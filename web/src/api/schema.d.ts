@@ -193,7 +193,8 @@ export interface paths {
          *     - `resync`, data `{}`: events may have been missed, so reload the list with `GET /documents`. Sent when the
          *       server reconnects to the database, when a read fails, and to a client that fell more than 1000 events behind.
          *
-         *     The stream opens with the comment `: connected` and sends `: keepalive` after 15 s with nothing else to send.
+         *     The stream opens with the comment `: connected` and `retry: 1000`, and sends `: keepalive` after 15 s with nothing
+         *     else to send.
          *     Past 100 open streams per API process the request is refused with 503 `too_many_streams` and
          *     `Retry-After`, before the stream starts.
          */
