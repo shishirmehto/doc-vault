@@ -40,7 +40,7 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.INVALID_CURSOR: 400,
     ErrorCode.INVALID_REQUEST: 422,
     ErrorCode.RATE_LIMITED: 429,        # with Retry-After: the seconds until the budget allows one more
-    ErrorCode.AI_UNAVAILABLE: 503,      # with Retry-After: 5
+    ErrorCode.AI_UNAVAILABLE: 503,      # with Retry-After: 5 when retryable
     ErrorCode.AI_BAD_OUTPUT: 502,
     # Stored-only codes (ENCRYPTED_PDF, UNREADABLE_FILE, NO_EXTRACTABLE_TEXT, TOO_MANY_PAGES, INTERNAL)
     # appear inside a 200 document body, never as a request error.
@@ -78,7 +78,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def vault_error_handler(request: Request, exc: VaultError) -> JSONResponse:
     failure = exc.failure
     body = wire.ErrorOut(error=wire.error_body(failure, exc.details))
-    retry_after = 5 if failure.code is ErrorCode.AI_UNAVAILABLE else exc.details.get("retry_after_s")
+    retry_after = 5 if failure.code is ErrorCode.AI_UNAVAILABLE and failure.retryable else exc.details.get("retry_after_s")
     headers = None if retry_after is None else {"Retry-After": str(retry_after)}
     return JSONResponse(body.model_dump(mode="json"), status_code=ERROR_STATUS.get(failure.code, 500), headers=headers)
 

@@ -360,3 +360,13 @@ def test_a_blank_question_is_an_invalid_request_and_calls_no_model(client, ctx):
 
     assert (response.status_code, response.json().get("error", {}).get("code")) == (422, "invalid_request")
     assert scalar(ctx.db, "SELECT count(*) FROM llm_calls") == calls
+
+
+def test_a_provider_failure_that_retrying_cannot_fix_sends_no_retry_after(client, ctx):
+    chat_id = client.post("/chats", json={"document_ids": [str(ready(ctx, POLICY))]}).json()["id"]
+    app.state.ctx = with_chat(ctx, provider_down("insufficient_quota", retryable=False, prompt="answer"))
+
+    response = client.post(f"/chats/{chat_id}/messages", json={"question": "What is the each occurrence limit?"})
+
+    assert (response.status_code, response.json()["error"]["retryable"], response.headers.get("retry-after")) == (
+        503, False, None)

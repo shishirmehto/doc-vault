@@ -129,8 +129,8 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str) -> Turn:
     """Answer one question with citations, or refuse honestly. Persists exactly one turn.
 
     Every model call is billed to the turn id, which exists before the first
-    call. A provider failure raises VaultError(AI_UNAVAILABLE) (HTTP 503 with
-    Retry-After) and writes no turn; the failed calls stay in llm_calls. No
+    call. A provider failure raises VaultError(AI_UNAVAILABLE) (HTTP 503, with
+    Retry-After when retryable) and writes no turn; the failed calls stay in llm_calls. No
     connection or transaction is held across a model call.
     """
     turn_id = TurnId(uuid4())
