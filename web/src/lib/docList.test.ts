@@ -78,7 +78,15 @@ test("deleting the latest version brings the one before it back, where its uploa
   assert.deepEqual(names(back), ["d7.txt", "terms v1.txt"]);
 });
 
-test("an older version that still names itself latest does not replace a newer one already listed", () => {
+test("version 1's event can come before version 2's delete, and the list still ends on version 1", () => {
+  const two = list(true, version(2, 80, 2, 2), doc(7, 70));
+  const first = applyDocEvent(two, { kind: "document", doc: version(1, 10, 1, 1) });
+  const back = applyDocEvent(first, { kind: "deleted", id: id(2) });
+  assert.deepEqual(names(back), ["d7.txt", "terms v1.txt"]);
+});
+
+test("version 1 read before version 2 was uploaded gives way to version 2's event, which the server sends after it", () => {
   const stale = upsertDoc(list(true, version(2, 80, 2, 2)), version(1, 10, 1, 1));
-  assert.deepEqual(names(stale), ["terms v2.txt"]);
+  const settled = upsertDoc(stale, version(2, 80, 2, 2));
+  assert.deepEqual(names(settled), ["terms v2.txt"]);
 });

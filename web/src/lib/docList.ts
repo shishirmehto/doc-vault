@@ -18,13 +18,13 @@ function compareNewestFirst(a: Doc, b: Doc): number {
 
 /**
  * Puts a document the server just returned into the list, where a fresh read of the list would put it. A version that
- * is not its family's latest leaves the list, and so does any lower version of a family whose newer one arrives, so the
- * order events arrive in never leaves two rows for one family.
+ * is not its family's latest leaves the list. One that is takes its family's row, even from a higher version: the
+ * server read it after that version was deleted, or before that version was uploaded, and then that version's own event
+ * follows, because one consumer reads and sends events in order. So the list never holds two rows for one family.
  */
 export function upsertDoc(list: DocList, doc: Doc): DocList {
   const family = doc.version.family;
-  const newer = list.docs.some((d) => d.version.family === family && d.version.number > doc.version.number);
-  if (doc.version.number < doc.version.latest || newer) {
+  if (doc.version.number < doc.version.latest) {
     return list.docs.some((d) => d.id === doc.id) ? { ...list, docs: list.docs.filter((d) => d.id !== doc.id) } : list;
   }
   if (list.docs.some((d) => d.version.family === family && d.id !== doc.id)) {
