@@ -1,6 +1,9 @@
 // Every sentence the interface writes about state. The backend's own messages are shown verbatim.
 
-import type { ApiError, AskStage, Doc, NotFoundReason, PageUnit, Turn } from "./api/domain.ts";
+import type { ApiError, Doc, NotFoundReason, PageUnit, Turn } from "./api/domain.ts";
+import type { Ask } from "./lib/thread.ts";
+
+type InFlight = Extract<Ask, { phase: "asking" | "streaming" }>;
 
 export type Tone = "quiet" | "working" | "done" | "failed";
 
@@ -99,17 +102,22 @@ export function searching(documents: number | null): string {
   return documents === null ? "Searching" : `Searching ${documents === 1 ? "1 document" : `${documents} documents`}`;
 }
 
-/** The status line under a streaming answer. `quiet`: text stopped arriving, so the citations are being checked. */
-export function streamingStatus(stage: AskStage, quiet: boolean, documents: number | null): string {
-  switch (stage) {
+/**
+ * The status line under a question in flight. It follows the server's steps in the order it names them, and
+ * until it names the first one the question is only being sent. `quiet`: text stopped arriving, so the
+ * citations are being checked.
+ */
+export function askStatus(ask: InFlight, documents: number | null): string {
+  if (ask.phase === "asking" || ask.stage === null) return "Sending the question";
+  switch (ask.stage) {
     case "condensing":
       return "Reading the follow-up against the conversation";
     case "searching":
       return searching(documents);
     case "answering":
-      return quiet ? "Checking citations" : "Writing the answer";
+      return ask.quiet ? "Checking citations" : "Writing the answer";
     default: {
-      const unknown: never = stage;
+      const unknown: never = ask.stage;
       return unknown;
     }
   }

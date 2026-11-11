@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseHistory } from "../api/parse.ts";
 import type { AskProgress, Turn } from "../api/domain.ts";
+import { askStatus } from "../copy.ts";
 import { canAsk, offered, started, step, type Thread, type ThreadEvent } from "./thread.ts";
 
 const captured = JSON.parse(readFileSync(new URL("../api/fixtures/history-policy-four-turns.json", import.meta.url), "utf8"));
@@ -131,4 +132,29 @@ test("a broken stream keeps checking history until its turn lands, and offers a 
     turns: ["What is the property damage deductible?", "Does it apply per occurrence?"],
   });
   assert.equal(step(notYet, { type: "history", result: { ok: true, value: [deductible] } }).ask.phase, "failed");
+});
+
+test("a follow-up's status line follows the server's steps, after a neutral line until the first one", () => {
+  const states = [
+    { type: "sent", question: perOccurrence.question },
+    ...progress({ kind: "stage", stage: "condensing" }, { kind: "stage", stage: "searching" }, { kind: "stage", stage: "answering" }),
+    ...progress({ kind: "text", text: "Yes" }),
+    { type: "quiet" },
+  ].reduce<Thread[]>((seen, e) => [...seen, step(seen.at(-1)!, e as ThreadEvent)], [run([{ type: "answered", turn: deductible }])]);
+  const lines = states.slice(1).map((t) => (t.ask.phase === "asking" || t.ask.phase === "streaming" ? askStatus(t.ask, 2) : t.ask.phase));
+  assert.deepEqual(lines, [
+    "Sending the question",
+    "Reading the follow-up against the conversation",
+    "Searching 2 documents",
+    "Writing the answer",
+    "Writing the answer",
+    "Checking citations",
+  ]);
+});
+
+test("text before any step names the answering step, never an invented search", () => {
+  const t = run([{ type: "sent", question: deductible.question }, ...progress({ kind: "text", text: "Each" })]);
+  assert.equal(t.ask.phase === "streaming" && t.ask.stage, "answering");
+  const sent = run([{ type: "sent", question: deductible.question }, ...progress({ kind: "reset" })]);
+  assert.equal(sent.ask.phase === "streaming" && askStatus(sent.ask, 1), "Sending the question");
 });

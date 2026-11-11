@@ -6,7 +6,7 @@ import type { ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Selection
 import { useFetched } from "@/hooks/useFetched";
 import { threads, useThread } from "@/hooks/useThread";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
-import { explain, listNames, NOT_FOUND, searching, streamingStatus, usageLine } from "@/copy";
+import { askStatus, explain, listNames, NOT_FOUND, usageLine } from "@/copy";
 import { Composer } from "./Composer";
 import { SourcePane, type SourceView } from "./SourcePane";
 
@@ -226,7 +226,7 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
       return (
         <article className="turn" aria-busy="true">
           <h2 className="question">{ask.question}</h2>
-          <p className="quiet" role="status">{searching(scope?.length ?? null)}</p>
+          <p className="quiet" role="status">{askStatus(ask, scope?.length ?? null)}</p>
           <div className="progress indeterminate"><span /></div>
         </article>
       );
@@ -236,7 +236,7 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
           <h2 className="question">{ask.question}</h2>
           {/* Plain text, no citations yet: the grounded turn replaces it when it lands. */}
           {ask.text !== "" && <p className="answer provisional">{ask.text}</p>}
-          <p className="quiet" role="status">{streamingStatus(ask.stage, ask.quiet, scope?.length ?? null)}</p>
+          <p className="quiet" role="status">{askStatus(ask, scope?.length ?? null)}</p>
           <div className="progress indeterminate"><span /></div>
         </article>
       );

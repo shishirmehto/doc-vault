@@ -17,10 +17,11 @@ export type Ask =
   | { phase: "idle" }
   | { phase: "asking"; question: string }
   /**
-   * The answer streams: the step it is on and the provisional text so far, which the final turn replaces.
-   * `quiet` is set when text stopped arriving for a while, so the answer is being checked, not written.
+   * The answer streams: the step the server last named (null before it names one) and the provisional text so
+   * far, which the final turn replaces. `quiet` is set when text stopped arriving for a while, so the answer is
+   * being checked, not written.
    */
-  | { phase: "streaming"; question: string; stage: AskStage; text: string; quiet: boolean }
+  | { phase: "streaming"; question: string; stage: AskStage | null; text: string; quiet: boolean }
   | { phase: "checking"; question: string; error: ApiError }
   /** History shows no turn for the question: asking again is safe. */
   | { phase: "failed"; question: string; error: ApiError }
@@ -92,7 +93,7 @@ export function step(t: Thread, e: ThreadEvent): Thread {
 /** Progress only moves a question in flight. Text implies the answering step, whatever came before it. */
 function afterProgress(ask: Ask, p: AskProgress): Ask {
   if (ask.phase !== "asking" && ask.phase !== "streaming") return ask;
-  const now = ask.phase === "streaming" ? ask : { phase: "streaming" as const, question: ask.question, stage: "searching" as const, text: "", quiet: false };
+  const now: Ask & { phase: "streaming" } = ask.phase === "streaming" ? ask : { phase: "streaming", question: ask.question, stage: null, text: "", quiet: false };
   switch (p.kind) {
     case "stage":
       return { ...now, stage: p.stage, quiet: false };
