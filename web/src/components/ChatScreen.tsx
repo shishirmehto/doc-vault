@@ -44,8 +44,10 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
             <h1>{documents ? `Asking ${listNames(documents.map((d) => d.filename))}` : "Chat"}</h1>
             <p className="quiet">
               {documents
-                ? "Answers come only from these documents, and each one cites the page it used."
-                : "This browser did not start this chat, so its documents are not listed. Its answers still cite their pages."}{" "}
+                ? "Answers come only from these documents, and each one cites the page it used. "
+                : turns
+                  ? "This browser did not start this chat, so its documents are not listed. Its answers still cite their pages. "
+                  : null}
               <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
             </p>
           </header>
@@ -194,7 +196,10 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
           <h2 className="question">{ask.question}</h2>
           <p role="alert">{explain(ask.error)}</p>
           <p className="actions">
-            <button type="button" className="button" onClick={() => onRetry(ask.question)}>Try again</button>
+            {/* A refusal the backend marks as final (a deleted document, a missing chat) would only fail again. */}
+            {!(ask.error.kind === "refused" && ask.error.retryable === false) && (
+              <button type="button" className="button" onClick={() => onRetry(ask.question)}>Try again</button>
+            )}
             <button type="button" className="text-button" onClick={() => onEdit(ask.question)}>Edit the question</button>
           </p>
         </article>
