@@ -17,8 +17,10 @@ import { FindField } from "./FindField";
  * The screen with nothing selected: choose ready documents and ask the first question, or reopen a recent chat.
  * An empty vault shows the steps from upload to first question instead.
  */
-export function NewChat({ docs, deleted, onDismiss, onOpen, onFiles }: {
+export function NewChat({ docs, failed, deleted, onDismiss, onOpen, onFiles }: {
   docs: readonly Doc[] | null;
+  /** The last failed read of the document list, which is retried on its own. */
+  failed: ApiError | null;
   /** The filename of a document just deleted, to confirm it. */
   deleted: string | null;
   onDismiss(): void;
@@ -72,7 +74,9 @@ export function NewChat({ docs, deleted, onDismiss, onOpen, onFiles }: {
             {docs?.length === 0 ? "" : "Choose the documents to ask about. "}Every answer cites the page it came from,
             with the passage marked, so you can check it against the source.
           </p>
-          {docs === null ? (
+          {docs === null && failed ? (
+            <p className="notice" data-tone="failed">{explain(failed)} Retrying.</p>
+          ) : docs === null ? (
             <div aria-busy="true">{[70, 55, 62].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}</div>
           ) : docs.length === 0 ? (
             <FirstSteps onFiles={onFiles} />

@@ -113,7 +113,7 @@ export function Workspace() {
         onRetry={retry}
       />
       {selection.kind === "none" && (
-        <NewChat docs={docs} deleted={deleted} onDismiss={() => setDeleted(null)}
+        <NewChat docs={docs} failed={documents.error} deleted={deleted} onDismiss={() => setDeleted(null)}
           onFiles={(files) => uploads.add(files, uploadLimit)} onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
       )}
       {selection.kind === "missing" && (

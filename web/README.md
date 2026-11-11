@@ -8,7 +8,7 @@ The page itself never scrolls. `html`, `body` and the `.app` wrapper are flex an
 
 Below 1100 px the source pane covers the centre column. Below 760 px the rail folds into a "Documents (n)" button above the centre column. It is open while the vault is empty or uploads are listed, closes when a document is opened from it, and takes at most half the height, with its own scroll.
 
-An empty vault shows the steps from upload to first question, with a large drop target in step 1. Over six documents, the rail and the new-chat picker show a "Find a document" field that matches the filename and the document type. The picker's "Select all ready" ticks the ready documents the search shows, up to the 50 a chat allows. Each row's meta leads with the document type once insights know it ("Policy. PDF, 7 pages, 11 KB").
+An empty vault shows the steps from upload to first question, with a large drop target in step 1. Over six documents, the rail shows a "Find a document" field and the new-chat picker a "Find a document to ask about" field. Each matches the filename and the document type, except the type "other", which rows do not show. The picker's "Select all ready" ticks the ready documents the search shows, up to the 50 a chat allows. Each row's meta leads with the document type once insights know it ("Policy. PDF, 7 pages, 11 KB").
 
 `.claude/skills/verify-doc-vault/scripts/visible.js` checks a screen for clipped text, controls nothing can scroll into view, and sideways page scroll. The verify skill's `features/README.md` says how to run it.
 
