@@ -6,7 +6,7 @@ import type { ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Selection
 import { useFetched } from "@/hooks/useFetched";
 import { threads, useThread } from "@/hooks/useThread";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
-import { askStatus, explain, listNames, NOT_FOUND, usageLine } from "@/copy";
+import { askStatus, documentNames, explain, listNames, NOT_FOUND, usageLine } from "@/copy";
 import { Composer } from "./Composer";
 import { MissingChat } from "./Missing";
 import { SourcePane, type SourceView } from "./SourcePane";
@@ -69,7 +69,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
           onTouchMove={() => { following.current = false; }}>
           <section className="chat" aria-label="Chat">
             <header className="chat-header">
-              <h1>{documents ? `Asking ${listNames(documents.map((d) => (d.deleted ? `${d.filename} (deleted)` : d.filename)))}` : "Chat"}</h1>
+              <h1>{documents ? `Asking ${documentNames(documents)}` : "Chat"}</h1>
               <p className="quiet">
                 {!documents
                   ? null

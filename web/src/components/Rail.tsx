@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import type { ApiError, Doc, DocumentId, Failure } from "@/api/domain";
-import { selectionQuery } from "@/api/parse";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { FIND_AFTER, findDocs } from "@/lib/find";
 import { isSettled } from "@/lib/lifecycle";
@@ -10,6 +9,7 @@ import type { Upload } from "@/lib/uploads";
 import { docMeta, explain, formatBytes, statusLine } from "@/copy";
 import { DropZone } from "./DropZone";
 import { FindField } from "./FindField";
+import { InAppLink } from "./InAppLink";
 import { StageBar } from "./StageBar";
 
 type Props = {
@@ -110,19 +110,7 @@ export function Rail({ docs, complete, connection, uploads, selected, onFiles, o
 }
 
 function DocLink({ id, onOpen, children }: { id: DocumentId; onOpen(id: DocumentId): void; children: string }) {
-  return (
-    <a
-      className="row-name"
-      href={selectionQuery({ kind: "doc", doc: id, pane: null })}
-      onClick={(e) => {
-        if (e.metaKey || e.ctrlKey || e.shiftKey) return;
-        e.preventDefault();
-        onOpen(id);
-      }}
-    >
-      {children}
-    </a>
-  );
+  return <InAppLink className="row-name" to={{ kind: "doc", doc: id, pane: null }} onFollow={() => onOpen(id)}>{children}</InAppLink>;
 }
 
 function UploadRow({ upload, onDismiss, onOpen }: { upload: Upload; onDismiss(): void; onOpen(id: DocumentId): void }) {

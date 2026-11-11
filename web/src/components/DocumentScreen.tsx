@@ -61,7 +61,14 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry,
               <FailureNote failure={doc.lifecycle.failure} onRetry={() => onRetry(id)} />
             )}
             <div className="doc-actions">
-              {doc.lifecycle.status === "ready" && <AskButton onAsk={() => onAsk(id)} />}
+              {doc.lifecycle.status === "ready" && (
+                <>
+                  <AskButton onAsk={() => onAsk(id)} />
+                  <button type="button" className="button secondary" onClick={() => push({ kind: "compare", with: id })}>
+                    Compare with...
+                  </button>
+                </>
+              )}
               {doc.layout && doc.lifecycle.status !== "failed" && (
                 <button type="button" className="text-button" onClick={() => push({ kind: "doc", doc: id, pane: { kind: "page", page: 1 } })}>
                   Read the {unitName(doc.layout.unit, 2)}

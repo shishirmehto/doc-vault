@@ -1,15 +1,18 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 const MAX_QUESTION = 2000;
 
-/** Enter sends; Shift+Enter is a new line. */
-export function Composer({ value, onChange, onSend, ready, placeholder, label }: {
+/** Enter sends; Shift+Enter is a new line. `extra` sits beside the send button: another action on the same text. */
+export function Composer({ value, onChange, onSend, ready, placeholder, label, extra }: {
   value: string;
   onChange(v: string): void;
   onSend(): void;
   ready: boolean;
   placeholder: string;
   label: string;
+  extra?: ReactNode;
 }) {
   const empty = value.trim() === "";
   return (
@@ -25,7 +28,10 @@ export function Composer({ value, onChange, onSend, ready, placeholder, label }:
             onSend();
           }
         }} />
-      <button type="submit" className="button" disabled={!ready || empty}>{label}</button>
+      <div className="composer-actions">
+        <button type="submit" className="button" disabled={!ready || empty}>{label}</button>
+        {extra}
+      </div>
     </form>
   );
 }

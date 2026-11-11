@@ -1,8 +1,9 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState, type ReactNode } from "react";
 import { api } from "@/api/client";
 import type { ApiError, Doc, DocumentId, Result } from "@/api/domain";
+import { parseSelection } from "@/api/parse";
 import { useSelection } from "@/hooks/useSelection";
 import { useDocuments } from "@/hooks/useDocuments";
 import { liveFeed } from "@/hooks/useLiveFeed";
@@ -11,16 +12,20 @@ import { useFetched } from "@/hooks/useFetched";
 import { useHealth } from "@/hooks/useHealth";
 import { applyDocEvent, upsertDoc } from "@/lib/docList";
 import { threads } from "@/hooks/useThread";
+import { compareRuns } from "@/hooks/useCompareRun";
+import type { CompareRequest } from "@/lib/compare";
 import { Rail } from "./Rail";
 import { ChatScreen } from "./ChatScreen";
+import { CompareScreen } from "./CompareScreen";
+import { ComparisonScreen } from "./ComparisonScreen";
 import { DocumentScreen } from "./DocumentScreen";
 import { NewChat } from "./NewChat";
 import { Metrics } from "./Metrics";
 import { MissingChat, MissingComparison, MissingDocument } from "./Missing";
 
 /**
- * Three columns: your documents; a chat, or what the system says about one document; and what the
- * document itself says. The URL holds the selection; the document list follows the live feed of document
+ * Three columns: your documents; a chat, a comparison, or what the system says about one document; and what
+ * the document itself says. The URL holds the selection; the document list follows the live feed of document
  * changes.
  */
 export function Workspace() {
@@ -52,6 +57,17 @@ export function Workspace() {
       return null;
     },
     [push],
+  );
+
+  // A run outlives the screen that started it. On success the compare screen gives way to the comparison, and
+  // replace means Back returns to where Compare was clicked; a reader who has moved on stays where they are.
+  const compare = useCallback(
+    (request: CompareRequest) =>
+      void compareRuns.start(request, (comparison) => {
+        if (parseSelection(new URLSearchParams(window.location.search)).kind !== "compare") return;
+        replace({ kind: "comparison", comparison: comparison.id, pane: null, only: false });
+      }),
+    [replace],
   );
 
   // Shown on the home screen after a delete, until the reader dismisses it or leaves the home screen.
@@ -97,7 +113,58 @@ export function Workspace() {
     });
   }, [lookUp, reloadOlder]);
   const current = listed ?? (older.result?.ok ? older.result.value : null);
-  const paneOpen = selection.kind === "chat" ? selection.pane !== null : current !== null && selection.kind === "doc" && selection.pane !== null;
+  const paneOpen = selection.kind === "chat" || selection.kind === "comparison"
+    ? selection.pane !== null
+    : current !== null && selection.kind === "doc" && selection.pane !== null;
+
+  const centre = (): ReactNode => {
+    switch (selection.kind) {
+      case "none":
+        return (
+          <NewChat docs={docs} failed={documents.error} deleted={deleted} onDismiss={() => setDeleted(null)}
+            onFiles={(files) => uploads.add(files, uploadLimit)} onOpen={(chat) => push({ kind: "chat", chat, pane: null })}
+            onCompare={(request) => {
+              compare(request);
+              push({ kind: "compare", with: null });
+            }} />
+        );
+      case "missing":
+        return <main className="centre">{{ doc: <MissingDocument />, chat: <MissingChat />, comparison: <MissingComparison /> }[selection.what]}</main>;
+      case "metrics":
+        return <Metrics window={selection.window} onWindow={(window) => replace({ kind: "metrics", window })} />;
+      case "chat":
+        return <ChatScreen key={selection.chat} id={selection.chat} docs={docs} pane={selection.pane} push={push} replace={replace} />;
+      case "compare":
+        return (
+          <CompareScreen key={selection.with} docs={docs} failed={documents.error} initial={selection.with} onCompare={compare}
+            onOpen={(comparison) => push({ kind: "comparison", comparison, pane: null, only: false })} />
+        );
+      case "comparison":
+        return (
+          <ComparisonScreen key={selection.comparison} id={selection.comparison} docs={docs} pane={selection.pane}
+            only={selection.only} push={push} replace={replace} />
+        );
+      case "doc":
+        return (
+          <DocumentScreen
+            key={selection.doc}
+            id={selection.doc}
+            doc={current}
+            loading={docs === null || (lookUp !== null && older.result === null)}
+            pane={selection.pane}
+            push={push}
+            replace={replace}
+            onRetry={retry}
+            onAsk={askAbout}
+            onDelete={remove}
+          />
+        );
+      default: {
+        const unknown: never = selection;
+        return unknown;
+      }
+    }
+  };
 
   return (
     <div className="workspace" data-pane={paneOpen ? "open" : "closed"}>
@@ -112,33 +179,7 @@ export function Workspace() {
         onOpen={(id) => push({ kind: "doc", doc: id, pane: null })}
         onRetry={retry}
       />
-      {selection.kind === "none" && (
-        <NewChat docs={docs} failed={documents.error} deleted={deleted} onDismiss={() => setDeleted(null)}
-          onFiles={(files) => uploads.add(files, uploadLimit)} onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
-      )}
-      {selection.kind === "missing" && (
-        <main className="centre">{{ doc: <MissingDocument />, chat: <MissingChat />, comparison: <MissingComparison /> }[selection.what]}</main>
-      )}
-      {selection.kind === "metrics" && (
-        <Metrics window={selection.window} onWindow={(window) => replace({ kind: "metrics", window })} />
-      )}
-      {selection.kind === "chat" && (
-        <ChatScreen key={selection.chat} id={selection.chat} docs={docs} pane={selection.pane} push={push} replace={replace} />
-      )}
-      {selection.kind === "doc" && (
-        <DocumentScreen
-          key={selection.doc}
-          id={selection.doc}
-          doc={current}
-          loading={docs === null || (lookUp !== null && older.result === null)}
-          pane={selection.pane}
-          push={push}
-          replace={replace}
-          onRetry={retry}
-          onAsk={askAbout}
-          onDelete={remove}
-        />
-      )}
+      {centre()}
     </div>
   );
 }
