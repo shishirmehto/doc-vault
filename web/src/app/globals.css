@@ -127,7 +127,8 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
 .done-note:focus { outline: none; }
 
 .quiet { color: var(--graphite); }
-/* Read by screen readers, never drawn. clip-path hides it, so no overflow: hidden cuts the text a sighted reader never sees. */
+/* Read by screen readers, never drawn. The usual pattern adds overflow: hidden. It is left out because visible.js
+   reports an overflow-hidden box narrower than its text as clipped, and clip-path alone hides the text. */
 .visually-hidden { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); white-space: nowrap; }
 .notice { font-size: var(--t-body); max-width: 60ch; }
 [data-tone="failed"].notice, .row-message[data-tone="failed"] { color: var(--stamp); }
@@ -407,7 +408,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* The tone and Rewrite wrap together, so Rewrite never starts a line on its own. */
 .rewrite-send { display: flex; align-items: end; gap: var(--s3); }
 .rewrite-send .button { padding: 7px 18px; }
-/* Radios drawn as the segmented control: the chosen length carbon, the ring round the whole group. */
 .segments label { position: relative; padding: 6px 12px; background: var(--sheet); color: var(--ink); cursor: pointer; }
 .segments label + label { border-left: 1px solid var(--rule); }
 .segments label:has(input:checked) { background: var(--carbon); color: var(--sheet); font-weight: 600; }
@@ -420,7 +420,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   display: grid; gap: var(--s2); padding: var(--s3) var(--s4) var(--s4); background: var(--sheet);
   box-shadow: 0 0 0 1px var(--rule); border-radius: var(--r-control); overflow-wrap: anywhere;
 }
-/* Set like the routing line on a form. */
 .rewrite .rewrite-options { font-size: var(--t-meta); color: var(--graphite); }
 .rewrite-sources { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); }
 .rewrite-sheet .written-by { margin-top: 0; }
@@ -577,12 +576,12 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .rail-flight > .text-button { margin: var(--s2) var(--s4) 0; }
   .rail-body { padding-top: 0; }
   .pick { grid-template-columns: auto minmax(0, 1fr); row-gap: 0; }
+  .pick-meta { grid-column: 2; text-align: left; }
   .rewrite-form { flex-direction: column; align-items: stretch; }
   .rewrite-form .segments { display: flex; }
   .rewrite-form .segments label { flex: 1 1 0; text-align: center; }
   .rewrite-form .find { flex: none; }
   .rewrite-send { flex-direction: column; align-items: stretch; }
-  .pick-meta { grid-column: 2; text-align: left; }
   .composer-actions { flex-direction: column; }
   .pane { width: 100%; }
   .pane-header { margin: 0 var(--s4); }

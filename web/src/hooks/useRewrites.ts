@@ -7,7 +7,7 @@ import { useFetched } from "@/hooks/useFetched";
 import { LISTED, idle, mergeSummary, paneList, shownSummary, step, type Run, type RunEvent } from "@/lib/summary";
 
 /** The options as typed; the focus is normalised when it is sent. */
-export type Draft = { length: SummaryLength; focus: string; tone: SummaryTone };
+type Draft = { length: SummaryLength; focus: string; tone: SummaryTone };
 
 export type Rewrites = ReturnType<typeof useRewrites>;
 

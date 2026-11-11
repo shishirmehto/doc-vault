@@ -275,8 +275,9 @@ export function rewriting({ length, focus, tone }: SummaryOptions): string {
   return `Writing a ${LENGTHS[length].label.toLowerCase()} summary${TONE_CLAUSE[tone]}${focus === null ? "" : ` about “${focus}”`}.`;
 }
 
-/** Said once a rewrite lands. Also the line on a summary the backend had stored. */
+/** Said once a new summary lands. */
 export const REWRITTEN = "Rewritten.";
+/** Said once a stored summary comes back, and the line on its sheet. */
 export const SAVED_EARLIER = "Saved earlier, no new model call.";
 
 /** Said under a summary's sources when it has none, or when the backend left some out; null otherwise. */

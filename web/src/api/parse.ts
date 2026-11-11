@@ -291,8 +291,8 @@ export function parseComparisonPage(w: W.ComparisonPage): Comparison[] {
 
 // ------------------------------------------------------------------ rewritten summaries
 
-const LENGTHS: readonly SummaryLength[] = ["brief", "standard", "detailed"];
-const TONES: readonly SummaryTone[] = ["plain", "formal", "client"];
+const WIRE_LENGTHS: readonly SummaryLength[] = ["brief", "standard", "detailed"];
+const WIRE_TONES: readonly SummaryTone[] = ["plain", "formal", "client"];
 
 /** Throws on a length or tone the contract does not name, a source on no page, or a `cached` that is not a boolean. */
 export function parseSummary(w: W.SummaryOut): Summary {
@@ -301,9 +301,9 @@ export function parseSummary(w: W.SummaryOut): Summary {
     id: required(asSummaryId(w.id), "a summary id"),
     documentId: documentId(w.document_id),
     options: {
-      length: required(LENGTHS.find((l) => l === w.length) ?? null, "a summary length"),
+      length: required(WIRE_LENGTHS.find((l) => l === w.length) ?? null, "a summary length"),
       focus: w.focus,
-      tone: required(TONES.find((t) => t === w.tone) ?? null, "a summary tone"),
+      tone: required(WIRE_TONES.find((t) => t === w.tone) ?? null, "a summary tone"),
     },
     text: w.text,
     sources: w.sources.map((source) => {
