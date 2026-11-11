@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Annotated, Literal, assert_never
 from uuid import UUID
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
 from . import pages
 from .domain import (
@@ -185,7 +185,7 @@ class ChatPage(BaseModel):
 
 
 class AskIn(BaseModel):
-    question: Annotated[str, NoNul] = Field(min_length=1, max_length=2000)
+    question: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000), NoNul]
 
 
 class CitationOut(BaseModel):

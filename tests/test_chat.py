@@ -350,3 +350,13 @@ def test_a_chat_takes_at_most_50_documents_and_a_200_character_title(client, ctx
     schema = client.get("/openapi.json").json()["components"]["schemas"]["StartChatIn"]["properties"]
     assert (schema["document_ids"]["maxItems"], schema["title"]["anyOf"][0]["maxLength"]) == (50, 200)
     assert "At most 50." in schema["document_ids"]["description"]
+
+
+def test_a_blank_question_is_an_invalid_request_and_calls_no_model(client, ctx):
+    chat_id = client.post("/chats", json={"document_ids": [str(ready(ctx, POLICY))]}).json()["id"]
+    calls = scalar(ctx.db, "SELECT count(*) FROM llm_calls")
+
+    response = client.post(f"/chats/{chat_id}/messages", json={"question": " \n\t "})
+
+    assert (response.status_code, response.json().get("error", {}).get("code")) == (422, "invalid_request")
+    assert scalar(ctx.db, "SELECT count(*) FROM llm_calls") == calls
