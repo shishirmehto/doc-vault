@@ -9,7 +9,7 @@ import { threads } from "@/hooks/useThread";
 import { useCompareRun } from "@/hooks/useCompareRun";
 import { COMPARE_MIN, columns, type CompareRequest } from "@/lib/compare";
 import { CHAT_MAX_DOCUMENTS } from "@/lib/find";
-import { COMPARE_BUSY, compareBlocked, documentNames, explain, formatWhen, listNames, notReadyNames } from "@/copy";
+import { COMPARE_BUSY, COMPARE_FOCUS_HINT, compareBlocked, documentNames, explain, formatWhen, listNames, notReadyNames } from "@/copy";
 import { Composer } from "./Composer";
 import { DropZone } from "./DropZone";
 import { InAppLink } from "./InAppLink";
@@ -80,7 +80,7 @@ export function NewChat({ docs, failed, deleted, onDismiss, onOpen, onFiles, onC
         <div className="centre-footer">
           {refusal && <StartRefusal error={refusal} docs={docs ?? []} />}
           {scope === null && question.trim() !== "" && <p className="quiet">Tick at least one ready document above to ask.</p>}
-          {compareBlock && <p className="quiet">{compareBlock}</p>}
+          {comparable && <p className="quiet">{compareBlock ?? COMPARE_FOCUS_HINT}</p>}
           <Composer
             value={question}
             onChange={setQuestion}

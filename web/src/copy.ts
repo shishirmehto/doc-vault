@@ -171,6 +171,8 @@ export function compareBlocked(ticked: number, focus: string): string | null {
 
 /** One comparison runs at a time. */
 export const COMPARE_BUSY = "A comparison is already running. Compare opens up again when it finishes.";
+/** Under the new-chat footer while Compare is offered, because Compare reads the question box as its focus. */
+export const COMPARE_FOCUS_HINT = "Compare uses the question as its focus. Leave it empty to compare every field a broker checks.";
 
 export const COMPARE_FULL = `A comparison takes at most ${COMPARE_MAX} documents. Untick one to choose another.`;
 
