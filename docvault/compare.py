@@ -21,17 +21,20 @@ from psycopg.types.json import Jsonb
 from . import chat, prompts
 from .ai import ComparisonOwner
 from .context import Ctx
+from .db import Db, decode_cursor, encode_cursor
 from .domain import (
     Cell,
     ComparedDocument,
     Comparison,
     ComparisonId,
     DocumentId,
+    ErrorCode,
     KeyFact,
     Page,
     PageBasis,
     Row,
     Usage,
+    VaultError,
 )
 from .pages import collapse_whitespace, find_on_page
 from .prompts import CellDraft, CompareDoc, ComparisonDraft
@@ -79,6 +82,28 @@ def create(ctx: Ctx, document_ids: Sequence[DocumentId], focus: str | None) -> C
              ctx.ai.chat.models[prompt.tier], prompt.version))
         return _row_to_comparison(conn.execute(_COMPARISON_SQL + "WHERE c.id = %s GROUP BY c.id",
                                                (comparison_id,)).fetchone())
+
+
+def get(db: Db, comparison_id: ComparisonId) -> Comparison:
+    """A comparison with its usage, deleted documents marked. Raises COMPARISON_NOT_FOUND."""
+    with db.connection() as conn:
+        row = conn.execute(_COMPARISON_SQL + "WHERE c.id = %s GROUP BY c.id", (comparison_id,)).fetchone()
+    if row is None:
+        raise VaultError(ErrorCode.COMPARISON_NOT_FOUND, f"No comparison has the id {comparison_id}.")
+    return _row_to_comparison(row)
+
+
+def list_comparisons(db: Db, *, limit: int, cursor: str | None) -> tuple[list[Comparison], str | None]:
+    """Newest first. Keyset pagination on (created_at DESC, id DESC), the same cursor as chat.list_chats."""
+    after = decode_cursor(cursor) if cursor else None
+    with db.connection() as conn:
+        rows = conn.execute(
+            _COMPARISON_SQL + "WHERE (%(created_at)s::timestamptz IS NULL"
+            " OR (c.created_at, c.id) < (%(created_at)s::timestamptz, %(id)s::uuid))"
+            " GROUP BY c.id ORDER BY c.created_at DESC, c.id DESC LIMIT %(limit)s",
+            {"created_at": after and after[0], "id": after and after[1], "limit": limit + 1}).fetchall()
+    last = rows[limit - 1] if len(rows) > limit else None
+    return [_row_to_comparison(row) for row in rows[:limit]], last and encode_cursor(last["created_at"], last["id"])
 
 
 def ground(draft: ComparisonDraft, documents: Sequence[CompareDoc]) -> tuple[tuple[Row, ...], int]:

@@ -17,7 +17,10 @@ from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 from . import pages
 from .domain import (
     Answered,
+    Cell,
     Chat,
+    ComparedDocument,
+    Comparison,
     DocKind,
     DocStatus,
     Document,
@@ -226,6 +229,62 @@ class HistoryOut(BaseModel):
     turns: list[TurnOut]
 
 
+# ------------------------------------------------------------------ comparison
+
+
+def _distinct(ids: list[UUID]) -> list[UUID]:
+    if len(set(ids)) < len(ids):
+        raise ValueError("must not repeat a document")
+    return ids
+
+
+class CompareIn(BaseModel):
+    document_ids: Annotated[list[UUID], AfterValidator(_distinct)] = Field(
+        min_length=2, max_length=5, description="The documents to compare, 2 to 5, each once. They become the "
+                                                "columns, in this order.")
+    focus: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200), NoNul] | None = Field(
+        None, description='What to compare, e.g. "deductibles". Absent or blank: the fields a broker compares.')
+
+
+class ComparedDocumentOut(BaseModel):
+    id: UUID
+    filename: str                      # as it was when the comparison ran
+    deleted: bool                      # deleted since; its column keeps its cells and page labels
+    pages_read: int                    # coverage: pages 1..pages_read went into the prompt
+    page_count: int
+
+
+class CellOut(BaseModel):
+    document_id: UUID
+    value: str | None                  # every field but document_id is null for an empty cell
+    page: int | None
+    page_label: str | None             # "p. 3" or "section 3"
+    quote: str | None                  # the source text on that page, whitespace collapsed
+
+
+class RowOut(BaseModel):
+    field: str
+    cells: list[CellOut]               # one per document, in the order of documents
+    differs: bool                      # two or more distinct values, or an empty cell beside a filled one
+
+
+class ComparisonOut(BaseModel):
+    id: UUID
+    documents: list[ComparedDocumentOut]
+    focus: str | None
+    rows: list[RowOut]
+    dropped_cells: int                 # cells the model filled whose quote was not on the page it cited
+    model: str
+    prompt_version: str
+    usage: UsageOut
+    created_at: datetime
+
+
+class ComparisonPage(BaseModel):
+    items: list[ComparisonOut]
+    next_cursor: str | None
+
+
 # ------------------------------------------------------------------ metrics
 
 
@@ -389,6 +448,27 @@ def turn_out(turn: Turn) -> TurnOut:
         suggestions=list(turn.suggestions),
         usage=UsageOut.model_validate(turn.usage, from_attributes=True),
         latency_ms=round((turn.finished_at - turn.started_at).total_seconds() * 1000), created_at=turn.started_at)
+
+
+def comparison_out(comparison: Comparison) -> ComparisonOut:
+    """Every row's cells[i] belongs to documents[i]."""
+    docs = comparison.documents
+    return ComparisonOut(
+        id=comparison.id, focus=comparison.focus, dropped_cells=comparison.dropped_cells, model=comparison.model,
+        prompt_version=comparison.prompt_version, created_at=comparison.created_at,
+        documents=[ComparedDocumentOut(id=doc.id, filename=doc.filename, deleted=doc.deleted, pages_read=doc.pages_read,
+                                       page_count=doc.page_count) for doc in docs],
+        rows=[RowOut(field=row.field, differs=row.differs,
+                     cells=[_cell_out(doc, cell) for doc, cell in zip(docs, row.cells, strict=True)])
+              for row in comparison.rows],
+        usage=UsageOut.model_validate(comparison.usage, from_attributes=True))
+
+
+def _cell_out(doc: ComparedDocument, cell: Cell | None) -> CellOut:
+    if cell is None:
+        return CellOut(document_id=doc.id, value=None, page=None, page_label=None, quote=None)
+    return CellOut(document_id=doc.id, value=cell.value, page=cell.page,
+                   page_label=pages.page_label(doc.page_basis, cell.page), quote=cell.quote)
 
 
 def _page_url(doc_id: UUID, page: int) -> str:

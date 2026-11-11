@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx2
 import pytest
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 
 from docvault import compare, documents, pages, prompts
 from docvault.ai import AI, ComparisonOwner, FakeChat, FakeEmbedder, ProviderError, RawCompletion, Tokens
+from docvault.api import app
 from docvault.config import Settings
 from docvault.domain import (
     Cell,
@@ -27,10 +29,11 @@ from docvault.domain import (
     VaultError,
 )
 from docvault.prompts import CellDraft, CompareDoc, ComparisonDraft, Msg, Prompt, RowDraft
+from docvault.ratelimit import RateLimiter
 
-from .conftest import POLICY, QUOTE, SAMPLES, scalar
+from .conftest import ENDORSEMENT, POLICY, QUOTE, SAMPLES, scalar
 from .test_ai import CHAT_COMPLETION, openai_chat, openai_client
-from .test_insights import indexed, with_chat
+from .test_insights import indexed, post, with_chat
 
 
 def row(*values: str | None) -> Row:
@@ -277,3 +280,107 @@ def test_a_document_deleted_during_the_model_call_reads_back_as_deleted(ctx):
     assert [(doc.filename, doc.deleted, doc.pages_read, doc.page_count) for doc in stored.documents] == [
         (POLICY, False, 7, 7), (QUOTE, True, 3, 3)]
     assert len(stored.rows) == 12
+
+
+# ------------------------------------------------------------------ over HTTP
+
+
+def compared(client, *document_ids: UUID, **body: object):
+    return client.post("/comparisons", json={"document_ids": [str(doc_id) for doc_id in document_ids], **body})
+
+
+def test_a_comparison_needs_two_to_five_distinct_ready_documents_and_a_focus_of_200_characters(client, ctx):
+    policy, quote = indexed(ctx, SAMPLES / POLICY), indexed(ctx, SAMPLES / QUOTE)
+    queued, unknown = post(client, SAMPLES / ENDORSEMENT), uuid4()
+
+    refused = [compared(client, policy), compared(client, *(uuid4() for _ in range(6))),
+               compared(client, policy, policy), compared(client, policy, quote, focus="a" * 201)]
+    longest_focus = compared(client, policy, quote, focus="a" * 200)
+    not_ready = compared(client, policy, queued)
+    missing = compared(client, policy, unknown)
+
+    assert [(response.status_code, response.json()["error"]["code"]) for response in refused] == [
+        (422, "invalid_request")] * 4
+    assert refused[2].json()["error"]["details"]["errors"] == [
+        {"field": "body.document_ids", "message": "Value error, must not repeat a document"}]
+    assert longest_focus.status_code == 201
+    assert (not_ready.status_code, not_ready.json()) == (409, {"error": {
+        "code": "documents_not_ready", "message": "1 of 2 documents are not ready.", "retryable": False,
+        "details": {"not_ready": [{"id": str(queued), "filename": ENDORSEMENT, "status": "queued"}]}}})
+    assert (missing.status_code, missing.json()) == (404, {"error": {
+        "code": "document_not_found", "message": "1 of 2 documents do not exist.", "retryable": False,
+        "details": {"missing": [str(unknown)]}}})
+    assert scalar(ctx.db, "SELECT count(*) FROM comparisons") == 1
+
+
+def test_a_broker_compares_the_policy_with_its_renewal_quote_and_reads_it_back(client, ctx):
+    policy, quote = indexed(ctx, SAMPLES / POLICY), indexed(ctx, SAMPLES / QUOTE)
+
+    created = compared(client, policy, quote, focus="  ")
+    focused = compared(client, policy, quote, focus=" deductible ")
+    body = created.json()
+    rows = {row["field"]: row for row in body["rows"]}
+
+    assert (created.status_code, focused.status_code) == (201, 201)
+    assert rows["Property Damage Deductible"] == {"field": "Property Damage Deductible", "differs": True, "cells": [
+        {"document_id": str(policy), "value": "$2,500 per occurrence", "page": 2, "page_label": "p. 2",
+         "quote": "Property Damage Deductible $2,500 per occurrence"},
+        {"document_id": str(quote), "value": "$5,000 per occurrence", "page": 2, "page_label": "p. 2",
+         "quote": "Property Damage Deductible $5,000 per occurrence"}]}
+    assert rows["Each Occurrence Limit"]["differs"] is False
+    assert {key: body[key] for key in ("focus", "documents", "dropped_cells", "model", "prompt_version")} == {
+        "focus": None, "dropped_cells": 0, "model": "fake-chat", "prompt_version": "compare-v1", "documents": [
+            {"id": str(policy), "filename": POLICY, "deleted": False, "pages_read": 7, "page_count": 7},
+            {"id": str(quote), "filename": QUOTE, "deleted": False, "pages_read": 3, "page_count": 3}]}
+    assert (body["usage"]["calls"], body["usage"]["cost_usd"]) == (1, 0.0)
+    assert (focused.json()["focus"], [row["field"] for row in focused.json()["rows"]]) == (
+        "deductible", ["Property Damage Deductible"])
+    with ctx.db.connection() as conn:
+        ledger = [tuple(row.values()) for row in conn.execute(
+            "SELECT purpose, document_id, turn_id, comparison_id FROM llm_calls WHERE comparison_id IS NOT NULL"
+            " ORDER BY id")]
+    assert ledger == [("compare", None, None, UUID(body["id"])), ("compare", None, None, UUID(focused.json()["id"]))]
+    assert client.get(f"/comparisons/{body['id']}").json() == body
+
+    with ctx.db.connection() as conn:   # a minute apart, so the order does not rest on clock resolution
+        conn.execute("UPDATE comparisons SET created_at = now() - interval '1 minute' WHERE id = %s", (body["id"],))
+    newest = client.get("/comparisons", params={"limit": 1}).json()
+    rest = client.get("/comparisons", params={"limit": 1, "cursor": newest["next_cursor"]}).json()
+
+    assert [item["id"] for item in newest["items"]] == [focused.json()["id"]]
+    assert ([item["id"] for item in rest["items"]], rest["next_cursor"]) == ([body["id"]], None)
+    unknown = uuid4()
+    missing = client.get(f"/comparisons/{unknown}")
+    bad_cursor = client.get("/comparisons", params={"cursor": "nope"})
+    assert (missing.status_code, missing.json()["error"]) == (404, {
+        "code": "comparison_not_found", "message": f"No comparison has the id {unknown}.", "retryable": False,
+        "details": {}})
+    assert (bad_cursor.status_code, bad_cursor.json()["error"]["code"]) == (400, "invalid_cursor")
+
+
+def test_a_document_deleted_after_the_comparison_keeps_its_column_and_page_labels(client, ctx):
+    policy, quote = indexed(ctx, SAMPLES / POLICY), indexed(ctx, SAMPLES / QUOTE)
+    created = compared(client, policy, quote).json()
+
+    assert client.delete(f"/documents/{quote}").status_code == 204
+    after = client.get(f"/comparisons/{created['id']}").json()
+
+    assert after["rows"] == created["rows"]
+    assert after["documents"] == [
+        {"id": str(policy), "filename": POLICY, "deleted": False, "pages_read": 7, "page_count": 7},
+        {"id": str(quote), "filename": QUOTE, "deleted": True, "pages_read": 3, "page_count": 3}]
+    assert {cell["page_label"] for row in after["rows"] for cell in row["cells"]} == {"p. 1", "p. 2"}
+
+
+def test_a_comparison_spends_from_the_same_rate_limit_budget_as_an_ask(client, ctx):
+    policy, quote = indexed(ctx, SAMPLES / POLICY), indexed(ctx, SAMPLES / QUOTE)
+    chat_id = client.post("/chats", json={"document_ids": [str(policy)]}).json()["id"]
+    app.state.ctx = dataclasses.replace(ctx, limiter=RateLimiter(), settings=ctx.settings.model_copy(
+        update={"questions_per_minute": 1}))
+
+    asked = client.post(f"/chats/{chat_id}/messages", json={"question": "What is the each occurrence limit?"})
+    refused = compared(client, policy, quote)
+
+    assert (asked.status_code, refused.status_code, refused.json()["error"]["code"]) == (200, 429, "rate_limited")
+    assert int(refused.headers["retry-after"]) > 0
+    assert scalar(ctx.db, "SELECT count(*) FROM comparisons") == 0

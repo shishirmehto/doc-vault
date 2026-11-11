@@ -25,10 +25,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.types import Receive, Scope, Send
 
-from . import chat, documents, events, metrics, wire
+from . import chat, compare, documents, events, metrics, wire
 from .config import load_settings
 from .context import Ctx, build_ctx, too_large
-from .domain import ChatId, Created, DocStatus, DocumentId, ErrorCode, Existing, Failure, Turn, VaultError
+from .domain import ChatId, ComparisonId, Created, DocStatus, DocumentId, ErrorCode, Existing, Failure, Turn, VaultError
 from .ratelimit import Action
 from .tasks import CeleryJobs
 
@@ -41,6 +41,7 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.DOCUMENT_NOT_FOUND: 404,
     ErrorCode.PAGE_NOT_FOUND: 404,
     ErrorCode.CHAT_NOT_FOUND: 404,
+    ErrorCode.COMPARISON_NOT_FOUND: 404,
     ErrorCode.DOCUMENTS_NOT_READY: 409,
     ErrorCode.DOCUMENTS_DELETED: 409,
     ErrorCode.NOTHING_TO_RETRY: 409,
@@ -384,6 +385,30 @@ async def document_events(request: Request) -> FeedResponse:
 def history(chat_id: UUID, ctx: Deps, limit: Annotated[int, Query(ge=1, le=200)] = 50) -> wire.HistoryOut:
     return wire.HistoryOut(chat_id=chat_id,
                            turns=[wire.turn_out(turn) for turn in chat.history(ctx.db, ChatId(chat_id), limit=limit)])
+
+
+@router.post("/comparisons", status_code=201, response_model=wire.ComparisonOut, dependencies=[rate_limited("ask")],
+             responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.DOCUMENTS_NOT_READY, ErrorCode.INVALID_REQUEST,
+                              ErrorCode.RATE_LIMITED, ErrorCode.AI_UNAVAILABLE, ErrorCode.AI_BAD_OUTPUT))
+def create_comparison(body: wire.CompareIn, ctx: Deps) -> wire.ComparisonOut:
+    """Compare 2 to 5 ready documents field by field, each cell checked against the page it cites."""
+    return wire.comparison_out(compare.create(ctx, [DocumentId(doc_id) for doc_id in body.document_ids], body.focus))
+
+
+@router.get("/comparisons", response_model=wire.ComparisonPage,
+            responses=errors(ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
+def list_comparisons(ctx: Deps, limit: Annotated[int, Query(ge=1, le=100)] = 20,
+                     cursor: str | None = None) -> wire.ComparisonPage:
+    """Stored comparisons, newest first, a page at a time."""
+    comparisons, next_cursor = compare.list_comparisons(ctx.db, limit=limit, cursor=cursor)
+    return wire.ComparisonPage(items=[wire.comparison_out(c) for c in comparisons], next_cursor=next_cursor)
+
+
+@router.get("/comparisons/{comparison_id}", response_model=wire.ComparisonOut,
+            responses=errors(ErrorCode.COMPARISON_NOT_FOUND, ErrorCode.INVALID_REQUEST))
+def get_comparison(comparison_id: UUID, ctx: Deps) -> wire.ComparisonOut:
+    """One stored comparison. A document deleted since keeps its column, its cells and their page labels."""
+    return wire.comparison_out(compare.get(ctx.db, ComparisonId(comparison_id)))
 
 
 @router.get("/metrics/documents", response_model=wire.DocumentMetricsOut)
