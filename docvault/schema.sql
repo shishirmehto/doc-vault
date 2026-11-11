@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS llm_calls (
   latency_ms     int  NOT NULL,
   ok             boolean NOT NULL,
   error_code     text,
+  request_id     text,                                -- X-Request-ID of the API request that caused the call
   CONSTRAINT llm_calls_purpose_values CHECK (
     purpose IN ('embed_chunks', 'embed_query', 'insights', 'condense', 'answer', 'compare', 'summary')),
   CONSTRAINT one_owner CHECK (num_nonnulls(document_id, turn_id, comparison_id, summary_id) = 1),
@@ -233,7 +234,7 @@ CREATE TABLE IF NOT EXISTS llm_calls (
 CREATE INDEX IF NOT EXISTS llm_calls_window ON llm_calls (at);
 CREATE INDEX IF NOT EXISTS llm_calls_turn   ON llm_calls (turn_id) WHERE turn_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS llm_calls_doc    ON llm_calls (document_id) WHERE document_id IS NOT NULL;
--- llm_calls_comparison and llm_calls_summary are in the upgrades section, after the columns they index exist in
+-- llm_calls_comparison, llm_calls_summary and llm_calls_request are in the upgrades section, after the columns they index exist in
 -- every database.
 
 -- ------------------------------------------------------------------ live events
@@ -343,3 +344,7 @@ BEGIN
       purpose IN ('embed_chunks', 'embed_query', 'insights', 'condense', 'answer', 'compare', 'summary'));
   END IF;
 END $$;
+
+-- The request id from the API's log line, so a request's model calls can be found from it.
+ALTER TABLE llm_calls ADD COLUMN IF NOT EXISTS request_id text;
+CREATE INDEX IF NOT EXISTS llm_calls_request ON llm_calls (request_id) WHERE request_id IS NOT NULL;

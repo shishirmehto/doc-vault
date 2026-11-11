@@ -19,6 +19,10 @@ Delivery semantics (each is load-bearing):
 
 Each worker process builds its own Ctx on its first task, after the fork,
 so no connection pool is shared across processes.
+
+The request id travels as a task header: set when the API enqueues, set again
+before the task runs, so the worker's log lines and ledger rows name the request.
+The worker and beat log through logs.configure, in the API's format.
 """
 
 from __future__ import annotations
@@ -27,9 +31,10 @@ import functools
 import logging
 from uuid import UUID
 
-from celery import Celery
+from celery import Celery, Task
+from celery.signals import before_task_publish, setup_logging, task_prerun
 
-from . import documents, insights
+from . import documents, insights, logs
 from .config import load_settings
 from .context import Ctx, build_ctx
 from .documents import MAX_RETRIES
@@ -49,6 +54,23 @@ celery_app.conf.update(
                  "docvault.tasks.analyze_document": {"queue": "llm"}},
     beat_schedule={"reconcile": {"task": "docvault.tasks.reconcile", "schedule": 60.0}},
 )
+
+
+@setup_logging.connect
+def _configure_logging(**_: object) -> None:
+    logs.configure(load_settings().log_format)
+
+
+@before_task_publish.connect
+def _send_request_id(headers: dict[str, object], **_: object) -> None:
+    if (rid := logs.request_id.get()) is not None:
+        headers["request_id"] = rid
+
+
+@task_prerun.connect
+def _take_request_id(task: Task, **_: object) -> None:
+    """None when the task carries no id, so a beat task never keeps the id of the task before it."""
+    logs.request_id.set(task.request.get("request_id"))
 
 
 class CeleryJobs:

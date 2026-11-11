@@ -169,9 +169,9 @@ def test_a_ready_event_read_before_the_embed_step_closed_is_followed_by_one_with
                                                                                                monkeypatch):
     close = PipelineSteps._close
 
-    def late_close(steps, row_id, outcome, error_code):
+    def late_close(steps, *args):
         time.sleep(0.5)
-        close(steps, row_id, outcome, error_code)
+        close(steps, *args)
 
     monkeypatch.setattr(PipelineSteps, "_close", late_close)
     with live.stream() as stream:

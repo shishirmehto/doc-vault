@@ -36,7 +36,7 @@ from openai.lib import type_to_response_format_param
 from openai.types import CompletionUsage
 from pydantic import BaseModel, ValidationError
 
-from . import prompts
+from . import logs, prompts
 from .config import ReasoningEffort, Settings
 from .db import Db
 from .domain import (
@@ -322,21 +322,22 @@ class AI:
     def _record(self, billing: _Billing, tokens: Tokens, latency_ms: int, error_code: str | None) -> None:
         """INSERT INTO llm_calls on the ledger pool (autocommit), so the row
         survives even when the caller's later work rolls back. Spent money stays spent.
-        cost_usd is NULL when the model is unpriced."""
+        cost_usd is NULL when the model is unpriced. request_id is the API request's, or the one
+        its Celery task carried, so a request's spend can be traced from its log line."""
         price = PRICES.get(billing.model)
         prompt, owner = billing.prompt, billing.owner
         with self.ledger.connection() as conn:
             conn.execute(
                 "INSERT INTO llm_calls (purpose, provider, model, prompt_name, prompt_version, document_id, turn_id,"
-                " comparison_id, summary_id, input_tokens, output_tokens, cost_usd, latency_ms, ok, error_code)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " comparison_id, summary_id, input_tokens, output_tokens, cost_usd, latency_ms, ok, error_code,"
+                " request_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (billing.purpose, billing.provider, billing.model, prompt and prompt.name, prompt and prompt.version,
                  owner.document_id if isinstance(owner, DocOwner) else None,
                  owner.turn_id if isinstance(owner, TurnOwner) else None,
                  owner.comparison_id if isinstance(owner, ComparisonOwner) else None,
                  owner.summary_id if isinstance(owner, SummaryOwner) else None,
                  tokens.input, tokens.output, None if price is None else price.usd(tokens), latency_ms,
-                 error_code is None, error_code))
+                 error_code is None, error_code, logs.request_id.get()))
 
 
 def _validated[T: BaseModel](output: type[T], raw: RawCompletion) -> T:

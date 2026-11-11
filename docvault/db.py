@@ -9,6 +9,8 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import logging
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -29,6 +31,8 @@ type Db = ConnectionPool
 
 SCHEMA = Path(__file__).with_name("schema.sql")
 MIGRATE_LOCK = 0x646F637661756C74   # "docvault"; any constant shared by every process works
+
+log = logging.getLogger("docvault.pipeline")
 
 
 class Lease(StrEnum):
@@ -109,22 +113,27 @@ class PipelineSteps:
         the VaultError code (INTERNAL for anything else) and re-raises. A
         BaseException (process shutdown, a test's simulated crash) leaves the
         row open, which is what a real crash does; the next lease holder closes
-        it 'abandoned'.
+        it 'abandoned'. Closing a row also writes one docvault.pipeline log line.
         """
         row = self.conn.execute(
             "INSERT INTO step_runs (document_id, step, attempt) VALUES (%s, %s, %s) RETURNING id",
             (self.doc_id, name, self.attempt)).fetchone()
+        started = time.monotonic()
         try:
             yield
         except Exception as exc:
             code = exc.failure.code if isinstance(exc, VaultError) else ErrorCode.INTERNAL
-            self._close(row["id"], StepOutcome.FAILED, code)
+            self._close(row["id"], name, StepOutcome.FAILED, code, started)
             raise
-        self._close(row["id"], StepOutcome.OK, None)
+        self._close(row["id"], name, StepOutcome.OK, None, started)
 
-    def _close(self, row_id: int, outcome: StepOutcome, error_code: ErrorCode | None) -> None:
+    def _close(self, row_id: int, name: Step, outcome: StepOutcome, error_code: ErrorCode | None,
+               started: float) -> None:
         self.conn.execute("UPDATE step_runs SET finished_at = now(), outcome = %s, error_code = %s WHERE id = %s",
                           (outcome, error_code, row_id))
+        log.info("step", extra={"document_id": str(self.doc_id), "step": name, "attempt": self.attempt,
+                                "outcome": outcome, "error_code": error_code,
+                                "duration_ms": round((time.monotonic() - started) * 1000)})
 
 
 @contextmanager

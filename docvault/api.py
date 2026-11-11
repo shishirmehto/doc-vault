@@ -3,15 +3,18 @@
 No business rules live here. The only table in this file maps domain error
 codes to HTTP statuses, so the domain never imports HTTP concepts. The streamed
 ask runs chat.ask in a worker thread and turns its progress into server-sent events.
-GET /events/documents turns an events.Feed into server-sent events.
+GET /events/documents turns an events.Feed into server-sent events. RequestLog gives every
+request an id, returns it as X-Request-ID and logs the request once, when it ends.
 """
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import queue
 import threading
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -23,9 +26,10 @@ from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response, Uploa
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from starlette.types import Receive, Scope, Send
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from . import chat, compare, documents, events, metrics, summaries, wire
+from . import chat, compare, documents, events, logs, metrics, summaries, wire
 from .config import load_settings
 from .context import Ctx, build_ctx, too_large
 from .domain import (
@@ -45,6 +49,7 @@ from .ratelimit import Action
 from .tasks import CeleryJobs
 
 log = logging.getLogger(__name__)
+requests_log = logging.getLogger("docvault.requests")
 
 ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.EMPTY_FILE: 422,
@@ -63,7 +68,8 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.TOO_MANY_STREAMS: 503,    # with Retry-After: 5
     ErrorCode.AI_UNAVAILABLE: 503,      # with Retry-After: 5 when retryable
     ErrorCode.AI_BAD_OUTPUT: 502,
-    # Stored-only codes (ENCRYPTED_PDF, UNREADABLE_FILE, NO_EXTRACTABLE_TEXT, TOO_MANY_PAGES, INTERNAL)
+    ErrorCode.INTERNAL: 500,            # an exception no route expected (internal_error_handler); also stored
+    # Stored-only codes (ENCRYPTED_PDF, UNREADABLE_FILE, NO_EXTRACTABLE_TEXT, TOO_MANY_PAGES)
     # appear inside a 200 document body, never as a request error.
 }
 
@@ -98,7 +104,9 @@ Deps = Annotated[Ctx, Depends(get_ctx)]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    ctx = build_ctx(load_settings(), CeleryJobs())
+    settings = load_settings()
+    logs.configure(settings.log_format)
+    ctx = build_ctx(settings, CeleryJobs())
     app.state.ctx = ctx
     async with events.running(ctx.settings.database_url, ctx.db) as hub:
         app.state.events = hub
@@ -118,6 +126,17 @@ def vault_error_handler(request: Request, exc: VaultError) -> JSONResponse:
     return JSONResponse(body.model_dump(mode="json"), status_code=ERROR_STATUS.get(failure.code, 500), headers=headers)
 
 
+def internal_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """An exception no route expected: the usual envelope and the request id, so a report can be matched to the
+    log. Starlette sends this response from outside every middleware, so RequestLog cannot add the header."""
+    log.exception("%s %s failed unexpectedly", request.method, request.url.path, exc_info=exc)
+    response = vault_error_handler(request, VaultError(ErrorCode.INTERNAL, "The request failed unexpectedly.",
+                                                       retryable=True))
+    if (rid := logs.request_id.get()) is not None:
+        response.headers["X-Request-ID"] = rid
+    return response
+
+
 def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Malformed input gets the same envelope as every other error, naming each field that failed."""
     problems = [{"field": ".".join(str(part) for part in error["loc"]), "message": error["msg"]}
@@ -125,6 +144,43 @@ def validation_error_handler(request: Request, exc: RequestValidationError) -> J
     message = "; ".join(f"{problem['field']}: {problem['message']}" for problem in problems)
     return vault_error_handler(request, VaultError(ErrorCode.INVALID_REQUEST, f"The request is not valid. {message}",
                                                    details={"errors": problems}))
+
+
+class RequestLog:
+    """Pure ASGI middleware: the request id, and one docvault.requests line per HTTP request.
+
+    The id is the client's X-Request-ID when logs.accept allows it, otherwise a fresh one, and it goes back on the
+    response. The line is written when the response body ends, however it ends, so a stream is logged once with
+    its whole duration. A BaseHTTPMiddleware gets the response when it starts, before a stream's body runs.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        rid = logs.accept(Headers(scope=scope).get("x-request-id"))
+        # Not reset afterwards: internal_error_handler runs after this returns and needs the id.
+        logs.request_id.set(rid)
+        started = time.monotonic()
+        status = 500
+
+        async def send_with_id(message: Message) -> None:
+            nonlocal status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+                message = {**message, "headers": [*message.get("headers", []), (b"x-request-id", rid.encode())]}
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_id)
+        finally:
+            client = scope.get("client")
+            requests_log.info("request", extra={
+                "method": scope["method"], "route": getattr(scope.get("route"), "path", None), "status": status,
+                "latency_ms": round((time.monotonic() - started) * 1000), "client": client[0] if client else None})
 
 
 async def refuse_oversized_uploads(request: Request,
@@ -287,8 +343,9 @@ class AskInThread:
 
     def __init__(self, ctx: Ctx, chat_id: ChatId, question: str) -> None:
         self._events: queue.SimpleQueue[str | Turn | Exception] = queue.SimpleQueue()
-        self.thread = threading.Thread(target=self._run, args=(ctx, chat_id, question), daemon=True,
-                                       name=f"ask-{chat_id}")
+        # A new thread starts with an empty context; the copy carries the request id to the ledger rows.
+        self.thread = threading.Thread(target=contextvars.copy_context().run, args=(self._run, ctx, chat_id, question),
+                                       daemon=True, name=f"ask-{chat_id}")
         self.thread.start()
 
     def _run(self, ctx: Ctx, chat_id: ChatId, question: str) -> None:
@@ -490,5 +547,7 @@ def health(ctx: Deps, response: Response) -> wire.HealthOut:
 app = FastAPI(title="Doc Vault", version="1.0", lifespan=lifespan)
 app.add_exception_handler(VaultError, vault_error_handler)  # type: ignore[arg-type]
 app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]
+app.add_exception_handler(Exception, internal_error_handler)
 app.middleware("http")(refuse_oversized_uploads)
+app.add_middleware(RequestLog)   # added last, so outermost: it also logs and tags refuse_oversized_uploads' 413
 app.include_router(router)

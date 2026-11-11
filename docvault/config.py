@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     insights_timeout_s: float = 120.0
     compare_timeout_s: float = 90.0
     summary_timeout_s: float = 90.0
+    log_format: Literal["json", "text"] = "text"   # json: one object per line, for compose and log shippers
 
 
 def load_settings() -> Settings:
