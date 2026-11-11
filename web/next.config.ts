@@ -6,6 +6,7 @@ const API_ORIGIN = process.env.API_ORIGIN ?? "http://localhost:8000";
 
 const config: NextConfig = {
   output: "standalone",
+  devIndicators: false,
   experimental: {
     // The rewrite proxy truncates bodies past 10 MB by default; the API accepts 50 MiB uploads.
     proxyClientMaxBodySize: "60mb",
