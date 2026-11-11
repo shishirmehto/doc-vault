@@ -190,7 +190,7 @@ CMP=$(curl -s $API/comparisons -H 'content-type: application/json' \
   -d "{\"document_ids\": [\"$POLICY\", \"$QUOTE\"]}" | jq -r .id)
 ```
 
-`documents` are the columns, in request order, each with `deleted`, `pages_read` and `page_count`. Each of the `rows` has a `field`, one cell per document (`cells[i]` belongs to `documents[i]`) and `differs`. A filled cell has the `value` as the document writes it, its `page` and `page_label`, and a `quote` found on that page. An empty cell has all four null: the document does not state the field, or the model's quote was not on the page it cited. `dropped_cells` counts the second kind.
+`documents` are the columns, in request order, each with `deleted`, `pages_read` and `page_count`. Each of the `rows` has a `field`, one cell per document (`cells[i]` belongs to `documents[i]`) and `differs`. A filled cell has the `value` as the document writes it, its `page` and `page_label`, and a `quote` found on that page. An empty cell has all four null: the document does not state the field, or the model gave a value that could not be checked against its page. `dropped_cells` counts the second kind: a quote not on the cited page, a missing page or quote, or a cell naming no document or one already placed in its row.
 
 ```json
 {"field": "Property Damage Deductible", "differs": true, "cells": [
@@ -200,7 +200,7 @@ CMP=$(curl -s $API/comparisons -H 'content-type: application/json' \
    "quote": "Property Damage Deductible $5,000 per occurrence"}]}
 ```
 
-The code decides `differs`, never the model. It is true when the filled cells hold two different values after case, spacing, currency symbols, thousands separators and zero cents are normalised, so `$1,000,000` equals `USD 1,000,000.00`. It is also true when an empty cell sits beside a filled one. `usage` lists the model calls, tokens and cost.
+The code decides `differs`, never the model. It is true when the filled cells hold two different values after case, spacing, thousands separators, zero cents and trailing punctuation are normalised, so `$1,000,000` equals `USD 1,000,000.00`. Currency symbols map to their codes and are compared apart from the figure: `$1,000,000` and `€1,000,000` differ, and a figure with no currency matches either. A leading sign or parenthesis is kept, so `-$500` and `$500` differ. It is also true when an empty cell sits beside a filled one. `usage` lists the model calls, tokens and cost.
 
 Fewer than 2 or more than 5 ids, a repeated id, or a focus over 200 characters is 422 `invalid_request`. An unknown id is 404 `document_not_found`. A document that is not ready is 409 `documents_not_ready`, with the same `details.not_ready` as chats.
 
@@ -260,7 +260,7 @@ Built:
 - Compose stack: `api` on port 8000, `worker`, `beat`, `db` (pgvector 0.8.0 on Postgres 16), and `redis`.
 - Upload with content-hash dedupe, format detection from the file's bytes, and a 413 from the headers when Content-Length is over the limit.
 - Indexing in Celery: parse, chunk and embed, crash-safe under a per-document lock. A rerun after a crash embeds only the chunks still pending. `documents.reconcile` runs every 60 seconds. It re-enqueues stalled documents (at most 50 a tick, oldest re-enqueue first), re-embeds ready documents after the embedding model changes, and enqueues missing insights.
-- The AI gateway (`docvault/ai.py`): OpenAI and a deterministic fake, retries with backoff for chat calls, strict JSON-schema output with one repair turn, and one priced `llm_calls` row per provider attempt.
+- The AI gateway (`docvault/ai.py`): OpenAI and a deterministic fake, retries with backoff for chat calls, strict JSON-schema output with one repair turn (none for a comparison), and one priced `llm_calls` row per provider attempt.
 - Insights: title, type, summary, tags and key facts. A key fact is kept only when its quote is on the page it cites, and `coverage` reports how much of a long document was read.
 - Chat: multi-document, follow-ups rewritten into standalone queries, hybrid retrieval (vector and full text fused by reciprocal rank, with a per-document quota), a relevance gate, and citations verified against the source text with their exact page.
 - Streamed answers over server-sent events (`POST /chats/{id}/messages/stream`), through the same `chat.ask` as the plain route. The web UI shows the answer as it is written.
@@ -291,7 +291,7 @@ Known limits:
 - An open event stream never ends by itself, so stopping the API gives requests 5 s (`--timeout-graceful-shutdown 5` in compose) and then cancels them. Uvicorn logs that cancellation as an error.
 - Over HTTP/1.1 a browser allows six connections to one host across all its tabs, and each visible tab of the web UI holds one for its stream. A hidden tab gives its stream back and reads the list again when shown.
 - In the web UI, a document older than the newest 100, opened by its link, is read again on each event that names it, so it updates but shows its loading state for a moment each time. While the stream is down and nothing in the list is processing, changes from elsewhere show when the stream reconnects, at most 30 s later.
-- A comparison runs synchronously: one model call of at most 90 s (`COMPARE_TIMEOUT_S`) with no gateway retries, so the API answers before the web proxy's 120 s timeout. Output that fails validation still gets one repair call, so the worst case is two calls.
+- A comparison runs synchronously: one model call of at most 90 s (`COMPARE_TIMEOUT_S`), with no gateway retry and no repair turn, so the API answers before the web proxy's 120 s timeout. Output that fails validation is a retryable 502 `ai_bad_output`, and the UI offers Try again.
 - Each compared document gets an even share of the 240,000-character insights budget, so five long documents are read for at most 48,000 characters each. `pages_read` says how far, and the UI says when a document was read only in part.
 - A comparison cell is checked for its quote being on the cited page, not for its value appearing in the quote. `differs` compares the values, so it trusts the model's copy of each one.
 - The fake provider aligns fields only when two or more documents give them the same label. It misses the premium change in the samples ("Total Advance Premium" and "Total Annual Premium") and leaves out fields only one document has.
