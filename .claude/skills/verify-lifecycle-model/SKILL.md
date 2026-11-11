@@ -40,7 +40,7 @@ Run `git diff <sync commit> -- docvault/documents.py docvault/db.py docvault/tas
 
 Each model step is one atomic step in the code: one SQL statement, one transaction, or one lock call. `StartParse` and `ResumeEmbed` fold the row read into the compare-and-swap. That is sound because `parsed` changes only under the lease and the compare-and-swap re-checks `status`.
 
-**Sync commit:** `1645d50`. The model was last confirmed against the code at this commit. Move it forward only after you have read every changed covered function and confirmed the model still describes it.
+**Sync commit:** `0334f3e`. The model was last confirmed against the code at this commit. Move it forward only after you have read every changed covered function and confirmed the model still describes it.
 
 ## Run
 

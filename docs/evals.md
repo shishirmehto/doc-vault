@@ -81,6 +81,8 @@ Read that margin as a warning, not a result. The fake embedder hashes words, so 
 
 ## Results
 
+**Reading the retrieval number.** Every retrieval miss in the results below is a gate refusal: the case table marks each one `gate`. When a question passes the gate, the expected fact is among the answer step's sources every time (21 of 21 on this run). So under the fake provider the weak step is the gate, which hashes words and cannot match a broker's wording to the document's, not retrieval or ranking. Citation misses are a separate step: the fake answer quotes the sentence that shares the most words with the question, which is often not the planted fact.
+
 <!-- results:start -->
 Run 2026-11-11 at commit ec87246: `uv run python -m docvault.evals --out docs/evals.md`
 

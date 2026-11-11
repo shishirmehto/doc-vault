@@ -12,7 +12,7 @@ Everything in the parent folder was captured from the running API on 2026-11-11,
 document (a generated textless PDF) and the queued, parsing and embedding states of a generated text file.
 The chat fixtures (`chat-*`, `turn-*`, `history-*`, `ask-*`) come from the backend's fake provider at `453d327`.
 
-At phase 3 (`ead25ad`), the scratchpad's `tools/capture_pass3.py` recaptured the fixtures whose wire changed (health,
+At phase 3 (`ead25ad`), a capture script run against the live API recaptured the fixtures whose wire changed (health,
 the failed document, the document list, both 422s, the 409 and the started chat) and captured the new ones: the chat
 read back with a deleted document, its `documents_deleted` 409, the recent chats, a 429 from 31 duplicate uploads of
 `ui-textless.pdf`, and both metrics routes, including an empty one-hour window.

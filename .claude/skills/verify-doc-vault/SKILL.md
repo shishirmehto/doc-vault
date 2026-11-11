@@ -31,7 +31,7 @@ Read-only. It checks five things:
 - port 18000 belongs to this project's `api`;
 - `/health` returns 200 with `db` and `redis` both `ok`;
 - the worker has logged `ready.`;
-- whether the api image is older than the last commit or than uncommitted changes in `docvault/`.
+- whether the api image is older than the last commit to `docvault/` (both times in UTC). It also notes uncommitted `docvault/` changes, which the image does not hold.
 
 Run it first whenever a result looks wrong. A stale image means the stack runs old code: run `cleanup.sh`, then `launch.sh`.
 

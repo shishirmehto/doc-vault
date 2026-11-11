@@ -32,6 +32,9 @@ Preconditions:
 - **Back.** Go back. The URL returns to `?doc=<id>` and no `mark` remains.
 - **Chat.** Tick the checkboxes for `sample-cgl-policy.pdf` and `sample-renewal-quote.pdf`, type `What is the property damage deductible?` in "Question" and press Enter. The URL becomes `?chat=<id>`. The answer lists source 1 `sample-cgl-policy.pdf, p. 2` and source 2 `sample-renewal-quote.pdf, p. 2`.
 - **Open a source.** Click "Source 2: sample-renewal-quote.pdf, p. 2". The URL gains `&cite=turn.<turn id>.2`, the pane shows "Page 2 of 3", and the `mark` text is `Property Damage Deductible $5,000 per occurrence`.
+- **Recent chats.** Open `/`. The new-chat screen lists the newest chats from `GET /chats`, each named by its documents. Click one and the URL becomes `?chat=<id>`.
+- **Metrics.** Click the "Metrics" link in the header. The URL becomes `?view=metrics`. The document counts match `GET /metrics/documents`, the "Questions" table matches `chat.outcomes` from `GET /metrics/processing?window=24h`, and under the fake provider the cost reads "fake provider, no cost".
+- **Upload limit.** Pick a file larger than `max_upload_bytes` from `/health`. The rail refuses it before sending, and no `POST /api/documents` request is made.
 - **Proof.** Take a screenshot after each step into the run's evidence folder. Read the URL and the `mark` text with `browser_evaluate` and save them beside the screenshots.
 
 ## Gotchas
@@ -39,5 +42,5 @@ Preconditions:
 - The Playwright MCP browser is headed and visible on the desktop. A stray click there changes the URL. Log input events with an init script (`pointerdown`, `click`, `keydown`, `popstate`) and redo any step with input you did not make.
 - A browser that once visited another app on the same port may hold a cached redirect (for example to `/sign-in`). Add a query string (`/?fresh=1`) to get past it.
 - The page pane slides in. Wait for the `mark` before you take the screenshot.
-- The document checkboxes may have no accessible name until the UI labels them. If `getByRole('checkbox', { name })` finds nothing, find the row by its filename text.
-- The API cannot read a chat's documents back (no `GET /chats/{id}` yet), so the chat header comes from this browser's `localStorage`. In a fresh browser, a chat link shows "Chat" as its title.
+- Each document checkbox is named by its filename through `aria-labelledby`, so use `getByRole('checkbox', { name: 'sample-cgl-policy.pdf', exact: true })`. Some accessibility-tree tools do not resolve `aria-labelledby` and show the checkboxes as "on". Playwright's role queries do resolve it.
+- The chat header comes from `GET /chats/{id}`, so a chat link names its documents in any browser.

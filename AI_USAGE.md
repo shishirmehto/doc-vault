@@ -6,14 +6,11 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 
 ## The workflow
 
-1. **Plan.** The lead agent read the case study and wrote a plan with seven decisions for me to take:
+1. **Plan.** The lead agent read the case study and wrote a plan with the decisions for me to take:
    - FastAPI;
    - pgvector in the same Postgres;
    - a hand-written retrieval module, for exact page citations;
-   - asking for an API key and building against a fake model until it arrives;
-   - naming the tools only in this file;
-   - a neutral repo name;
-   - keeping the code outside my job-search folder.
+   - asking for an API key and building against a fake model until it arrives.
 
    I took the recommended option on each.
 2. **Design bakeoff.** Three runners, each on a different model, sketched the whole backend from the same task: schema, endpoints, document lifecycle, retrieval and prompts. A read-only judge on another model scored the sketches against a rubric. The lead agent took the strongest sketch as the base and grafted in the best parts of the other two.
@@ -60,7 +57,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 
 ## What I decided
 
-- The scope, and the seven decisions in the plan.
+- The scope, and the decisions in the plan.
 - The model-per-role sheet for the agents.
 - Adding the web UI, the lifecycle chart as documentation, the verification skills, and the F1 fix.
 

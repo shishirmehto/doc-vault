@@ -79,8 +79,8 @@ stateDiagram-v2
 - **Failed** stays failed until you call `POST /documents/{id}/retry`. A retry goes back to Queued. If the pages were already saved, the worker skips parsing and resumes embedding.
 - "A worker holds the lease" means a worker holds the document's Postgres advisory lock (`db.pipeline_steps`). Postgres releases the lock when a worker dies. A duplicate job that cannot get the lock exits without doing anything.
 - "The worker marks it failed (lease held)" is the failure path. `run_index` writes FAILED on its lease connection and only then releases the lease.
-- "Waiting for a worker" is where a crashed or retried job sits until Celery redelivers it. It also covers a document that the minute check (`documents.reconcile`, every 60 seconds) re-queues after it has not moved for two minutes.
-- A retry can land in the moment after FAILED is written and before the lease is released. That is the arrow from Failed to "Queued, a worker holds the lease". The retry's job finds the lease taken and exits, and the minute check picks the document up again within about three minutes.
+- "Waiting for a worker" is where a crashed or retried job sits until Celery redelivers it. It also covers a document that the minute check (`documents.reconcile`, every 60 seconds) re-queues after it has not moved for two minutes. Each tick re-queues at most 50 stale documents, the ones re-queued longest ago first, so a large backlog is worked through over several ticks rather than flooding the queue.
+- A retry can land in the moment after FAILED is written and before the lease is released. That is the arrow from Failed to "Queued, a worker holds the lease". The retry's job finds the lease taken and exits. The minute check picks the document up again within about three minutes, or longer when more than 50 documents are stale at once.
 
 ## Rules the model checks
 
@@ -115,6 +115,7 @@ The same race happened when the AI provider used up its retries, and on unexpect
 
 - Insights (`run_analyze`), document deletes, and re-embedding after an embedding-model change.
 - Time. The two-minute stale threshold is modelled as "may happen at any moment", which can only add orders of events, never remove them.
+- The 50-per-tick bound on reconcile. The model lets reconcile re-queue any in-flight document at any moment, which covers every choice the bounded rule can make.
 - Size. The gate runs with 2 workers, 2 chunks, 1 crash, 2 provider faults, 1 Celery retry, 1 user retry and at most 2 queued jobs. The chart above uses 1 worker and 1 chunk, so it stays readable. A pass covers these bounds, not every possible run.
 - A lost lease connection. If the worker cannot reach Postgres, it cannot write FAILED either. The document then waits for the minute check, by design, because a write without the lease would bring F1 back.
 

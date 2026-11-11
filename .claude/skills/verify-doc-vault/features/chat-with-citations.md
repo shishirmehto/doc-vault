@@ -38,6 +38,6 @@ Preconditions:
 
 - Under `ai_mode: fake`, answers are the source sentence that shares the most words with the question. Grounding and citations are real, but wording and judgement are not. Two known fake limits are tracked in `docs/evals.md`:
   - a comparison phrased with a word no chunk contains ("differ") is gated as `no_evidence`;
-  - an elliptical follow-up with no reference word ("And the premium?") is not rewritten.
+  - an elliptical follow-up ("And the premium?") is rewritten, but the fake often cites the wrong passage for it.
 - The fake never produces `unverified`, because it quotes its sources word for word.
 - Chats have no delete route. Runs on the isolated stack are removed by `cleanup.sh`.
