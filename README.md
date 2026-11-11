@@ -200,6 +200,9 @@ Known limits:
 - A key fact is checked only for its quote being on the cited page, not for its value appearing in the quote.
 - Insights rerun only when the prompt version changes, not when the model or the provider key changes.
 - During a re-embed after an embedding-model change, a chat over that document refuses with `no_evidence`, and the embedding progress count reads as complete.
+- After an embedding-model change, chats answer only from documents already re-embedded until reconcile finishes.
 - Rate limits are per API process and per client address. Behind a proxy, such as the web UI's, every user shares the proxy's address.
 - Gateway retries have no jitter, and Celery's retry countdown (2 to 32 seconds) ignores the provider's Retry-After header.
 - Chats cannot be deleted.
+- A delete racing an upload of the same bytes can delete the blob that the new row needs.
+- An upload sent without Content-Length is read in full into a temporary file before its size is checked, so the limit bounds what is stored, not what a client can send.
