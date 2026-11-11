@@ -186,6 +186,12 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
 .row-name { font-weight: 600; overflow-wrap: anywhere; text-decoration: none; }
 a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .row-meta { font-size: var(--t-meta); color: var(--graphite); }
+/* A version after the first, boxed like the edition number printed in a form's margin. */
+.version-mark {
+  display: inline-block; margin-right: 6px; padding: 0 5px; border: 1px solid var(--rule); border-radius: var(--r-tab);
+  font-size: var(--t-meta); font-weight: 600; line-height: 1.35; color: var(--ink); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .row-status { font-size: var(--t-meta); font-variant-numeric: tabular-nums; }
 .row-status[data-tone="quiet"] { color: var(--graphite); }
 .row-status[data-tone="working"] { color: var(--carbon); }

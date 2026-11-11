@@ -98,8 +98,9 @@ export function Workspace() {
   const complete = documents.data?.complete ?? true;
   const selectedDoc = selection.kind === "doc" ? selection.doc : null;
   const listed = selectedDoc && docs ? (docs.find((d) => d.id === selectedDoc) ?? null) : null;
-  // The list holds the newest 100. A link to an older document reads that one document instead.
-  const lookUp = selectedDoc !== null && docs !== null && !complete && listed === null ? selectedDoc : null;
+  // The list holds the latest version of the newest 100. A link to an earlier version or an older document reads that
+  // one document instead, and a document read that way that is gone shows the missing-document page.
+  const lookUp = selectedDoc !== null && docs !== null && listed === null ? selectedDoc : null;
   const older = useFetched(`older:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
   const reloadOlder = older.reload;
   useEffect(() => {

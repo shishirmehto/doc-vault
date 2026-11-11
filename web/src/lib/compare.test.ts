@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { parseComparison, parseDocumentPage } from "../api/parse.ts";
 import type { ApiError, Comparison, Doc, DocumentId } from "../api/domain.ts";
 import {
-  cellAt, columns, idle, step, visibleRows, withDoc, worthRetrying, type CompareRequest, type Run,
+  cellAt, columns, columnVersion, idle, step, visibleRows, withDoc, worthRetrying, type CompareRequest, type Run,
 } from "./compare.ts";
 
 function captured(name: string): Comparison {
@@ -122,4 +122,15 @@ test("a document older than the live list's newest 100 is offered after them, on
     "sample-renewal-quote.pdf",
   ]);
   assert.deepEqual([withDoc(docs, policy).length, withDoc(docs, null).length], [11, 11]);
+});
+
+test("a column header marks any version after the first, and version 1 when another column shares its filename", () => {
+  const col = (id: string, filename: string, version: number | null) =>
+    ({ id: id as DocumentId, filename, version, deleted: false, pagesRead: 1, pageCount: 1 });
+  const twins = [col("a", "terms.txt", 1), col("b", "terms.txt", 2)];
+  const strangers = [col("a", "policy.pdf", 1), col("b", "quote.pdf", 3)];
+  const before = [col("a", "terms.txt", null), col("b", "terms.txt", null)];
+  assert.deepEqual(twins.map((d) => columnVersion(twins, d)), [1, 2]);
+  assert.deepEqual(strangers.map((d) => columnVersion(strangers, d)), [null, 3]);
+  assert.deepEqual(before.map((d) => columnVersion(before, d)), [null, null]);
 });

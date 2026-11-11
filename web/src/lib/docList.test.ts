@@ -55,3 +55,30 @@ test("a delete removes the document and leaves complete as it was", () => {
   assert.deepEqual(applyDocEvent(list(true, doc(3, 30), doc(2, 20)), { kind: "deleted", id: id(3) }), list(true, doc(2, 20)));
   assert.deepEqual(applyDocEvent(list(true, doc(3, 30)), { kind: "deleted", id: id(9) }), list(true, doc(3, 30)));
 });
+
+/** Version `number` of `latest` in the family of document 1, uploaded at `second`. */
+function version(n: number, second: number, number: number, latest: number): Doc {
+  return { ...doc(n, second), filename: `terms v${number}.txt`, version: { family: id(1) as string as FamilyId, number, latest } };
+}
+
+test("the list holds one row per family, its latest version, whichever order the events arrive in", () => {
+  const before = list(true, doc(7, 70), version(1, 10, 1, 1));
+  const arrived = [version(2, 80, 2, 2), version(1, 10, 1, 2)];
+
+  for (const order of [arrived, [...arrived].reverse()]) {
+    const next = order.reduce((l, d) => applyDocEvent(l, { kind: "document", doc: d }), before);
+    assert.deepEqual(names(next), ["terms v2.txt", "d7.txt"]);
+  }
+});
+
+test("deleting the latest version brings the one before it back, where its upload time puts it", () => {
+  const two = list(true, version(2, 80, 2, 2), doc(7, 70));
+  const deleted = applyDocEvent(two, { kind: "deleted", id: id(2) });
+  const back = applyDocEvent(deleted, { kind: "document", doc: version(1, 10, 1, 1) });
+  assert.deepEqual(names(back), ["d7.txt", "terms v1.txt"]);
+});
+
+test("an older version that still names itself latest does not replace a newer one already listed", () => {
+  const stale = upsertDoc(list(true, version(2, 80, 2, 2)), version(1, 10, 1, 1));
+  assert.deepEqual(names(stale), ["terms v2.txt"]);
+});

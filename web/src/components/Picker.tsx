@@ -3,8 +3,10 @@
 import { useState } from "react";
 import type { Doc, DocumentId } from "@/api/domain";
 import { FIND_AFTER, allChosen, chooseAll, findDocs } from "@/lib/find";
+import { laterVersion } from "@/lib/versions";
 import { docMeta, statusLine } from "@/copy";
 import { FindField } from "./FindField";
+import { VersionMark } from "./VersionMark";
 
 /**
  * How many documents can be ticked. A chat offers "Select all ready" and stops it at `max`; a comparison disables the
@@ -82,7 +84,9 @@ export function Picker({ docs, chosen, onChange, findLabel, limit, noneReady, bu
                 <input type="checkbox" checked={isChosen} disabled={!open || busy}
                   aria-labelledby={`pick-${d.id}`} aria-describedby={`pick-meta-${d.id}`} onChange={() => toggle(d.id)} />
                 <span className="pick-name" id={`pick-${d.id}`}>{d.filename}</span>
-                <span className="pick-meta" id={`pick-meta-${d.id}`}>{isReady ? docMeta(d) : statusLine(d).text}</span>
+                <span className="pick-meta" id={`pick-meta-${d.id}`}>
+                  <VersionMark number={laterVersion(d)} />{isReady ? docMeta(d) : statusLine(d).text}
+                </span>
               </label>
             </li>
           );

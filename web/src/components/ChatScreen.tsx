@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
-import type { ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Selection, Turn, TurnCite } from "@/api/domain";
+import type { ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Result, Selection, Turn, TurnCite } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { threads, useThread } from "@/hooks/useThread";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
@@ -29,6 +29,15 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   const [draft, setDraft] = useState("");
   const turns = thread?.history.kind === "loaded" ? thread.history.turns : null;
   const open = (cite: TurnCite) => push({ kind: "chat", chat: id, pane: { cite, page: null } });
+
+  // The live list holds the latest version of the newest 100 documents. A citation of an earlier version, which a chat
+  // started on it still answers from, or of an older document, reads that one document instead.
+  const cited = pane && turns ? citationAt(turns, pane.cite) : null;
+  const listed = cited && docs ? (docs.find((d) => d.id === cited.source.documentId) ?? null) : null;
+  const lookUp = cited && docs !== null && listed === null ? cited.source.documentId : null;
+  const older = useFetched(`cited:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
+  const citedDoc = listed ?? (older.result?.ok ? older.result.value : null);
+  const resolving = docs === null || (lookUp !== null && older.result === null);
 
   const column = useRef<HTMLDivElement>(null);
   const turnCount = turns?.length ?? 0;
@@ -114,7 +123,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
       </main>
       {pane && (
         <SourcePane
-          view={sourceView(pane, turns, docs)}
+          view={sourceView(pane, turns, citedDoc, resolving)}
           onPage={(page) => replace({ kind: "chat", chat: id, pane: { ...pane, page } })}
           onClose={() => push({ kind: "chat", chat: id, pane: null })}
         />
@@ -123,13 +132,16 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   );
 }
 
-/** The URL names a turn and a citation number; the loaded history and the document list resolve them. */
-function sourceView(pane: ChatPane, turns: readonly Turn[] | null, docs: readonly Doc[] | null): SourceView {
-  if (turns === null || docs === null) return { kind: "resolving" };
-  const outcome = turns.find((t) => t.id === pane.cite.turn)?.outcome;
-  const citation = outcome?.kind === "answered" ? outcome.citations.find((c) => c.ref === pane.cite.ref) : undefined;
+function citationAt(turns: readonly Turn[], cite: TurnCite): Citation | null {
+  const outcome = turns.find((t) => t.id === cite.turn)?.outcome;
+  return (outcome?.kind === "answered" ? outcome.citations.find((c) => c.ref === cite.ref) : undefined) ?? null;
+}
+
+/** The URL names a turn and a citation number; the loaded history resolves them, and `doc` is the cited document. */
+function sourceView(pane: ChatPane, turns: readonly Turn[] | null, doc: Doc | null, resolving: boolean): SourceView {
+  if (turns === null || resolving) return { kind: "resolving" };
+  const citation = citationAt(turns, pane.cite);
   if (!citation) return { kind: "unknown", message: "This citation is not in the chat's history." };
-  const doc = docs.find((d) => d.id === citation.source.documentId);
   if (!doc) return { kind: "unknown", message: `${citation.filename} is no longer in the vault.` };
   const page = pane.page ?? citation.source.page;
   const mark = page === citation.source.page ? { quote: citation.source.quote, label: `source ${citation.ref}`, flag: String(citation.ref) } : null;

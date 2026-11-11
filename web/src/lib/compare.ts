@@ -76,3 +76,13 @@ export function cellAt(c: Comparison, cite: CellCite): { field: string; doc: Com
   const cell = row?.cells[cite.col];
   return row && doc && cell ? { field: row.field, doc, cell } : null;
 }
+
+/**
+ * The version a column's header marks: any after the first, and version 1 too when another column has the same
+ * filename, so two versions of one file can be told apart. Null when the comparison predates versions.
+ */
+export function columnVersion(documents: readonly ComparedDoc[], doc: ComparedDoc): number | null {
+  if (doc.version === null) return null;
+  const twin = documents.some((d) => d.id !== doc.id && d.filename === doc.filename);
+  return doc.version > 1 || twin ? doc.version : null;
+}

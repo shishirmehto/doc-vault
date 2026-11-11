@@ -1,5 +1,5 @@
-// The rail's list: the newest LIST_LIMIT documents, newest first, kept current by upload and retry
-// responses and by live events between list reads.
+// The rail's list: the latest version of the newest LIST_LIMIT documents, newest first, kept current by upload and
+// retry responses and by live events between list reads. It holds one row per family.
 
 import type { Doc, DocEvent } from "../api/domain.ts";
 
@@ -16,8 +16,20 @@ function compareNewestFirst(a: Doc, b: Doc): number {
   return a.id === b.id ? 0 : a.id > b.id ? -1 : 1;
 }
 
-/** Puts a document the server just returned into the list, where a fresh read of the list would put it. */
+/**
+ * Puts a document the server just returned into the list, where a fresh read of the list would put it. A version that
+ * is not its family's latest leaves the list, and so does any lower version of a family whose newer one arrives, so the
+ * order events arrive in never leaves two rows for one family.
+ */
 export function upsertDoc(list: DocList, doc: Doc): DocList {
+  const family = doc.version.family;
+  const newer = list.docs.some((d) => d.version.family === family && d.version.number > doc.version.number);
+  if (doc.version.number < doc.version.latest || newer) {
+    return list.docs.some((d) => d.id === doc.id) ? { ...list, docs: list.docs.filter((d) => d.id !== doc.id) } : list;
+  }
+  if (list.docs.some((d) => d.version.family === family && d.id !== doc.id)) {
+    list = { ...list, docs: list.docs.filter((d) => d.version.family !== family || d.id === doc.id) };
+  }
   const known = list.docs.findIndex((d) => d.id === doc.id);
   if (known !== -1) return { ...list, docs: list.docs.map((d, i) => (i === known ? doc : d)) };
   const last = list.docs.at(-1);

@@ -6,7 +6,7 @@ import type {
   ApiError, CellCite, ComparedDoc, Comparison, ComparisonId, ComparisonPane, Doc, Result, Selection,
 } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
-import { cellAt, visibleRows } from "@/lib/compare";
+import { cellAt, columnVersion, visibleRows } from "@/lib/compare";
 import { cellView } from "@/lib/comparisonPane";
 import {
   NONE_DIFFER, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, partlyRead,
@@ -14,6 +14,7 @@ import {
 import { InAppLink } from "./InAppLink";
 import { MissingComparison } from "./Missing";
 import { SourcePane } from "./SourcePane";
+import { VersionMark } from "./VersionMark";
 
 type Props = {
   id: ComparisonId;
@@ -129,7 +130,10 @@ function ComparisonView({ c, docs, active, only: inUrl, onOpen, onOnly, onNew }:
                   <tr>
                     <th scope="col">Field</th>
                     {c.documents.map((d) => (
-                      <th key={d.id} scope="col">{d.filename}{d.deleted && <span className="quiet"> (deleted)</span>}</th>
+                      <th key={d.id} scope="col">
+                        {d.filename} <VersionMark number={columnVersion(c.documents, d)} />
+                        {d.deleted && <span className="quiet"> (deleted)</span>}
+                      </th>
                     ))}
                   </tr>
                 </thead>

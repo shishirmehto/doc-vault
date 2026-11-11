@@ -31,7 +31,12 @@ type Props = {
 };
 
 /** The centre column for one document, and the source pane beside it. */
-export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry, onAsk, onDelete }: Props) {
+export function DocumentScreen({ id, doc: current, loading, pane, push, replace, onRetry, onAsk, onDelete }: Props) {
+  // A document that leaves the list, because a newer version arrived or because it was deleted, is read again on its
+  // own. Until that read lands the page keeps what it showed, rather than a skeleton.
+  const [last, setLast] = useState(current);
+  if (current !== null && current !== last) setLast(current);
+  const doc = current ?? (loading ? last : null);
   // A new key whenever the list shows the document or its insights moving on, so the panel refetches once.
   const insights = useFetched(`${id}:${doc?.lifecycle.status}:${doc?.insights}`, () => api.insights(id));
   const cite = citedSource(pane);

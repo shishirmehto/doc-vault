@@ -13,8 +13,14 @@ import { LIST_LIMIT, type DocList } from "../lib/docList.ts";
 const BASE = "/api";
 
 export const api = {
-  /** The newest LIST_LIMIT. Older documents need cursor paging, which pass 1 leaves out. */
-  documents: (): Promise<Result<DocList>> => call("GET", `/documents?limit=${LIST_LIMIT}`, P.parseDocumentPage),
+  /**
+   * The latest version of the newest LIST_LIMIT documents. Earlier versions, and documents older than these, are read
+   * one at a time. Older documents need cursor paging, which pass 1 leaves out.
+   */
+  documents: (): Promise<Result<DocList>> => call("GET", `/documents?latest=true&limit=${LIST_LIMIT}`, P.parseDocumentPage),
+
+  /** Every version of the document's family, oldest first. */
+  versions: (id: DocumentId): Promise<Result<Doc[]>> => call("GET", `/documents/${id}/versions`, P.parseVersionList),
 
   /**
    * Removes the document, its pages and its insights. Chats keep their turns, whose citations carry their own
@@ -111,13 +117,15 @@ export const api = {
   /**
    * XHR, because fetch reports no upload progress. 202 is a new document; 200 means the same
    * bytes were uploaded before and nothing was reprocessed. 413, 415, 422 and 429 arrive as "refused".
+   * With `replaces`, new bytes become the next version of that document's family whatever their name; 404 when it is
+   * gone. Without it, new bytes under a stored document's name become its next version.
    */
-  upload: (file: File, onProgress: (sent: number, total: number) => void): Promise<Result<UploadReceipt>> =>
+  upload: (file: File, onProgress: (sent: number, total: number) => void, replaces: DocumentId | null = null): Promise<Result<UploadReceipt>> =>
     new Promise((resolve) => {
       const form = new FormData();
       form.append("file", file, file.name);
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `${BASE}/documents`);
+      xhr.open("POST", `${BASE}/documents${replaces ? `?replaces=${replaces}` : ""}`);
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress(e.loaded, e.total);
       };

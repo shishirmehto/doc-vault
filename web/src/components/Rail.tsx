@@ -5,12 +5,14 @@ import type { ApiError, Doc, DocumentId, Failure } from "@/api/domain";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { FIND_AFTER, findDocs } from "@/lib/find";
 import { isSettled } from "@/lib/lifecycle";
+import { laterVersion } from "@/lib/versions";
 import type { Upload } from "@/lib/uploads";
 import { docMeta, explain, formatBytes, statusLine } from "@/copy";
 import { DropZone } from "./DropZone";
 import { FindField } from "./FindField";
 import { InAppLink } from "./InAppLink";
 import { StageBar } from "./StageBar";
+import { VersionMark } from "./VersionMark";
 
 type Props = {
   docs: readonly Doc[] | null;
@@ -175,7 +177,7 @@ function DocumentRow({ doc, current, onOpen, onRetry }: {
   return (
     <li className="row" aria-current={current || undefined}>
       <DocLink id={doc.id} onOpen={onOpen}>{doc.filename}</DocLink>
-      <span className="row-meta">{docMeta(doc)}</span>
+      <span className="row-meta"><VersionMark number={laterVersion(doc)} />{docMeta(doc)}</span>
       <span className="row-status" data-tone={status.tone} aria-live="polite">{status.text}</span>
       <StageBar lifecycle={doc.lifecycle} />
       {doc.lifecycle.status === "failed" && (
