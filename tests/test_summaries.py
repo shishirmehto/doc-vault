@@ -113,6 +113,16 @@ def test_a_focus_puts_the_passages_it_names_first(ctx):
     assert focused.text != unfocused.text
 
 
+def test_a_focus_the_document_never_mentions_gives_the_leading_passages(ctx):
+    policy = indexed(ctx, SAMPLES / POLICY)
+
+    unfocused = summaries.create(ctx, policy, options())
+    earthquake = summaries.create(ctx, policy, options(focus="earthquake"))
+
+    assert (earthquake.text, earthquake.sources) == (unfocused.text, unfocused.sources)
+    assert earthquake.id != unfocused.id
+
+
 def test_each_tone_gives_the_fake_its_own_opening_sentence_and_the_same_passages(ctx):
     policy = indexed(ctx, SAMPLES / POLICY)
 

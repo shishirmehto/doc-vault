@@ -655,17 +655,22 @@ _FAKE_SUMMARY_OPENINGS: dict[SummaryTone, str] = {
 def _fake_summary(prompt: Prompt) -> SummaryDraft:
     """The tone's opening sentence, naming the file, then the length's number of passages (_segments of the
     included pages), whitespace collapsed. With a focus, passages sharing more of its content words come first,
-    ties and passages sharing none in document order. A focus word and a passage word are shared when one stem
-    starts with the other, because _stem leaves "deductibles" as "deductibl" but "deductible" whole. Sources: the
-    passages used, at most 6, each quoting itself on its page."""
+    ties and passages sharing none in document order. A focus word and a passage word are shared when their stems
+    are equal or the shorter, of 4 letters or more, starts the longer: _stem leaves "deductibles" as "deductibl" but
+    "deductible" whole, and a list marker such as "e." must not match "earthquake". Sources: the passages used, at
+    most 6, each quoting itself on its page."""
     pages: tuple[Page, ...] = prompt.inputs["pages"]
     options: SummaryOptions = prompt.inputs["options"]
     passages = [(page.number, collapse_whitespace(passage)) for page in pages for passage in _segments(page.text)]
     wanted = set(_tokens(options.focus or ""))
 
+    def same_stem(a: str, b: str) -> bool:
+        shorter, longer = sorted((a, b), key=len)
+        return shorter == longer or (len(shorter) >= 4 and longer.startswith(shorter))
+
     def shared(passage: str) -> int:
         words = set(_tokens(passage))
-        return sum(any(word.startswith(focus) or focus.startswith(word) for word in words) for focus in wanted)
+        return sum(any(same_stem(focus, word) for word in words) for focus in wanted)
 
     chosen = sorted(passages, key=lambda item: -shared(item[1]))[:_FAKE_SUMMARY_PASSAGES[options.length]]
     opening = _FAKE_SUMMARY_OPENINGS[options.tone].format(filename=prompt.inputs["filename"])
