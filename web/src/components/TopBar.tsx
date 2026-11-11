@@ -1,6 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { parseSelection } from "@/api/parse";
 import { useHealth } from "@/hooks/useHealth";
 
 function ServiceNote() {
@@ -12,23 +15,64 @@ function ServiceNote() {
   }
   if (health.value.aiMode === "fake") {
     return (
-      <span className="service" title="No API key is set. Summaries and key facts come from the backend's deterministic fake model.">
-        Fake AI provider
-      </span>
+      <>
+        <button type="button" className="service" popoverTarget="ai-note">Fake AI provider</button>
+        <p id="ai-note" className="service-note" popover="auto">
+          No API key is set, so summaries, key facts and answers come from the backend&apos;s deterministic fake model.
+          They show the wiring and the citations, not answer quality.
+        </p>
+      </>
     );
   }
   return null;
+}
+
+/**
+ * "page" when the link leads to exactly this screen, "true" when this screen sits inside the section, as a
+ * chat sits inside Ask.
+ */
+type Current = { ask: "page" | "true" | undefined; metrics: "page" | undefined };
+
+function Sections({ current }: { current: Current }) {
+  return (
+    <nav className="sections" aria-label="Sections">
+      <Link href="/" aria-current={current.ask}>Ask</Link>
+      <Link href="/?view=metrics" aria-current={current.metrics}>Metrics</Link>
+    </nav>
+  );
+}
+
+const NONE: Current = { ask: undefined, metrics: undefined };
+
+function CurrentSections() {
+  const path = usePathname();
+  const params = useSearchParams();
+  if (path !== "/") return <Sections current={NONE} />;
+  const selection = parseSelection(new URLSearchParams(params.toString()));
+  switch (selection.kind) {
+    case "none":
+      return <Sections current={{ ask: "page", metrics: undefined }} />;
+    case "chat":
+      return <Sections current={{ ask: "true", metrics: undefined }} />;
+    case "metrics":
+      return <Sections current={{ ask: undefined, metrics: "page" }} />;
+    case "doc":
+      return <Sections current={NONE} />;
+    default: {
+      const unknown: never = selection;
+      return unknown;
+    }
+  }
 }
 
 export function TopBar() {
   return (
     <header className="topbar">
       <Link className="wordmark" href="/">Doc Vault</Link>
-      <nav className="topbar-end">
-        <ServiceNote />
-        <Link href="/?view=metrics">Metrics</Link>
-        <Link className="button" href="/">New chat</Link>
-      </nav>
+      <Suspense fallback={<Sections current={NONE} />}>
+        <CurrentSections />
+      </Suspense>
+      <ServiceNote />
     </header>
   );
 }
