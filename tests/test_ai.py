@@ -51,16 +51,18 @@ LIMIT = Limit(amount=1_000_000, currency="USD")
 
 @dataclass
 class ScriptedChat:
-    """Returns or raises its script in order and keeps every prompt it was sent."""
+    """Returns or raises its script in order and keeps every prompt it was sent and the timeout of each call."""
 
     script: list[tuple[RawCompletion, Tokens] | ProviderError]
     models: Mapping[Tier, str] = field(default_factory=lambda: {"main": "gpt-6.1-sol", "small": "gpt-6-luna"})
     provider: str = "scripted"
     prompts: list[Prompt] = field(default_factory=list)
+    timeouts: list[float] = field(default_factory=list)
 
     def complete_json(self, prompt: Prompt, output: type[BaseModel], *,
                       timeout_s: float) -> tuple[RawCompletion, Tokens]:
         self.prompts.append(prompt)
+        self.timeouts.append(timeout_s)
         step = self.script.pop(0)
         if isinstance(step, ProviderError):
             raise step
@@ -140,6 +142,35 @@ def test_insights_keep_their_repair_turn(db):
     assert gateway(db, chat).complete(prompt, Limit, owner=OWNER) == LIMIT
     assert rows(db, "purpose, input_tokens") == [("insights", 120), ("insights", 160)]
     assert len(chat.prompts) == 2
+
+
+def outcome(call: Callable[[], object]) -> object:
+    try:
+        return call()
+    except VaultError as exc:
+        return exc.failure
+
+
+RETRYABLE_BAD_OUTPUT = Failure(ErrorCode.AI_BAD_OUTPUT, "The model returned invalid output.", True)
+
+
+@pytest.mark.parametrize(("purpose", "attempts", "timeout_s", "after_bad_output", "calls_after_bad_output"), [
+    (Purpose.ANSWER, 3, 30.0, LIMIT, 2),
+    (Purpose.CONDENSE, 3, 30.0, LIMIT, 2),
+    (Purpose.INSIGHTS, 1, 120.0, LIMIT, 2),
+    (Purpose.COMPARE, 1, 90.0, RETRYABLE_BAD_OUTPUT, 1),
+    (Purpose.SUMMARY, 1, 90.0, RETRYABLE_BAD_OUTPUT, 1),
+])
+def test_each_model_purpose_keeps_its_attempts_repair_turn_and_timeout(
+        db, purpose, attempts, timeout_s, after_bad_output, calls_after_bad_output):
+    prompt = dataclasses.replace(PROMPT, purpose=purpose)
+    down = ScriptedChat([ProviderError("server_error", retryable=True)] * 3)
+    bad = ScriptedChat([reply(BAD, 120, 0, 15), reply(GOOD, 160, 0, 15)])
+
+    assert outcome(lambda: gateway(db, down).complete(prompt, Limit, owner=OWNER)) == unavailable("server_error", True)
+    assert (down.timeouts, len(rows(db, "id"))) == ([timeout_s] * attempts, attempts)
+    assert outcome(lambda: gateway(db, bad).complete(prompt, Limit, owner=OWNER)) == after_bad_output
+    assert (len(bad.prompts), len(rows(db, "id"))) == (calls_after_bad_output, attempts + calls_after_bad_output)
 
 
 def test_a_refusal_is_bad_output_without_a_repair_turn(db):

@@ -2,10 +2,10 @@
 
 Callers get one object, AI, with two methods: embed() and complete(). Behind
 them sit provider choice, batching, timeouts, retries with backoff,
-JSON-schema output, validation with one repair turn (none for a comparison),
-cost pricing, and one llm_calls row per provider attempt (failed
-attempts included). No module can reach a provider without going through
-here, so token and cost accounting cannot be skipped.
+JSON-schema output, validation with one repair turn (none for a comparison
+or a summary), cost pricing, and one llm_calls row per provider attempt
+(failed attempts included). No module can reach a provider without going
+through here, so token and cost accounting cannot be skipped.
 """
 
 from __future__ import annotations
@@ -39,7 +39,22 @@ from pydantic import BaseModel, ValidationError
 from . import prompts
 from .config import ReasoningEffort, Settings
 from .db import Db
-from .domain import ComparisonId, DocumentId, ErrorCode, KeyFact, Page, Purpose, Source, Turn, TurnId, VaultError
+from .domain import (
+    ComparisonId,
+    DocumentId,
+    ErrorCode,
+    KeyFact,
+    Page,
+    Purpose,
+    Source,
+    SummaryId,
+    SummaryLength,
+    SummaryOptions,
+    SummaryTone,
+    Turn,
+    TurnId,
+    VaultError,
+)
 from .pages import SENTENCE_OR_PARAGRAPH_END, TABLE_CELL, collapse_whitespace
 from .prompts import (
     DOCUMENT_TYPES,
@@ -53,6 +68,8 @@ from .prompts import (
     KeyFactDraft,
     Prompt,
     RowDraft,
+    SummaryDraft,
+    SummarySourceDraft,
     Tier,
 )
 
@@ -66,12 +83,14 @@ MAX_RETRY_WAIT_S = 10.0
 # tries. Retrying them here too would multiply the attempts and hold both while sleeping.
 BACKGROUND = frozenset({Purpose.EMBED_CHUNKS, Purpose.INSIGHTS})
 
-# One provider attempt per call, with no gateway retry: Celery retries BACKGROUND, and the UI's Try again a comparison.
-ONE_ATTEMPT = BACKGROUND | {Purpose.COMPARE}
+# One provider attempt per call, with no gateway retry: Celery retries BACKGROUND, and the UI's Try again a comparison
+# or a summary.
+ONE_ATTEMPT = BACKGROUND | {Purpose.COMPARE, Purpose.SUMMARY}
 
-# No repair turn either. A comparison is synchronous and the web proxy gives up at 120 s, so one call of at most
-# compare_timeout_s lets the API answer first; its invalid output fails as retryable, for the UI's Try again.
-NO_REPAIR = frozenset({Purpose.COMPARE})
+# No repair turn either. A comparison and a summary are synchronous and the web proxy gives up at 120 s, so one call of
+# at most compare_timeout_s or summary_timeout_s (90 s) lets the API answer first; invalid output fails as a
+# retryable 502, for the UI's Try again.
+NO_REPAIR = frozenset({Purpose.COMPARE, Purpose.SUMMARY})
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +108,12 @@ class ComparisonOwner:
     comparison_id: ComparisonId
 
 
-type Owner = DocOwner | TurnOwner | ComparisonOwner   # every call is billed to exactly one of them
+@dataclass(frozen=True, slots=True)
+class SummaryOwner:
+    summary_id: SummaryId
+
+
+type Owner = DocOwner | TurnOwner | ComparisonOwner | SummaryOwner   # every call is billed to exactly one of them
 
 
 class Tokens(NamedTuple):
@@ -275,8 +299,8 @@ class AI:
         Anything else is a bug or a crash, and it propagates without a row.
         """
         purpose, settings = billing.purpose, self.settings
-        timeout_s = {Purpose.INSIGHTS: settings.insights_timeout_s,
-                     Purpose.COMPARE: settings.compare_timeout_s}.get(purpose, settings.chat_timeout_s)
+        timeout_s = {Purpose.INSIGHTS: settings.insights_timeout_s, Purpose.COMPARE: settings.compare_timeout_s,
+                     Purpose.SUMMARY: settings.summary_timeout_s}.get(purpose, settings.chat_timeout_s)
         attempts = 1 if purpose in ONE_ATTEMPT else settings.ai_max_attempts
         for attempt in itertools.count(1):
             started = time.perf_counter()
@@ -304,12 +328,13 @@ class AI:
         with self.ledger.connection() as conn:
             conn.execute(
                 "INSERT INTO llm_calls (purpose, provider, model, prompt_name, prompt_version, document_id, turn_id,"
-                " comparison_id, input_tokens, output_tokens, cost_usd, latency_ms, ok, error_code)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " comparison_id, summary_id, input_tokens, output_tokens, cost_usd, latency_ms, ok, error_code)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (billing.purpose, billing.provider, billing.model, prompt and prompt.name, prompt and prompt.version,
                  owner.document_id if isinstance(owner, DocOwner) else None,
                  owner.turn_id if isinstance(owner, TurnOwner) else None,
                  owner.comparison_id if isinstance(owner, ComparisonOwner) else None,
+                 owner.summary_id if isinstance(owner, SummaryOwner) else None,
                  tokens.input, tokens.output, None if price is None else price.usd(tokens), latency_ms,
                  error_code is None, error_code))
 
@@ -617,6 +642,37 @@ def _fake_compare(prompt: Prompt) -> ComparisonDraft:
     return ComparisonDraft(rows=rows)
 
 
+_FAKE_SUMMARY_PASSAGES: dict[SummaryLength, int] = {
+    SummaryLength.BRIEF: 2, SummaryLength.STANDARD: 4, SummaryLength.DETAILED: 8}
+
+_FAKE_SUMMARY_OPENINGS: dict[SummaryTone, str] = {
+    SummaryTone.PLAIN: "{filename} in brief.",
+    SummaryTone.FORMAL: "This note summarises {filename}.",
+    SummaryTone.CLIENT: "Here is what {filename} means for you.",
+}
+
+
+def _fake_summary(prompt: Prompt) -> SummaryDraft:
+    """The tone's opening sentence, naming the file, then the length's number of passages (_segments of the
+    included pages), whitespace collapsed. With a focus, passages sharing more of its content words come first,
+    ties and passages sharing none in document order. A focus word and a passage word are shared when one stem
+    starts with the other, because _stem leaves "deductibles" as "deductibl" but "deductible" whole. Sources: the
+    passages used, at most 6, each quoting itself on its page."""
+    pages: tuple[Page, ...] = prompt.inputs["pages"]
+    options: SummaryOptions = prompt.inputs["options"]
+    passages = [(page.number, collapse_whitespace(passage)) for page in pages for passage in _segments(page.text)]
+    wanted = set(_tokens(options.focus or ""))
+
+    def shared(passage: str) -> int:
+        words = set(_tokens(passage))
+        return sum(any(word.startswith(focus) or focus.startswith(word) for word in words) for focus in wanted)
+
+    chosen = sorted(passages, key=lambda item: -shared(item[1]))[:_FAKE_SUMMARY_PASSAGES[options.length]]
+    opening = _FAKE_SUMMARY_OPENINGS[options.tone].format(filename=prompt.inputs["filename"])
+    return SummaryDraft(summary=" ".join([opening, *(passage for _, passage in chosen)]),
+                        sources=[SummarySourceDraft(page=page, quote=passage) for page, passage in chosen[:6]])
+
+
 _REFERENCE_WORD = re.compile(r"\b(?:it|its|that|this|these|those|they|them|one|same|other)\b", re.IGNORECASE)
 _CONTINUATION = re.compile(r"^\W*(?:and|also|but|or|what about|how about)\b", re.IGNORECASE)
 
@@ -677,7 +733,7 @@ class FakeChat:
     `handlers` to script other output or a provider failure.
 
     Handlers: insights (_fake_insights), condense (_fake_condense), answer (_fake_answer),
-    compare (_fake_compare).
+    compare (_fake_compare), summary (_fake_summary).
 
     Token counts are whitespace word counts (system and messages in, JSON out),
     so ledger and metrics tests have real numbers. Asked to stream, it sends the
@@ -688,7 +744,8 @@ class FakeChat:
     provider = "fake"
     models: Mapping[Tier, str] = {"main": "fake-chat", "small": "fake-chat"}
     handlers: Mapping[str, Callable[[Prompt], BaseModel]] = {
-        "insights": _fake_insights, "condense": _fake_condense, "answer": _fake_answer, "compare": _fake_compare}
+        "insights": _fake_insights, "condense": _fake_condense, "answer": _fake_answer, "compare": _fake_compare,
+        "summary": _fake_summary}
 
     def __init__(self, stream_delay_ms: int = 0) -> None:
         self.stream_delay_ms = stream_delay_ms

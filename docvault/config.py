@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     questions_per_minute: int = Field(20, ge=1)
     insights_timeout_s: float = 120.0
     compare_timeout_s: float = 90.0
+    summary_timeout_s: float = 90.0
 
 
 def load_settings() -> Settings:

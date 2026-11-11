@@ -24,6 +24,7 @@ ChunkId = NewType("ChunkId", UUID)
 ChatId = NewType("ChatId", UUID)
 TurnId = NewType("TurnId", UUID)
 ComparisonId = NewType("ComparisonId", UUID)
+SummaryId = NewType("SummaryId", UUID)
 Sha256 = NewType("Sha256", bytes)
 
 
@@ -75,6 +76,7 @@ class Purpose(StrEnum):
     CONDENSE = "condense"
     ANSWER = "answer"
     COMPARE = "compare"
+    SUMMARY = "summary"
 
 
 class InsightsStatus(StrEnum):
@@ -471,4 +473,55 @@ class Comparison:
     model: str
     prompt_version: str
     usage: Usage                # aggregated from llm_calls WHERE comparison_id = id
+    created_at: datetime
+
+
+# ---------------------------------------------------------------- summary
+
+
+class SummaryLength(StrEnum):
+    BRIEF = "brief"
+    STANDARD = "standard"
+    DETAILED = "detailed"
+
+
+class SummaryTone(StrEnum):
+    PLAIN = "plain"
+    FORMAL = "formal"
+    CLIENT = "client"       # written for the insured client, avoiding broker jargon
+
+
+@dataclass(frozen=True, slots=True)
+class SummaryOptions:
+    """What a reader asked for. The options are the cache key, so focus is stored as normalised: the prompt gets
+    the same text, and one key always means one model input."""
+
+    length: SummaryLength
+    focus: str | None       # trimmed, lowercase, single-spaced; None when blank
+    tone: SummaryTone
+
+    @classmethod
+    def of(cls, length: SummaryLength, focus: str | None, tone: SummaryTone) -> SummaryOptions:
+        """' Deductibles  ' -> 'deductibles'; a blank or absent focus -> None."""
+        return cls(length, " ".join((focus or "").casefold().split()) or None, tone)
+
+
+@dataclass(frozen=True, slots=True)
+class SummarySource:
+    page: int
+    quote: str          # the source span on `page`, whitespace collapsed; never the model's copy
+
+
+@dataclass(frozen=True, slots=True)
+class Summary:
+    id: SummaryId
+    document_id: DocumentId
+    options: SummaryOptions
+    text: str
+    sources: tuple[SummarySource, ...]  # may be empty: a summary is not a fact claim, so it is kept without them
+    dropped_sources: int        # sources summaries.ground could not keep, such as a quote not on its page
+    page_basis: PageBasis       # read from the document at read time; labels the source pages
+    model: str
+    prompt_version: str
+    cached: bool                # no model call answered this request: a stored summary, served again
     created_at: datetime

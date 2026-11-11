@@ -14,6 +14,7 @@
 --   document_insights                    -> insights.py
 --   chats, chat_documents, chat_turns    -> chat.py
 --   comparisons                          -> compare.py
+--   document_summaries                   -> summaries.py
 --   llm_calls                            -> ai.py
 --   (metrics.py reads all, writes none)
 --   *_notify triggers (live events)      -> NOTIFY documents, heard by events.py
@@ -178,8 +179,30 @@ CREATE TABLE IF NOT EXISTS comparisons (
 );
 CREATE INDEX IF NOT EXISTS comparisons_listing ON comparisons (created_at DESC, id DESC);
 
+-- One row per distinct summary request, written once after the model call; a provider failure writes none. A
+-- document's content never changes (it is keyed by its hash), so a stored summary stays true and is served again
+-- for the same options, model and prompt version; it goes when its document goes. focus_key is the normalised
+-- focus, '' for none, so the unique key treats every request without a focus as one value.
+CREATE TABLE IF NOT EXISTS document_summaries (
+  id              uuid PRIMARY KEY,                   -- generated before the model call, used as ledger attribution
+  document_id     uuid  NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
+  length          text  NOT NULL,
+  focus_key       text  NOT NULL,
+  tone            text  NOT NULL,
+  text            text  NOT NULL,
+  sources         jsonb NOT NULL,                     -- [{page, quote}], each quote the source span on its page
+  dropped_sources int   NOT NULL,                     -- sources the model cited whose quote was not on the cited page
+  model           text  NOT NULL,
+  prompt_version  text  NOT NULL,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT document_summaries_length_values CHECK (length IN ('brief', 'standard', 'detailed')),
+  CONSTRAINT document_summaries_tone_values CHECK (tone IN ('plain', 'formal', 'client')),
+  CONSTRAINT document_summaries_key UNIQUE (document_id, length, focus_key, tone, model, prompt_version)
+);
+CREATE INDEX IF NOT EXISTS document_summaries_listing ON document_summaries (document_id, created_at DESC, id DESC);
+
 -- Every provider call, successful or not, one row. The only place tokens and
--- cost exist. No FKs: cost history outlives document, chat and comparison deletes.
+-- cost exist. No FKs: cost history outlives document, chat, comparison and summary deletes.
 CREATE TABLE IF NOT EXISTS llm_calls (
   id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   at             timestamptz NOT NULL DEFAULT now(),
@@ -191,6 +214,7 @@ CREATE TABLE IF NOT EXISTS llm_calls (
   document_id    uuid,
   turn_id        uuid,
   comparison_id  uuid,
+  summary_id     uuid,
   input_tokens   int  NOT NULL DEFAULT 0,
   output_tokens  int  NOT NULL DEFAULT 0,
   cost_usd       numeric(12, 6),                      -- NULL when the model has no price entry; never guessed
@@ -198,14 +222,15 @@ CREATE TABLE IF NOT EXISTS llm_calls (
   ok             boolean NOT NULL,
   error_code     text,
   CONSTRAINT llm_calls_purpose_values CHECK (
-    purpose IN ('embed_chunks', 'embed_query', 'insights', 'condense', 'answer', 'compare')),
-  CONSTRAINT one_owner CHECK (num_nonnulls(document_id, turn_id, comparison_id) = 1),
+    purpose IN ('embed_chunks', 'embed_query', 'insights', 'condense', 'answer', 'compare', 'summary')),
+  CONSTRAINT one_owner CHECK (num_nonnulls(document_id, turn_id, comparison_id, summary_id) = 1),
   CONSTRAINT error_iff_not_ok CHECK (ok = (error_code IS NULL))
 );
 CREATE INDEX IF NOT EXISTS llm_calls_window ON llm_calls (at);
 CREATE INDEX IF NOT EXISTS llm_calls_turn   ON llm_calls (turn_id) WHERE turn_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS llm_calls_doc    ON llm_calls (document_id) WHERE document_id IS NOT NULL;
--- llm_calls_comparison is in the upgrades section, after the column it indexes exists in every database.
+-- llm_calls_comparison and llm_calls_summary are in the upgrades section, after the columns they index exist in
+-- every database.
 
 -- ------------------------------------------------------------------ live events
 -- GET /events/documents (events.py) listens on channel 'documents'. Each payload is the id of a document whose
@@ -280,20 +305,23 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS requeued_at timestamptz;
 
 ALTER TABLE chat_turns ADD COLUMN IF NOT EXISTS suggestions jsonb NOT NULL DEFAULT '[]';
 
--- Comparisons are billed to their own owner. The constraints are replaced only while they lack it, so a later
--- hash change does not re-validate every ledger row.
+-- Comparisons and summaries are billed to their own owners. Each guard tests for the newest owner and purpose,
+-- so a database at any earlier version upgrades in one step, and the constraints are replaced only while they lack
+-- them, so a later hash change does not re-validate every ledger row.
 ALTER TABLE llm_calls ADD COLUMN IF NOT EXISTS comparison_id uuid;
+ALTER TABLE llm_calls ADD COLUMN IF NOT EXISTS summary_id uuid;
 CREATE INDEX IF NOT EXISTS llm_calls_comparison ON llm_calls (comparison_id) WHERE comparison_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS llm_calls_summary ON llm_calls (summary_id) WHERE summary_id IS NOT NULL;
 DO $$
 BEGIN
   IF (SELECT pg_get_constraintdef(oid) FROM pg_constraint
-      WHERE conrelid = 'llm_calls'::regclass AND conname = 'one_owner') NOT LIKE '%comparison_id%' THEN
+      WHERE conrelid = 'llm_calls'::regclass AND conname = 'one_owner') NOT LIKE '%summary_id%' THEN
     ALTER TABLE llm_calls DROP CONSTRAINT one_owner,
-      ADD CONSTRAINT one_owner CHECK (num_nonnulls(document_id, turn_id, comparison_id) = 1);
+      ADD CONSTRAINT one_owner CHECK (num_nonnulls(document_id, turn_id, comparison_id, summary_id) = 1);
   END IF;
   IF (SELECT pg_get_constraintdef(oid) FROM pg_constraint
-      WHERE conrelid = 'llm_calls'::regclass AND conname = 'llm_calls_purpose_values') NOT LIKE '%''compare''%' THEN
+      WHERE conrelid = 'llm_calls'::regclass AND conname = 'llm_calls_purpose_values') NOT LIKE '%''summary''%' THEN
     ALTER TABLE llm_calls DROP CONSTRAINT llm_calls_purpose_values, ADD CONSTRAINT llm_calls_purpose_values CHECK (
-      purpose IN ('embed_chunks', 'embed_query', 'insights', 'condense', 'answer', 'compare'));
+      purpose IN ('embed_chunks', 'embed_query', 'insights', 'condense', 'answer', 'compare', 'summary'));
   END IF;
 END $$;
