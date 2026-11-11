@@ -9,6 +9,8 @@ constructed.
 
 from __future__ import annotations
 
+import re
+import string
 from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import datetime
@@ -21,6 +23,7 @@ DocumentId = NewType("DocumentId", UUID)
 ChunkId = NewType("ChunkId", UUID)
 ChatId = NewType("ChatId", UUID)
 TurnId = NewType("TurnId", UUID)
+ComparisonId = NewType("ComparisonId", UUID)
 Sha256 = NewType("Sha256", bytes)
 
 
@@ -106,6 +109,7 @@ class ErrorCode(StrEnum):
     DOCUMENT_NOT_FOUND = "document_not_found"
     PAGE_NOT_FOUND = "page_not_found"
     CHAT_NOT_FOUND = "chat_not_found"
+    COMPARISON_NOT_FOUND = "comparison_not_found"
     DOCUMENTS_NOT_READY = "documents_not_ready"
     DOCUMENTS_DELETED = "documents_deleted"
     NOTHING_TO_RETRY = "nothing_to_retry"
@@ -401,3 +405,62 @@ class Turn:
     finished_at: datetime
     usage: Usage                # aggregated from llm_calls WHERE turn_id = id
     suggestions: tuple[str, ...]        # at most 3 follow-up questions, each ending in "?"
+
+
+# ---------------------------------------------------------------- comparison
+
+
+@dataclass(frozen=True, slots=True)
+class ComparedDocument:
+    """One column of a comparison. Everything but deleted is a snapshot taken when the comparison ran, so its
+    labels and coverage survive a delete."""
+
+    id: DocumentId
+    filename: str
+    page_basis: PageBasis   # labels the column's cell pages
+    pages_read: int         # coverage: pages 1..pages_read went into the prompt
+    page_count: int
+    deleted: bool           # derived at read time: the document has no row any more
+
+
+@dataclass(frozen=True, slots=True)
+class Cell:
+    value: str          # as the document writes it, whitespace collapsed
+    page: int
+    quote: str          # the source span on `page`, whitespace collapsed; never the model's copy
+
+
+_CURRENCY = re.compile(r"[$€£]|(?<![a-z])(?:usd|eur|gbp)(?![a-z])")
+_COMMA_IN_NUMBER = re.compile(r"(?<=\d),(?=\d)")
+_ZERO_CENTS = re.compile(r"(?<=\d)\.00(?!\d)")
+
+
+def _comparable(value: str) -> str:
+    """'USD 1,000,000.00' -> '1000000', so one value written two ways is not a difference."""
+    text = _ZERO_CENTS.sub("", _COMMA_IN_NUMBER.sub("", _CURRENCY.sub("", value.casefold())))
+    return " ".join(text.split()).strip(string.punctuation + " ")
+
+
+@dataclass(frozen=True, slots=True)
+class Row:
+    field: str                          # "Property Damage Deductible"
+    cells: tuple[Cell | None, ...]      # one per document, in Comparison.documents order; None is an empty cell
+
+    @property
+    def differs(self) -> bool:
+        """Two or more distinct values, or an empty cell beside a filled one. Decided here, never by the model."""
+        values = {_comparable(cell.value) for cell in self.cells if cell is not None}
+        return len(values) > 1 or (bool(values) and None in self.cells)
+
+
+@dataclass(frozen=True, slots=True)
+class Comparison:
+    id: ComparisonId
+    documents: tuple[ComparedDocument, ...]     # the columns, in request order
+    focus: str | None
+    rows: tuple[Row, ...]
+    dropped_cells: int          # cells the model filled whose quote was not on the page it cited
+    model: str
+    prompt_version: str
+    usage: Usage                # aggregated from llm_calls WHERE comparison_id = id
+    created_at: datetime
