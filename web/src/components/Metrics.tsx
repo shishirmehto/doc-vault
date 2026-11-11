@@ -210,7 +210,7 @@ function ProcessingFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean })
 /** A table that scrolls sideways inside its own box when it is wider than the column. */
 function Figures({ caption, children }: { caption: string; children: ReactNode }) {
   return (
-    <div className="table-box" role="region" aria-label={caption} tabIndex={0}>
+    <div className="table-box" role="region" aria-label={caption} tabIndex={0} data-scroll-x>
       <table className="figures">
         <caption>{caption}</caption>
         {children}

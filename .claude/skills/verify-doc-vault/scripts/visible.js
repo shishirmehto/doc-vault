@@ -3,6 +3,7 @@
 //   clipped      text cut off by overflow: hidden or clip, text-overflow: ellipsis, or line-clamp
 //   unreachable  a button, link or field outside the viewport that no scroll container can bring into view
 //   page-scroll  the page itself is wider than the viewport
+//   side-scroll  a column scrolls sideways, unless it is marked data-scroll-x (a wide table's own box)
 // features/README.md lists what it skips and why.
 (() => {
   const TOLERANCE = 1;
@@ -63,6 +64,8 @@
       const outY = box.top < r.top - TOLERANCE || box.bottom > r.bottom + TOLERANCE;
       if (scrolls(s.overflowX) || scrolls(s.overflowY)) {
         if ((outX && !scrolls(s.overflowX)) || (outY && !scrolls(s.overflowY))) return false;
+        // A scroller smaller than the control can never show all of it.
+        if (a.clientWidth + TOLERANCE < box.width || a.clientHeight + TOLERANCE < box.height) return false;
         box = r;
       } else if ((outX && clips(s.overflowX)) || (outY && clips(s.overflowY))) {
         return false;
@@ -82,6 +85,14 @@
 
   const pageWidth = Math.max(root.scrollWidth, document.body.scrollWidth);
   if (pageWidth > vw + TOLERANCE) findings.push({ kind: "page-scroll", element: "html", text: `${pageWidth}px wide in a ${vw}px viewport` });
+
+  // The page itself never scrolls here, so content too wide for its column lands in the column's scroller.
+  for (const el of document.body.querySelectorAll("*")) {
+    if (el.matches("input, textarea, select") || el.hasAttribute("data-scroll-x") || !rendered(el)) continue;
+    if (scrolls(style(el).overflowX) && el.scrollWidth > el.clientWidth + TOLERANCE) {
+      findings.push({ kind: "side-scroll", element: name(el), text: `${el.scrollWidth}px wide in ${el.clientWidth}px` });
+    }
+  }
 
   return findings;
 })();

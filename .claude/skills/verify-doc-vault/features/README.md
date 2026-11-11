@@ -27,9 +27,10 @@ This folder is the maintained source for verifying what a doc-vault user sees an
 
 Every UI proof also runs `scripts/visible.js` on each screen it shows, at 1440x785, 1024x768 and 375x812. The script is one JavaScript expression that runs in the page. It returns an array with one finding per problem, and `[]` when the screen is clean:
 
-- `clipped`: an element with text whose content is cut off by `overflow: hidden` or `clip`, `text-overflow: ellipsis` or `line-clamp` (`scrollWidth > clientWidth` or `scrollHeight > clientHeight`). It also reports the page itself when its content is taller than a viewport that does not scroll, which is how a pushed-off question box shows up.
-- `unreachable`: a button, link, field or `summary` outside the viewport that no scroll container can bring into view. The check walks out from the control. An `overflow: hidden` ancestor that it falls outside hides it for good. A scroll container can bring it into view, and then the container itself must be reachable.
+- `clipped`: an element with text whose content is cut off by `overflow: hidden` or `clip`, `text-overflow: ellipsis` or `line-clamp` (`scrollWidth > clientWidth` or `scrollHeight > clientHeight`). `body` and the centre column count too, so content pushed off the bottom of the window shows up as `clipped body` beside the controls it hid.
+- `unreachable`: a button, link, field or `summary` outside the viewport that no scroll container can bring into view. The check walks out from the control. An `overflow: hidden` ancestor that it falls outside hides it for good. A scroll container can bring it into view if the container is at least the control's size, and then the container itself must be reachable.
 - `page-scroll`: the page is wider than the viewport.
+- `side-scroll`: a column or other scroll container scrolls sideways. The page never scrolls in this app, so this is where content too wide for its column ends up. A box meant to scroll sideways, such as a metrics table's, carries `data-scroll-x` and is not reported.
 
 Run it with Playwright:
 
@@ -48,6 +49,8 @@ What it skips, and why:
 - `input`, `textarea` and `select` in the clipped check: they scroll their own text.
 - Controls inside `[inert]`.
 - Overlap. A control covered by the source pane or by a dialog's backdrop is on screen, so the script does not report it.
+
+Known blind spots: it tests a control against its DOM ancestors, not its containing block. So an absolutely positioned control under a static scroller, or a fixed control under a transformed ancestor, can be misjudged. The app has neither.
 
 A clean result does not prove that text does not wrap where it should not, or that something sits above the question box. Check those with their own assertion, as `web-ui.md` describes.
 

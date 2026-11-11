@@ -24,7 +24,7 @@ The Next.js app on the `web` service shows the vault in a browser. A user upload
 - Rail: the drop zone, the "Choose files" button, one link per document, and over six documents a "Find a document" searchbox. Below 760 px the rail sits behind a "Documents (n)" button with `aria-expanded`.
 - The empty home screen: three numbered steps, with a second "Choose files" button in step 1.
 - The document view: the "Read the pages" and "Ask about this document" buttons, a "Delete" button, and one button per key fact, named "<label>: show the passage on p. N".
-- The new-chat screen: the document checkboxes, "Find a document" and "Select all ready" over six documents, a "Question" textbox and an "Ask" button in the footer row.
+- The new-chat screen: the document checkboxes, "Find a document to ask about" and "Select all ready" over six documents, a "Question" textbox and an "Ask" button in the footer row.
 - The chat: a "Question" textbox and an "Ask" button in the footer row. Each source is a button named "Source N: <file>, p. N". Suggestions are buttons named "Ask: <question>" in a group named "Suggested questions".
 - The page pane: "Previous", "Next" and "Close".
 
@@ -46,7 +46,7 @@ Preconditions:
 - **Recent chats.** Open `/`. The new-chat screen lists the newest chats from `GET /chats`, each named by its documents. Click one and the URL becomes `?chat=<id>`.
 - **Metrics.** Click the "Metrics" link in the header. The URL becomes `?view=metrics`. The document counts match `GET /metrics/documents`, the "Questions" table matches `chat.outcomes` from `GET /metrics/processing?window=24h`, and under the fake provider the cost reads "fake provider, no cost".
 - **Delete.** Upload a throwaway file (never a sample: other runs use their ids) and start a chat on it with `call.sh`. Open the file's page, click "Delete", and check the dialog names the file and that focus is on "Cancel". Press Escape: the dialog closes and the URL is unchanged. Click "Delete", then the dialog's "Delete". The URL becomes `/`, a status note "Deleted <file>. ..." has focus, the rail no longer lists it, `GET /documents/<id>` answers 404, and the chat's header reads "Asking <file> (deleted)".
-- **Find.** With more than six documents, type `policy` into "Find a document". The rail and the picker list only `sample-cgl-policy.pdf`. Type a word nothing matches and both say so, with a "Clear" button.
+- **Find.** With more than six documents, type `policy` into the rail's "Find a document": the rail lists only `sample-cgl-policy.pdf`. Type it into the new-chat picker's "Find a document to ask about": the picker lists only that file. Type a word nothing matches and each says so, with a "Clear" button.
 - **Question box and suggestions.** In a three-turn chat at 1440x785, 1440x600 and 1440x500, the "Question" textbox and "Ask" button are inside the viewport. Inject a 72 px fixed element on the right, then an in-flow 72 px element as the first child of `body`; both stay inside. After an answer lands at 1024x768, the "Suggested questions" group's bottom is at or above the footer row's top.
 - **Status line.** Record the busy turn's `[role="status"]` with a `MutationObserver` while a suggested follow-up is asked. It starts with "Sending the question" and never goes back to an earlier step.
 - **Missing.** Open `/no-such-page`, `/?doc=<random uuid>` and `/?chat=<random uuid>`. Each shows a sentence and an "Ask your documents" link to `/`, and the missing chat has no "Question" textbox.
