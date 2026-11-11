@@ -10,13 +10,14 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
 from . import ai, db
 from .config import Settings
 from .domain import DocumentId, ErrorCode, Sha256, VaultError
+from .ratelimit import RateLimiter
 
 _COPY_BLOCK = 1024 * 1024
 
@@ -84,6 +85,7 @@ class Ctx:
     ai: ai.AI
     blobs: BlobStore
     jobs: Jobs
+    limiter: RateLimiter = field(default_factory=RateLimiter)
 
 
 def build_ctx(settings: Settings, jobs: Jobs) -> Ctx:

@@ -111,6 +111,7 @@ class ErrorCode(StrEnum):
     NOTHING_TO_RETRY = "nothing_to_retry"
     INVALID_CURSOR = "invalid_cursor"
     INVALID_REQUEST = "invalid_request"           # a parameter or body failed validation
+    RATE_LIMITED = "rate_limited"                 # the client spent its per-minute budget for this route
 
 
 @dataclass(frozen=True, slots=True)

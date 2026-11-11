@@ -22,6 +22,7 @@ from . import chat, documents, metrics, wire
 from .config import load_settings
 from .context import Ctx, build_ctx, too_large
 from .domain import ChatId, Created, DocStatus, DocumentId, ErrorCode, Existing, VaultError
+from .ratelimit import Action
 from .tasks import CeleryJobs
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.NOTHING_TO_RETRY: 409,
     ErrorCode.INVALID_CURSOR: 400,
     ErrorCode.INVALID_REQUEST: 422,
+    ErrorCode.RATE_LIMITED: 429,        # with Retry-After: the seconds until the budget allows one more
     ErrorCode.AI_UNAVAILABLE: 503,      # with Retry-After: 5
     ErrorCode.AI_BAD_OUTPUT: 502,
     # Stored-only codes (ENCRYPTED_PDF, UNREADABLE_FILE, NO_EXTRACTABLE_TEXT, TOO_MANY_PAGES, INTERNAL)
@@ -76,7 +78,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def vault_error_handler(request: Request, exc: VaultError) -> JSONResponse:
     failure = exc.failure
     body = wire.ErrorOut(error=wire.error_body(failure, exc.details))
-    headers = {"Retry-After": "5"} if failure.code is ErrorCode.AI_UNAVAILABLE else None
+    retry_after = 5 if failure.code is ErrorCode.AI_UNAVAILABLE else exc.details.get("retry_after_s")
+    headers = None if retry_after is None else {"Retry-After": str(retry_after)}
     return JSONResponse(body.model_dump(mode="json"), status_code=ERROR_STATUS.get(failure.code, 500), headers=headers)
 
 
@@ -115,13 +118,24 @@ def _probe(check: Callable[[], object]) -> Literal["ok", "unreachable"]:
     return "ok"
 
 
+def rate_limited(action: Action) -> Any:
+    """A route dependency that spends one of the client's per-minute budget for `action`, or answers 429."""
+    def check(request: Request, ctx: Deps) -> None:
+        per_minute = ctx.settings.uploads_per_minute if action == "upload" else ctx.settings.questions_per_minute
+        wait = ctx.limiter.take(request.client.host if request.client else "", action, per_minute)
+        if wait is not None:
+            raise VaultError(ErrorCode.RATE_LIMITED, f"Too many requests. Try again in {wait} seconds.",
+                             retryable=True, details={"retry_after_s": wait})
+    return Depends(check)
+
+
 router = APIRouter()
 
 
-@router.post("/documents", status_code=202, response_model=wire.DocumentOut,
+@router.post("/documents", status_code=202, response_model=wire.DocumentOut, dependencies=[rate_limited("upload")],
              responses={200: {"model": wire.DocumentOut, "description": "Same bytes uploaded before; existing document"},
                         **errors(ErrorCode.FILE_TOO_LARGE, ErrorCode.UNSUPPORTED_TYPE, ErrorCode.EMPTY_FILE,
-                                 ErrorCode.INVALID_REQUEST)})
+                                 ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED)})
 def upload(file: UploadFile, response: Response, ctx: Deps) -> wire.DocumentOut:
     outcome = documents.upload(ctx, file.file, file.filename or "upload")
     match outcome:
@@ -179,9 +193,9 @@ def start_chat(body: wire.StartChatIn, ctx: Deps) -> wire.ChatOut:
     return wire.chat_out(chat.start(ctx.db, [DocumentId(doc_id) for doc_id in body.document_ids], title=body.title))
 
 
-@router.post("/chats/{chat_id}/messages", response_model=wire.TurnOut,
+@router.post("/chats/{chat_id}/messages", response_model=wire.TurnOut, dependencies=[rate_limited("ask")],
              responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED, ErrorCode.AI_UNAVAILABLE,
-                              ErrorCode.AI_BAD_OUTPUT, ErrorCode.INVALID_REQUEST))
+                              ErrorCode.AI_BAD_OUTPUT, ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED))
 def ask(chat_id: UUID, body: wire.AskIn, ctx: Deps) -> wire.TurnOut:
     return wire.turn_out(chat.ask(ctx, ChatId(chat_id), body.question))
 
