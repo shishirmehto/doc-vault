@@ -3,7 +3,7 @@
 
 import type {
   AskProgress, Chat, ChatId, Comparison, ComparisonId, Doc, DocumentId, DocumentMetrics, Health, Insights, MetricsWindow,
-  NonEmpty, Page, ProcessingMetrics, Result, Turn, UploadReceipt,
+  NonEmpty, Page, ProcessingMetrics, Result, Summary, SummaryList, SummaryOptions, Turn, UploadReceipt,
 } from "./domain.ts";
 import * as P from "./parse.ts";
 import { createSseReader } from "./sse.ts";
@@ -61,6 +61,17 @@ export const api = {
   /** The newest `limit`, newest first. */
   comparisons: (limit: number): Promise<Result<Comparison[]>> =>
     call("GET", `/comparisons?limit=${limit}`, P.parseComparisonPage),
+
+  /**
+   * Writes the document's summary again with these options. 201 is a new summary; 200 is the one stored for the same
+   * options, served with no model call. 409 documents_not_ready until it is ready; 429 shares the ask budget.
+   */
+  summarize: (id: DocumentId, { length, focus, tone }: SummaryOptions): Promise<Result<Summary>> =>
+    call("POST", `/documents/${id}/summaries`, P.parseSummary, { body: { length, focus, tone } satisfies W.SummaryIn }),
+
+  /** The newest `limit` of the document's summaries, newest first. */
+  summaries: (id: DocumentId, limit: number): Promise<Result<SummaryList>> =>
+    call("GET", `/documents/${id}/summaries?limit=${limit}`, P.parseSummaryPage),
 
   documentMetrics: (): Promise<Result<DocumentMetrics>> => call("GET", "/metrics/documents", P.parseDocumentMetrics),
 

@@ -28,6 +28,7 @@ const PURPOSE: Record<Purpose, string> = {
   condense: "Rewrite follow-ups",
   answer: "Answers",
   compare: "Comparisons",
+  summary: "Rewritten summaries",
 };
 
 const OUTCOME: Record<TurnOutcome, string> = {

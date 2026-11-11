@@ -1,0 +1,12 @@
+{
+  "status": 404,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "document_not_found",
+      "message": "No document has the id 00000000-0000-4000-8000-000000000000.",
+      "retryable": false,
+      "details": {}
+    }
+  }
+}

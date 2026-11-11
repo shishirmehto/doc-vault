@@ -4,9 +4,10 @@ import { readFileSync } from "node:fs";
 import { settle } from "./client.ts";
 import {
   parseChat, parseChatPage, parseComparison, parseComparisonPage, parseDoc, parseDocumentMetrics, parseDocumentPage,
-  parseHealth, parseHistory, parseInsights, parsePage, parseProcessingMetrics, parseSelection, parseTurn, selectionQuery,
+  parseHealth, parseHistory, parseInsights, parsePage, parseProcessingMetrics, parseSelection, parseSummary,
+  parseSummaryPage, parseTurn, selectionQuery,
 } from "./parse.ts";
-import type { ChatId, ComparisonId, DocumentId, Selection, TurnId } from "./domain.ts";
+import type { ChatId, ComparisonId, DocumentId, Selection, SummaryId, TurnId } from "./domain.ts";
 
 /** A captured response: the API's real status, headers and JSON body. */
 function replay<T>(name: string, parse: (w: never) => T, dataStatuses: readonly number[] = []) {
@@ -713,11 +714,116 @@ test("the URL selects a comparison, then one cell's page, a page away from it, a
   assert.deepEqual(sel("compare="), { kind: "missing", what: "comparison" });
 });
 
+// ------------------------------------------------------------------ rewritten summaries
+
+const REWRITTEN = "5cb8a257-f588-415e-a12c-df8a997cecdb" as DocumentId;
+const BRIEF = "8b9267e2-7aa6-409a-9e54-84740ab28388" as SummaryId;
+
+test("a rewritten summary keeps the focus as the backend stored it, and each source on its page", () => {
+  assert.deepEqual(replay("summary-201-brief-focus-client", parseSummary), {
+    ok: true,
+    value: {
+      id: BRIEF,
+      documentId: REWRITTEN,
+      options: { length: "brief", focus: "property damage deductibles", tone: "client" },
+      text: "Here is what phase-d-summary-1cd9f3.txt means for you. A property damage deductible of $5,000 applies to each " +
+        "occurrence. The deductible is paid by the insured before the insurer pays any claim.",
+      sources: [
+        { page: 2, pageLabel: "section 2", quote: "A property damage deductible of $5,000 applies to each occurrence." },
+        { page: 3, pageLabel: "section 3", quote: "The deductible is paid by the insured before the insurer pays any claim." },
+      ],
+      droppedSources: 0,
+      writtenBy: { model: "fake-chat", promptVersion: "summary-v1" },
+      cached: false,
+      createdAt: new Date("2026-11-11T18:57:52.235Z"),
+    },
+  });
+});
+
+test("the same options again answer 200 with the stored summary, marked cached", () => {
+  const r = replay("summary-200-cached", parseSummary);
+  assert.deepEqual(r.ok && [r.value.id, r.value.cached, r.value.options], [
+    BRIEF, true, { length: "brief", focus: "property damage deductibles", tone: "client" },
+  ]);
+});
+
+test("a document's summaries come newest first, and the list is complete when there is no next cursor", () => {
+  const r = replay("summaries-page", parseSummaryPage);
+  assert.ok(r.ok);
+  assert.deepEqual(
+    r.value.summaries.map((s) => [s.id, s.options, s.sources.length, s.cached]),
+    [
+      ["03172f80-a399-4fe4-bb8d-e8b8b07d5a50", { length: "standard", focus: null, tone: "plain" }, 4, true],
+      ["b083fceb-16ca-4457-9d7d-e1809d72c2b3", { length: "detailed", focus: null, tone: "formal" }, 6, true],
+      [BRIEF, { length: "brief", focus: "property damage deductibles", tone: "client" }, 2, true],
+    ],
+  );
+  assert.equal(r.value.complete, true);
+  const captured = JSON.parse(readFileSync(new URL("./fixtures/summaries-page.json", import.meta.url), "utf8")).body;
+  const more = settle(200, JSON.stringify({ ...captured, next_cursor: "abc" }), null, parseSummaryPage);
+  assert.deepEqual(more.ok ? more.value.complete : more.error, false);
+});
+
+test("summarising refuses a document that is not ready and an unknown length; listing refuses an unknown document", () => {
+  const busy = replay("summary-409-not-ready", parseSummary);
+  assert.deepEqual(busy.ok ? null : busy.error, {
+    kind: "refused", status: 409, code: "documents_not_ready", message: "1 of 1 documents are not ready.",
+    retryable: false, retryAfterS: null,
+    documents: [{ id: "2da79ec2-177a-4c59-9c06-fc2ae84f83d6", filename: "phase-d-large-1cd9f3.txt" }],
+  });
+  const short = replay("summary-422-length", parseSummary);
+  assert.deepEqual(short.ok ? null : short.error, {
+    kind: "refused", status: 422, code: "invalid_request",
+    message: "The request is not valid. body.length: Input should be 'brief', 'standard' or 'detailed'",
+    retryable: false, retryAfterS: null, documents: [],
+  });
+  const missing = replay("summaries-404-not-found", parseSummaryPage);
+  assert.deepEqual(missing.ok ? null : missing.error, {
+    kind: "refused", status: 404, code: "document_not_found",
+    message: "No document has the id 00000000-0000-4000-8000-000000000000.",
+    retryable: false, retryAfterS: null, documents: [],
+  });
+});
+
+test("a summary with no sources parses; an unknown length or tone, a source on no page, or a non-boolean cached does not", () => {
+  const captured = JSON.parse(readFileSync(new URL("./fixtures/summary-201-brief-focus-client.json", import.meta.url), "utf8")).body;
+  const edited = (edit: (body: Record<string, unknown> & { sources: Record<string, unknown>[] }) => void) => {
+    const body = structuredClone(captured);
+    edit(body);
+    const r = settle(201, JSON.stringify(body), null, parseSummary);
+    return r.ok ? { sources: r.value.sources, droppedSources: r.value.droppedSources } : r.error;
+  };
+  assert.deepEqual(edited((b) => { b.sources = []; b.dropped_sources = 2; }), { sources: [], droppedSources: 2 });
+  assert.deepEqual(edited((b) => { b.length = "short"; }), { kind: "unexpected", detail: "not a summary length" });
+  assert.deepEqual(edited((b) => { b.tone = "casual"; }), { kind: "unexpected", detail: "not a summary tone" });
+  assert.deepEqual(edited((b) => { b.sources[1]!.page = 0; }), { kind: "unexpected", detail: "a source on page 0" });
+  assert.deepEqual(edited((b) => { b.cached = "yes"; }), { kind: "unexpected", detail: 'not a cached flag: "yes"' });
+});
+
+test("the URL selects a rewritten summary's source on a document; a malformed one is dropped like a fact's", () => {
+  const sel = (q: string) => parseSelection(new URLSearchParams(q));
+  assert.deepEqual(sel(`doc=${REWRITTEN}&cite=sum.${BRIEF}.1&p=2`), {
+    kind: "doc",
+    doc: REWRITTEN,
+    pane: { kind: "cite", cite: { kind: "summary", summary: BRIEF, index: 1 }, page: 2 },
+  });
+  for (const bad of [`sum.${BRIEF}.6`, `sum.${BRIEF}.01`, `sum.${BRIEF}`, "sum.8b9267e2.1", `sum.${BRIEF}.-1`, `summary.${BRIEF}.1`]) {
+    assert.deepEqual(sel(`doc=${REWRITTEN}&cite=${bad}&p=3`), { kind: "doc", doc: REWRITTEN, pane: { kind: "page", page: 3 } }, bad);
+    assert.deepEqual(sel(`doc=${REWRITTEN}&cite=${bad}`), { kind: "doc", doc: REWRITTEN, pane: null }, bad);
+  }
+  assert.deepEqual(sel(`chat=${CHAT}&cite=sum.${BRIEF}.1`), { kind: "chat", chat: CHAT, pane: null });
+  assert.equal(
+    selectionQuery(sel(`p=4&cite=sum.${BRIEF}.0&doc=${REWRITTEN}`)),
+    `?doc=${REWRITTEN}&cite=sum.${BRIEF}.0&p=4`,
+  );
+});
+
 test("every selection a link can carry reads back from the query it writes", () => {
   const forms: Selection[] = [
     { kind: "none" },
     { kind: "metrics", window: "7d" },
     { kind: "doc", doc: POLICY, pane: { kind: "cite", cite: { kind: "fact", index: 2 }, page: 4 } },
+    { kind: "doc", doc: REWRITTEN, pane: { kind: "cite", cite: { kind: "summary", summary: BRIEF, index: 5 }, page: null } },
     { kind: "chat", chat: CHAT, pane: { cite: { turn: DEDUCTIBLE_TURN, ref: 1 }, page: null } },
     { kind: "compare", with: null },
     { kind: "compare", with: RENEWAL },
@@ -730,7 +836,7 @@ test("every selection a link can carry reads back from the query it writes", () 
     assert.deepEqual(parseSelection(new URLSearchParams(selectionQuery(form))), form, selectionQuery(form));
   }
   assert.equal(
-    selectionQuery(forms[9]!),
+    selectionQuery(forms[10]!),
     `?compare=${COMPARISON}&cite=cmp.0.1&p=7&only=differences`,
   );
 });

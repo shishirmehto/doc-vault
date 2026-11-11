@@ -1,0 +1,114 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "items": [
+      {
+        "id": "03172f80-a399-4fe4-bb8d-e8b8b07d5a50",
+        "document_id": "5cb8a257-f588-415e-a12c-df8a997cecdb",
+        "length": "standard",
+        "focus": null,
+        "tone": "plain",
+        "text": "phase-d-summary-1cd9f3.txt in brief. Clause 1. The policy period runs from 1 January 2027 to 1 January 2028. Further wording applies to clause 1 as set out in the schedule, and the insured shall comply with it at every job site. Clause 2. The general aggregate limit is $2,000,000 for the policy period. Further wording applies to clause 2 as set out in the schedule, and the insured shall comply with it at every job site.",
+        "sources": [
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Clause 1. The policy period runs from 1 January 2027 to 1 January 2028."
+          },
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Further wording applies to clause 1 as set out in the schedule, and the insured shall comply with it at every job site."
+          },
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Clause 2. The general aggregate limit is $2,000,000 for the policy period."
+          },
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Further wording applies to clause 2 as set out in the schedule, and the insured shall comply with it at every job site."
+          }
+        ],
+        "dropped_sources": 0,
+        "model": "fake-chat",
+        "prompt_version": "summary-v1",
+        "cached": true,
+        "created_at": "2026-11-11T18:58:04.333098Z"
+      },
+      {
+        "id": "b083fceb-16ca-4457-9d7d-e1809d72c2b3",
+        "document_id": "5cb8a257-f588-415e-a12c-df8a997cecdb",
+        "length": "detailed",
+        "focus": null,
+        "tone": "formal",
+        "text": "This note summarises phase-d-summary-1cd9f3.txt. Clause 1. The policy period runs from 1 January 2027 to 1 January 2028. Further wording applies to clause 1 as set out in the schedule, and the insured shall comply with it at every job site. Clause 2. The general aggregate limit is $2,000,000 for the policy period. Further wording applies to clause 2 as set out in the schedule, and the insured shall comply with it at every job site. Clause 3. Medical expense cover is limited to $10,000 for any one person. Further wording applies to clause 3 as set out in the schedule, and the insured shall comply with it at every job site. Clause 4. Work at heights above three storeys is excluded unless the insurer agrees in writing. Further wording applies to clause 4 as set out in the schedule, and the insured shall comply with it at every job site.",
+        "sources": [
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Clause 1. The policy period runs from 1 January 2027 to 1 January 2028."
+          },
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Further wording applies to clause 1 as set out in the schedule, and the insured shall comply with it at every job site."
+          },
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Clause 2. The general aggregate limit is $2,000,000 for the policy period."
+          },
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Further wording applies to clause 2 as set out in the schedule, and the insured shall comply with it at every job site."
+          },
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Clause 3. Medical expense cover is limited to $10,000 for any one person."
+          },
+          {
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Further wording applies to clause 3 as set out in the schedule, and the insured shall comply with it at every job site."
+          }
+        ],
+        "dropped_sources": 0,
+        "model": "fake-chat",
+        "prompt_version": "summary-v1",
+        "cached": true,
+        "created_at": "2026-11-11T18:58:00.299394Z"
+      },
+      {
+        "id": "8b9267e2-7aa6-409a-9e54-84740ab28388",
+        "document_id": "5cb8a257-f588-415e-a12c-df8a997cecdb",
+        "length": "brief",
+        "focus": "property damage deductibles",
+        "tone": "client",
+        "text": "Here is what phase-d-summary-1cd9f3.txt means for you. A property damage deductible of $5,000 applies to each occurrence. The deductible is paid by the insured before the insurer pays any claim.",
+        "sources": [
+          {
+            "page": 2,
+            "page_label": "section 2",
+            "quote": "A property damage deductible of $5,000 applies to each occurrence."
+          },
+          {
+            "page": 3,
+            "page_label": "section 3",
+            "quote": "The deductible is paid by the insured before the insurer pays any claim."
+          }
+        ],
+        "dropped_sources": 0,
+        "model": "fake-chat",
+        "prompt_version": "summary-v1",
+        "cached": true,
+        "created_at": "2026-11-11T18:57:52.235608Z"
+      }
+    ],
+    "next_cursor": null
+  }
+}

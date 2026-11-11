@@ -251,6 +251,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Summaries
+         * @description A document's stored summaries, newest first, a page at a time.
+         */
+        get: operations["list_summaries_documents__doc_id__summaries_get"];
+        put?: never;
+        /**
+         * Create Summary
+         * @description Summarise a ready document at the length, focus and tone asked for, each source checked on its page.
+         */
+        post: operations["create_summary_documents__doc_id__summaries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/documents": {
         parameters: {
             query?: never;
@@ -786,7 +810,7 @@ export interface components {
          * Purpose
          * @enum {string}
          */
-        Purpose: "embed_chunks" | "embed_query" | "insights" | "condense" | "answer" | "compare";
+        Purpose: "embed_chunks" | "embed_query" | "insights" | "condense" | "answer" | "compare" | "summary";
         /** RowOut */
         RowOut: {
             /** Field */
@@ -829,6 +853,84 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /** SummaryIn */
+        SummaryIn: {
+            /**
+             * @description brief (about 60 words), standard (about 150) or detailed (about 300).
+             * @default standard
+             */
+            length: components["schemas"]["SummaryLength"];
+            /**
+             * Focus
+             * @description What the reader cares about, e.g. "deductibles"; the summary leads with it. At most 200 characters after trimming, and compared lowercase with single spaces, so two ways of writing it get the same summary. Absent or blank: what a broker checks first.
+             */
+            focus?: string | null;
+            /**
+             * @description plain (short sentences for a broker), formal (a file note) or client (written for the insured client, avoiding broker jargon).
+             * @default plain
+             */
+            tone: components["schemas"]["SummaryTone"];
+        };
+        /**
+         * SummaryLength
+         * @enum {string}
+         */
+        SummaryLength: "brief" | "standard" | "detailed";
+        /** SummaryOut */
+        SummaryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            length: components["schemas"]["SummaryLength"];
+            /** Focus */
+            focus: string | null;
+            tone: components["schemas"]["SummaryTone"];
+            /** Text */
+            text: string;
+            /** Sources */
+            sources: components["schemas"]["SummarySourceOut"][];
+            /** Dropped Sources */
+            dropped_sources: number;
+            /** Model */
+            model: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Cached */
+            cached: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** SummaryPage */
+        SummaryPage: {
+            /** Items */
+            items: components["schemas"]["SummaryOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** SummarySourceOut */
+        SummarySourceOut: {
+            /** Page */
+            page: number;
+            /** Page Label */
+            page_label: string;
+            /** Quote */
+            quote: string;
+        };
+        /**
+         * SummaryTone
+         * @enum {string}
+         */
+        SummaryTone: "plain" | "formal" | "client";
         /** TurnOut */
         TurnOut: {
             /**
@@ -1701,6 +1803,147 @@ export interface operations {
             };
             /** @description invalid_request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    list_summaries_documents__doc_id__summaries_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryPage"];
+                };
+            };
+            /** @description invalid_cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    create_summary_documents__doc_id__summaries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryIn"];
+            };
+        };
+        responses: {
+            /** @description Summarised before with the same options; the stored summary, cached */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryOut"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryOut"];
+                };
+            };
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description documents_not_ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description rate_limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description ai_bad_output */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description ai_unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

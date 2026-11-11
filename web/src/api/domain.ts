@@ -153,16 +153,52 @@ export type Comparison = {
   createdAt: Date;
 };
 
+// ------------------------------------------------------------------ rewritten summaries
+
+export type SummaryId = Brand<string, "SummaryId">;
+
+export type SummaryLength = "brief" | "standard" | "detailed";
+export type SummaryTone = "plain" | "formal" | "client";
+
+/** `focus` as the backend compares it: trimmed, lowercase, single spaces; null for none. */
+export type SummaryOptions = { length: SummaryLength; focus: string | null; tone: SummaryTone };
+
+/** A passage found on the page it cites. pageLabel is the backend's ("p. 2" or "section 2"). */
+export type SummarySource = { page: number; pageLabel: string; quote: string };
+
+/** The document's summary written again at another length, about one topic, or for another reader. */
+export type Summary = {
+  id: SummaryId;
+  documentId: DocumentId;
+  options: SummaryOptions;
+  text: string;
+  sources: readonly SummarySource[];
+  /** Sources the backend left out because the quote was not on the page they cite. */
+  droppedSources: number;
+  writtenBy: { model: string; promptVersion: string };
+  /** The same options were summarised before, so this response made no model call. */
+  cached: boolean;
+  createdAt: Date;
+};
+
+/** Newest first. `complete` is false when older summaries exist past this page. */
+export type SummaryList = { summaries: readonly Summary[]; complete: boolean };
+
 // ------------------------------------------------------------------ the URL
 
 /** A key fact's passage, by its index in the document's insights. */
 export type FactCite = { kind: "fact"; index: number };
+/** A rewritten summary's passage, by the summary and its index among the summary's sources, from 0. */
+export type SummaryCite = { kind: "summary"; summary: SummaryId; index: number };
 /** A chat citation, by the turn that made it and its [n]. */
 export type TurnCite = { turn: TurnId; ref: number };
 
-/** The document view's pane: a fact's passage (on its page, or another page after paging), or a bare page. */
+/**
+ * The document view's pane: a key fact's or a rewritten summary's passage (on its page, or another page after
+ * paging), or a bare page.
+ */
 export type PaneRequest =
-  | { kind: "cite"; cite: FactCite; page: number | null }
+  | { kind: "cite"; cite: FactCite | SummaryCite; page: number | null }
   | { kind: "page"; page: number };
 
 /** The chat's pane: always a citation, so it always knows its document. `page` is set after paging. */
@@ -231,7 +267,7 @@ export type DocumentMetrics = {
 };
 
 export type Step = "parse" | "embed" | "analyze";
-export type Purpose = "embed_chunks" | "embed_query" | "insights" | "condense" | "answer" | "compare";
+export type Purpose = "embed_chunks" | "embed_query" | "insights" | "condense" | "answer" | "compare" | "summary";
 export type TurnOutcome = "answered" | NotFoundReason;
 
 /** Runs, not documents: a retried document counts once per run. */

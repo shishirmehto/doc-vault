@@ -21,3 +21,19 @@ test("compare sends the focus trimmed, and a blank one as null", async (t) => {
     { document_ids: [POLICY, RENEWAL], focus: null },
   ]);
 });
+
+test("summarize posts the options to the document's summaries, a missing focus as null", async (t) => {
+  const sent: unknown[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    sent.push([init.method, url, JSON.parse(String(init.body))]);
+    return new Response("{}", { status: 503 });
+  });
+
+  await api.summarize(POLICY, { length: "brief", focus: "deductibles", tone: "client" });
+  await api.summarize(POLICY, { length: "standard", focus: null, tone: "plain" });
+
+  assert.deepEqual(sent, [
+    ["POST", `/api/documents/${POLICY}/summaries`, { length: "brief", focus: "deductibles", tone: "client" }],
+    ["POST", `/api/documents/${POLICY}/summaries`, { length: "standard", focus: null, tone: "plain" }],
+  ]);
+});

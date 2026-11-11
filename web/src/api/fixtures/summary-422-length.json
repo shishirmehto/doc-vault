@@ -1,0 +1,19 @@
+{
+  "status": 422,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "invalid_request",
+      "message": "The request is not valid. body.length: Input should be 'brief', 'standard' or 'detailed'",
+      "retryable": false,
+      "details": {
+        "errors": [
+          {
+            "field": "body.length",
+            "message": "Input should be 'brief', 'standard' or 'detailed'"
+          }
+        ]
+      }
+    }
+  }
+}

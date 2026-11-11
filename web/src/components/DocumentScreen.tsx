@@ -39,7 +39,7 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry,
   }
 
   const openFact = (index: number) => push({ kind: "doc", doc: id, pane: { kind: "cite", cite: { kind: "fact", index }, page: null } });
-  const activeFact = pane?.kind === "cite" ? pane.cite.index : null;
+  const activeFact = pane?.kind === "cite" && pane.cite.kind === "fact" ? pane.cite.index : null;
 
   return (
     <>
@@ -91,6 +91,7 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry,
 /** Resolves the URL's pane request against the loaded insights: which page, and which passage to mark. */
 function sourceView(doc: Doc, pane: PaneRequest, insights: Result<Insights> | null): SourceView {
   if (pane.kind === "page") return { kind: "page", doc, page: pane.page, mark: null };
+  if (pane.cite.kind === "summary") return { kind: "unknown", message: "A rewritten summary's passage cannot be opened here." };
   if (insights === null) return { kind: "resolving" };
   const fact = insights.ok && insights.value.status === "ready" ? insights.value.keyFacts[pane.cite.index] : undefined;
   if (!fact) return { kind: "unknown", message: "This fact is not in the document's current summary." };

@@ -5,8 +5,8 @@ import type * as W from "./wire.ts";
 import type {
   AnswerPart, ApiError, AskProgress, AskStage, CellCite, Chat, ChatId, Citation, CodeCount, CompareCell, ComparedDoc,
   Comparison, ComparisonId, Doc, DocEvent, DocumentId, DocumentMetrics, FactCite, Failure, Health, Insights, Lifecycle,
-  Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument, Selection, Spread, Step, Turn, TurnCite, TurnId,
-  TurnOutcome, Usage,
+  Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument, Selection, Spread, Step, Summary, SummaryCite,
+  SummaryId, SummaryLength, SummaryList, SummaryTone, Turn, TurnCite, TurnId, TurnOutcome, Usage,
 } from "./domain.ts";
 import type { SseMessage } from "./sse.ts";
 
@@ -27,6 +27,10 @@ function asTurnId(raw: string): TurnId | null {
 
 function asComparisonId(raw: string): ComparisonId | null {
   return UUID.test(raw) ? (raw as ComparisonId) : null;
+}
+
+function asSummaryId(raw: string): SummaryId | null {
+  return UUID.test(raw) ? (raw as SummaryId) : null;
 }
 
 function documentId(raw: string): DocumentId {
@@ -285,6 +289,38 @@ export function parseComparisonPage(w: W.ComparisonPage): Comparison[] {
   return w.items.map(parseComparison);
 }
 
+// ------------------------------------------------------------------ rewritten summaries
+
+const LENGTHS: readonly SummaryLength[] = ["brief", "standard", "detailed"];
+const TONES: readonly SummaryTone[] = ["plain", "formal", "client"];
+
+/** Throws on a length or tone the contract does not name, a source on no page, or a `cached` that is not a boolean. */
+export function parseSummary(w: W.SummaryOut): Summary {
+  if (typeof w.cached !== "boolean") throw new TypeError(`not a cached flag: ${JSON.stringify(w.cached)}`);
+  return {
+    id: required(asSummaryId(w.id), "a summary id"),
+    documentId: documentId(w.document_id),
+    options: {
+      length: required(LENGTHS.find((l) => l === w.length) ?? null, "a summary length"),
+      focus: w.focus,
+      tone: required(TONES.find((t) => t === w.tone) ?? null, "a summary tone"),
+    },
+    text: w.text,
+    sources: w.sources.map((source) => {
+      if (!Number.isInteger(source.page) || source.page < 1) throw new TypeError(`a source on page ${source.page}`);
+      return { page: source.page, pageLabel: source.page_label, quote: source.quote };
+    }),
+    droppedSources: w.dropped_sources,
+    writtenBy: { model: w.model, promptVersion: w.prompt_version },
+    cached: w.cached,
+    createdAt: new Date(w.created_at),
+  };
+}
+
+export function parseSummaryPage(w: W.SummaryPage): SummaryList {
+  return { summaries: w.items.map(parseSummary), complete: w.next_cursor === null };
+}
+
 function sameWords(a: string, b: string): boolean {
   const words = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
   return words(a) === words(b);
@@ -404,6 +440,26 @@ function factCite(raw: string | null): FactCite | null {
   return m ? { kind: "fact", index: Number(m[1]) } : null;
 }
 
+/** A summary has at most 6 sources. */
+function summaryCite(raw: string | null): SummaryCite | null {
+  const m = raw === null ? null : /^sum\.([0-9a-f-]{36})\.([0-5])$/i.exec(raw);
+  const summary = m ? asSummaryId(m[1]!) : null;
+  return m && summary ? { kind: "summary", summary, index: Number(m[2]) } : null;
+}
+
+function citeParam(cite: FactCite | SummaryCite): string {
+  switch (cite.kind) {
+    case "fact":
+      return `fact.${cite.index}`;
+    case "summary":
+      return `sum.${cite.summary}.${cite.index}`;
+    default: {
+      const unknown: never = cite;
+      return unknown;
+    }
+  }
+}
+
 function turnCite(raw: string | null): TurnCite | null {
   const m = raw === null ? null : /^turn\.([0-9a-f-]{36})\.([1-9]\d{0,3})$/i.exec(raw);
   const turn = m ? asTurnId(m[1]!) : null;
@@ -417,9 +473,9 @@ function cellCite(raw: string | null): CellCite | null {
 }
 
 /**
- * `?chat=<uuid>&cite=turn.<turn uuid>.<n>&p=<n>`, `?doc=<uuid>&cite=fact.<i>&p=<n>`, `?view=metrics&window=7d`,
- * `?view=compare&with=<doc uuid>`, or `?compare=<uuid>&cite=cmp.<row>.<col>&p=<n>&only=differences`.
- * Anything malformed is dropped, never an error page.
+ * `?chat=<uuid>&cite=turn.<turn uuid>.<n>&p=<n>`, `?doc=<uuid>&cite=fact.<i>&p=<n>`,
+ * `?doc=<uuid>&cite=sum.<summary uuid>.<i>&p=<n>`, `?view=metrics&window=7d`, `?view=compare&with=<doc uuid>`, or
+ * `?compare=<uuid>&cite=cmp.<row>.<col>&p=<n>&only=differences`. Anything malformed is dropped, never an error page.
  */
 export function parseSelection(params: URLSearchParams): Selection {
   if (params.get("view") === "metrics") return { kind: "metrics", window: params.get("window") === "7d" ? "7d" : "24h" };
@@ -439,7 +495,7 @@ export function parseSelection(params: URLSearchParams): Selection {
   }
   const doc = asDocumentId(params.get("doc") ?? "");
   if (doc === null) return params.has("doc") ? { kind: "missing", what: "doc" } : { kind: "none" };
-  const cite = factCite(params.get("cite"));
+  const cite = factCite(params.get("cite")) ?? summaryCite(params.get("cite"));
   const pane: PaneRequest | null = cite ? { kind: "cite", cite, page } : page ? { kind: "page", page } : null;
   return { kind: "doc", doc, pane };
 }
@@ -457,7 +513,7 @@ export function selectionQuery(s: Selection): string {
       break;
     case "doc":
       params.set("doc", s.doc);
-      if (s.pane?.kind === "cite") params.set("cite", `fact.${s.pane.cite.index}`);
+      if (s.pane?.kind === "cite") params.set("cite", citeParam(s.pane.cite));
       if (s.pane?.page) params.set("p", String(s.pane.page));
       break;
     case "chat":

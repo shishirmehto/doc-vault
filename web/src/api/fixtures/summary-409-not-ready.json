@@ -1,0 +1,20 @@
+{
+  "status": 409,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "documents_not_ready",
+      "message": "1 of 1 documents are not ready.",
+      "retryable": false,
+      "details": {
+        "not_ready": [
+          {
+            "id": "2da79ec2-177a-4c59-9c06-fc2ae84f83d6",
+            "filename": "phase-d-large-1cd9f3.txt",
+            "status": "queued"
+          }
+        ]
+      }
+    }
+  }
+}
