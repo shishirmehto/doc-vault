@@ -1,6 +1,6 @@
 # Evals
 
-`docvault/evals.py` asks a fixed set of broker questions about the three sample documents and scores retrieval, answers, refusals and insights separately, so a miss shows the step where it happened. The case set is `evals/cases.yaml`, and the expected values come from `samples/facts.yaml`.
+`docvault/evals.py` asks a fixed set of broker questions about the three sample documents and scores retrieval, answers, refusals and insights separately, so a miss shows the step where it happened. It also compares the policy with its renewal quote and scores the comparison. The case set is `evals/cases.yaml`, and the expected values come from `samples/facts.yaml`.
 
 ## Run the evals
 
@@ -39,6 +39,9 @@ Each answerable turn names one or more expected facts. A comparison names one fa
 | Key-fact grounding | Insights key facts kept, over kept plus dropped, summed over the three documents. `insights.verify` keeps a fact only when its quote is on the page it cites, so every kept fact is grounded by construction. This number says how often the model cited the wrong page or misquoted, not whether the kept facts are the right ones. |
 | Key-fact recall | Planted facts whose text appears in a kept key fact's quote on the same document and page. The denominator is `samples/facts.yaml` without the two running footers (28 facts), because a footer repeated on every page is not a key fact. |
 | Suggestions answered | After a case's own turns, every suggestion under its last turn is asked in that chat, the way a click on one asks it, and should come back `answered`. These turns are kept out of every other number: they have no expected facts, so they would count as out of scope and move the gate fit. |
+| Cell grounding | Comparison cells kept, over kept plus dropped. `compare.ground` keeps a filled cell only when its quote is on the page it cites, so every kept cell is grounded by construction. Like key-fact grounding, this says how often the model cited the wrong page or misquoted. |
+| Difference recall | The comparison case is built in code from `samples/facts.yaml`, not from `cases.yaml`, whose hash is frozen. It compares the policy with the renewal quote, with no focus. Each entry under `changes` (general aggregate limit, medical expense limit, property damage deductible, premium) counts when one row has `differs` true, its policy cell is on the planted page with the planted text inside its quote, and its quote cell likewise. A change found only as two rows, or with a cell on the wrong page, is a miss. |
+| Equal fields kept equal | The same match for each entry under `unchanged` (each occurrence limit), which must come back with `differs` false. It catches a comparison that marks every row as different. |
 | Gate rows | A turn passes the gate when one chunk holds every query term or its best vector similarity reaches `min_similarity`. "Refused" here means refused by the gate. An out-of-scope turn that passes can still come back `not_found` from the answer step. |
 | Cost and latency | `metrics.processing_stats`, the reader behind `GET /metrics/processing`: `llm_calls` grouped by purpose and model (calls, failed calls, tokens, cost, p95 `latency_ms`), and p95 turn latency over `chat_turns.finished_at - started_at`. Every row in the eval database belongs to the run. Under the fake, latency measures Postgres and Python, not a model. |
 
@@ -79,16 +82,20 @@ Read that margin as a warning, not a result. The fake embedder hashes words, so 
 - "How does the deductible differ between the two?" stays `no_evidence`. Its other words ("differ", "two") are in no chunk, so nothing matches every term, and its best similarity is 0.066.
 - "CG 21 47 Employment-Related Practices Exclusion" is on page 3 (the schedule) and, as a heading, on page 7. The case asks about the schedule, and a page 7 citation scores as a miss.
 - Some out-of-scope questions can be answered by inference ("no flood limit is listed"). Review not-found misses by hand after a live run.
+- The fake comparison aligns fields only when two or more documents use the same label, so the premium change ("Total Advance Premium: $18,450" on the policy's page 1, "Total Annual Premium $21,900" on the quote's page 2) gets no row: the one difference-recall miss. A live model is asked to line up fields by meaning and should catch it, but no live run has measured that.
+- The fake also marks Estimated Annual Payroll and Rate per $1,000 of Payroll as different. Both are real differences, but `facts.yaml` does not plant them, so they count in no number. There is no precision score for differences beyond the one equal field.
 - Under the fake, suggestions are "What is the <label>?" for label-and-value passages, so they repeat across cases ("What is the Policy Number?" follows most policy questions) and 108 of 108 answered says that a label's words find its passage, not that the questions are good ones. A live run measures the model's own follow-ups.
 
 ## Results
+
+**Comparisons (2026-11-11, compare-v1).** The comparison adds one `compare` call to the spend and moves no other number. On the policy and the renewal quote the fake returns 12 rows, all 24 cells grounded. It finds 3 of the 4 planted changes, all on page 2, and keeps the each-occurrence limit equal. `tests/test_evals.py` pins these numbers.
 
 **Suggestions (2026-11-11, answer-v2).** Adding follow-up suggestions moved no scored number: retrieval, citations, not-found, grounding, recall and the gate fit are the same as before. The spend counts rose because the eval now asks 108 more turns (three suggestions under each of the 36 cases' last turns), each with a condense, a query embedding and an answer call. `tests/test_evals.py` pins the new counts and the 108 of 108.
 
 **Reading the retrieval number.** Every retrieval miss in the results below is a gate refusal: the case table marks each one `gate`. When a question passes the gate, the expected fact is among the answer step's sources every time (21 of 21 on this run). So under the fake provider the weak step is the gate, which hashes words and cannot match a broker's wording to the document's, not retrieval or ranking. Citation misses are a separate step: the fake answer quotes the sentence that shares the most words with the question, which is often not the planted fact.
 
 <!-- results:start -->
-Run 2026-11-11 at commit 6ff08d4: `uv run python -m docvault.evals --out docs/evals.md`
+Run 2026-11-11 at commit 033ba80: `uv run python -m docvault.evals --out docs/evals.md`
 
 Provider: chat fake (main fake-chat, small fake-chat); embeddings fake fake-hash-1536; gate min_similarity 0.184.
 
@@ -102,17 +109,31 @@ Provider: chat fake (main fake-chat, small fake-chat); embeddings fake fake-hash
 | Key-fact grounding (insights facts kept / kept + dropped) | 31/31 (100%) |
 | Key-fact recall (planted facts in a kept key fact) | 12/28 (43%) |
 | Suggestions answered (each one under a case's last turn, asked in that chat) | 108/108 (100%) |
+| Cell grounding (comparison cells kept / kept + dropped) | 24/24 (100%) |
+| Difference recall (planted changes found as a differing row, both cells quoting the fact) | 3/4 (75%) |
+| Equal fields kept equal (planted unchanged fields found as a row that does not differ) | 1/1 (100%) |
 | Gate at 0.184: answerable passed, out-of-scope refused | 18/28 (64%) passed, 15/16 (94%) refused |
 | Best gate threshold on this set | 0.184, 33/44 turns on the right side; nearest similarity passed 0.187 (+0.003), nearest refused 0.181 (-0.003) |
-| p95 turn latency | 11 ms |
+| p95 turn latency | 7 ms |
 
 | Purpose | Model | Calls | Errors | Input tokens | Output tokens | Cost (USD) | p95 latency |
 |---|---|---|---|---|---|---|---|
-| answer | fake-chat | 127 | 0 | 246532 | 3457 | 0.000000 | 4 ms |
+| answer | fake-chat | 127 | 0 | 246532 | 3457 | 0.000000 | 3 ms |
+| compare | fake-chat | 1 | 0 | 2292 | 169 | 0.000000 | 1 ms |
 | condense | fake-chat | 116 | 0 | 15151 | 670 | 0.000000 | 0 ms |
 | embed_chunks | fake-hash | 3 | 0 | 2731 | 0 | 0.000000 | 1 ms |
 | embed_query | fake-hash | 152 | 0 | 993 | 0 | 0.000000 | 0 ms |
 | insights | fake-chat | 3 | 0 | 3096 | 296 | 0.000000 | 1 ms |
+
+Comparison of sample-cgl-policy.pdf with sample-renewal-quote.pdf, no focus:
+
+| Expected field | Matched row | Differs | Policy page | Quote page | Result |
+|---|---|---|---|---|---|
+| general aggregate limit | General Aggregate Limit | yes | 2 | 2 | found |
+| medical expense limit | Medical Expense Limit | yes | 2 | 2 | found |
+| property damage deductible | Property Damage Deductible | yes | 2 | 2 | found |
+| premium | no row | - | 1 | 2 | no row |
+| each occurrence limit | Each Occurrence Limit | no | 2 | 2 | found |
 
 | Case | Question | Interpreted as | Outcome | Retrieval | Citation |
 |---|---|---|---|---|---|
