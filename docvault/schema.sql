@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS comparisons (
   focus          text,
   documents      jsonb NOT NULL,
   rows           jsonb NOT NULL,
-  dropped_cells  int   NOT NULL,                      -- cells whose quote was not on the page they cite
+  dropped_cells  int   NOT NULL,                      -- filled cells that grounding emptied
   model          text  NOT NULL,
   prompt_version text  NOT NULL,
   created_at     timestamptz NOT NULL DEFAULT now()

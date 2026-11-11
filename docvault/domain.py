@@ -460,7 +460,7 @@ class Comparison:
     documents: tuple[ComparedDocument, ...]     # the columns, in request order
     focus: str | None
     rows: tuple[Row, ...]
-    dropped_cells: int          # cells the model filled whose quote was not on the page it cited
+    dropped_cells: int          # filled cells compare.ground could not keep, such as a quote not on the cited page
     model: str
     prompt_version: str
     usage: Usage                # aggregated from llm_calls WHERE comparison_id = id

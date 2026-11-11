@@ -273,7 +273,7 @@ class ComparisonOut(BaseModel):
     documents: list[ComparedDocumentOut]
     focus: str | None
     rows: list[RowOut]
-    dropped_cells: int                 # cells the model filled whose quote was not on the page it cited
+    dropped_cells: int                 # filled cells left out, such as one whose quote was not on the cited page
     model: str
     prompt_version: str
     usage: UsageOut
