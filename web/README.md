@@ -1,6 +1,6 @@
 # Doc Vault web UI
 
-A small Next.js app for the doc-vault API. You can upload documents and watch them process. Each document shows its summary, tags and key facts. You can also start a chat over one or more ready documents and ask questions. Click a key fact's page tab, or an answer's numbered citation, to open that page with the quoted passage marked. The Metrics link in the header shows how documents, steps, AI calls and chats are doing.
+A small Next.js app for the doc-vault API. You can upload documents and watch them process. Each document shows its summary, tags and key facts. You can also start a chat over one or more ready documents and ask questions. Click a key fact's page tab, or an answer's numbered citation, to open that page with the quoted passage marked and a flag on the page edge. In a chat, the flag carries the citation's number. The Metrics link in the header shows how documents, steps, AI calls and chats are doing.
 
 ## Run it
 

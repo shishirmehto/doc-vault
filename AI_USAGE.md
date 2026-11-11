@@ -20,7 +20,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
    - phase 1: scaffold, parsing, crash-safe indexing;
    - phase 2: the AI gateway, insights, chat;
    - phase 3: metrics, hardening, evals, the demo script, the docs;
-   - the web UI, in three passes.
+   - the web UI, in three passes, then a design pass.
 4. **Parallel work without collisions.** The UI was built on its own branch in a separate git worktree, at the same time as the backend agent worked on `main`. The UI agents used the running API read-only and never restarted containers.
 5. **Independent acceptance.** Before accepting a phase, the lead agent reran the full test suite. It also asked the live API its own questions and compared the answers with `samples/facts.yaml`, and it used the UI in a browser. Several findings below came from this step.
 6. **Decision log.** Every decision went into a log with what was decided, why, the evidence and the result. The log holds more than 40 decisions and is kept outside the repo.
@@ -45,6 +45,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 | An automated comment-removal pass deleted comments that explain non-obvious reasons | The owner agent reviewed the edits and reverted them |
 | A UI agent saw the page change while it was not touching it | An idle watcher with input logging showed that no code path did it. The cause was a click in the visible test browser |
 | The verification skill's health check printed FAIL after every OK, and one recipe expected progress on a finished document | Running the skill once, end to end, before committing it |
+| Below 1100 px wide, the chat's question box covered the source page it had just opened | The design pass, which checked each screen in a browser at 1024 px and on a phone |
 
 ## AI inside the product
 
