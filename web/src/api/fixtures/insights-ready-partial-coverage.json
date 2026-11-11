@@ -1,0 +1,22 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "status": "ready",
+    "title": "ui-renewal-memo-2.txt",
+    "document_type": "other",
+    "summary": "ui-renewal-memo-2: generated test document for the doc-vault web UI (seed 9102). Clause 1. The Occurrence endorsement endorsement coverage broker policy coverage endorsement insured endorsement coverage limit contractor endorsement endorsement policy. Reference number UI-9102-001.",
+    "key_facts": [],
+    "tags": [
+      "renewal",
+      "memo"
+    ],
+    "coverage": {
+      "pages_read": 82,
+      "page_count": 254
+    },
+    "dropped_key_facts": 0,
+    "model": "fake-chat",
+    "prompt_version": "insights-v1"
+  }
+}

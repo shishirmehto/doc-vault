@@ -107,6 +107,12 @@ test("ready insights turn each key fact into a pointer at its page and quote", (
   });
 });
 
+test("insights that read only part of a long document say how much", () => {
+  const r = replay("insights-ready-partial-coverage", (w: never) => parseInsights(w, MEMO));
+  assert.ok(r.ok && r.value.status === "ready");
+  assert.deepEqual([r.value.coverage, r.value.keyFacts.length, r.value.droppedKeyFacts], [{ pagesRead: 82, pageCount: 254 }, 0, 0]);
+});
+
 test("insights pending, unavailable and failed each parse to their variant", () => {
   const parse = (w: never) => parseInsights(w, MEMO);
   assert.deepEqual(replay("insights-pending", parse), { ok: true, value: { status: "pending" } });
