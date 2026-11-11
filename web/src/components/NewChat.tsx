@@ -124,6 +124,7 @@ export function NewChat({ docs, deleted, onDismiss, onOpen, onFiles }: {
       {ready.length > 0 && (
         <div className="centre-footer">
           {refusal && <StartRefusal error={refusal} docs={docs ?? []} />}
+          {scope === null && question.trim() !== "" && <p className="quiet">Tick at least one ready document above to ask.</p>}
           <Composer
             value={question}
             onChange={setQuestion}

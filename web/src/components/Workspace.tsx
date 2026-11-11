@@ -93,6 +93,7 @@ export function Workspace() {
     <div className="workspace" data-pane={paneOpen ? "open" : "closed"}>
       <Rail
         docs={docs}
+        complete={documents.data?.complete ?? true}
         connection={documents.error}
         uploads={uploads.uploads}
         selected={selectedDoc}

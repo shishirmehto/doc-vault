@@ -13,6 +13,8 @@ import { StageBar } from "./StageBar";
 
 type Props = {
   docs: readonly Doc[] | null;
+  /** False when the vault holds more documents than the list fetched. */
+  complete: boolean;
   connection: ApiError | null;
   uploads: readonly Upload[];
   selected: DocumentId | null;
@@ -27,7 +29,7 @@ type Props = {
  * button over the centre column: open while the vault is empty or uploads are listed, so the upload target
  * and their progress show, and closed once a document is opened from it.
  */
-export function Rail({ docs, connection, uploads, selected, onFiles, onDismiss, onOpen, onRetry }: Props) {
+export function Rail({ docs, complete, connection, uploads, selected, onFiles, onDismiss, onOpen, onRetry }: Props) {
   const drop = useFileDrop(onFiles);
   const [query, setQuery] = useState("");
   const [choice, setChoice] = useState<boolean | null>(null);
@@ -57,6 +59,9 @@ export function Rail({ docs, connection, uploads, selected, onFiles, onDismiss, 
             <DocumentRow key={doc.id} doc={doc} current={doc.id === selected} onOpen={openDoc} onRetry={onRetry} />
           ))}
         </ul>
+        {!complete && docs && (
+          <p className="rail-note">The newest {docs.length} documents are listed. Older ones are in the vault but not shown here.</p>
+        )}
         {finding && shown?.length === 0 && (
           <p className="rail-note">
             No document matches &ldquo;{query.trim()}&rdquo;.{" "}
