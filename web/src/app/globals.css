@@ -256,6 +256,15 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* Provisional text while the answer streams: the same type as an answer, a shade lighter until it is grounded. */
 .answer.provisional { color: var(--graphite); }
+
+/* Follow-up questions under the latest turn. Each asks itself in one click. */
+.suggestions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: calc(-1 * var(--s4)); }
+.suggestion {
+  border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--sheet); color: var(--carbon);
+  padding: var(--s1) var(--s3); font: 400 var(--t-meta)/1.4 var(--font-ui); text-align: left; cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.suggestion:hover { border-color: var(--carbon); background: var(--carbon-tint); }
 .actions { display: flex; align-items: center; gap: var(--s4); }
 
 .progress.indeterminate { overflow: hidden; max-width: 240px; }

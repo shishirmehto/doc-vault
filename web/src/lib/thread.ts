@@ -50,6 +50,11 @@ export function canAsk(t: Thread): boolean {
   return t.history.kind === "loaded" && (t.ask.phase === "idle" || t.ask.phase === "failed");
 }
 
+/** The latest turn's follow-up questions, offered only while a click can ask at once. */
+export function offered(t: Thread): readonly string[] {
+  return t.history.kind === "loaded" && t.ask.phase === "idle" ? (t.history.turns.at(-1)?.suggestions ?? []) : [];
+}
+
 export function step(t: Thread, e: ThreadEvent): Thread {
   switch (e.type) {
     case "history":

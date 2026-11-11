@@ -5,7 +5,7 @@ import { api } from "@/api/client";
 import type { ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Selection, Turn, TurnCite } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { threads, useThread } from "@/hooks/useThread";
-import { canAsk, type Ask, type Thread } from "@/lib/thread";
+import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { explain, listNames, NOT_FOUND, searching, streamingStatus, usageLine } from "@/copy";
 import { Composer } from "./Composer";
 import { SourcePane, type SourceView } from "./SourcePane";
@@ -57,7 +57,8 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
               <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
             </p>
           </header>
-          <Turns thread={thread} pane={pane} onOpen={open} accepting={accepting} />
+          <Turns thread={thread} pane={pane} onOpen={open} accepting={accepting}
+            onSuggest={(question) => void threads.ask(id, question)} />
           {thread && (
             <PendingTurn
               ask={thread.ask}
@@ -110,11 +111,12 @@ function sourceView(pane: ChatPane, turns: readonly Turn[] | null, docs: readonl
   return { kind: "page", doc, page, mark, citedPage: citation.source.page };
 }
 
-function Turns({ thread, pane, onOpen, accepting }: {
+function Turns({ thread, pane, onOpen, accepting, onSuggest }: {
   thread: Thread | undefined;
   pane: ChatPane | null;
   onOpen(cite: TurnCite): void;
   accepting: boolean;
+  onSuggest(question: string): void;
 }) {
   if (!thread || thread.history.kind === "loading") {
     return (
@@ -129,9 +131,24 @@ function Turns({ thread, pane, onOpen, accepting }: {
   if (thread.history.turns.length === 0 && thread.ask.phase === "idle") {
     return accepting ? <p className="quiet">Ask a question to start. Follow-ups can refer back to earlier answers.</p> : null;
   }
-  return thread.history.turns.map((turn) => (
-    <TurnView key={turn.id} turn={turn} active={pane?.cite.turn === turn.id ? pane.cite.ref : null} onOpen={onOpen} />
-  ));
+  const suggestions = accepting ? offered(thread) : [];
+  return (
+    <>
+      {thread.history.turns.map((turn) => (
+        <TurnView key={turn.id} turn={turn} active={pane?.cite.turn === turn.id ? pane.cite.ref : null} onOpen={onOpen} />
+      ))}
+      {suggestions.length > 0 && (
+        <div className="suggestions" role="group" aria-label="Suggested questions">
+          {suggestions.map((question) => (
+            <button key={question} type="button" className="suggestion" aria-label={`Ask: ${question}`}
+              onClick={() => onSuggest(question)}>
+              {question}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
 }
 
 function TurnView({ turn, active, onOpen }: { turn: Turn; active: number | null; onOpen(cite: TurnCite): void }) {

@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseHistory } from "../api/parse.ts";
 import type { AskProgress, Turn } from "../api/domain.ts";
-import { canAsk, started, step, type Thread, type ThreadEvent } from "./thread.ts";
+import { canAsk, offered, started, step, type Thread, type ThreadEvent } from "./thread.ts";
 
 const captured = JSON.parse(readFileSync(new URL("../api/fixtures/history-policy-four-turns.json", import.meta.url), "utf8"));
-const [deductible, perOccurrence, worldCup] = parseHistory(captured.body) as [Turn, Turn, Turn, Turn];
+const [deductible, perOccurrence, worldCup, exclusions] = parseHistory(captured.body) as [Turn, Turn, Turn, Turn];
 
 function run(events: ThreadEvent[], from: Thread = started): Thread {
   return events.reduce(step, from);
@@ -105,4 +105,13 @@ test("quiet before any text keeps the step as it is, and progress after the end 
 test("a stream that breaks mid-answer drops its text and checks history like any lost answer", () => {
   const t = run([{ type: "sent", question: worldCup.question }, ...progress({ kind: "stage", stage: "searching" }), lost]);
   assert.deepEqual(t.ask, { phase: "checking", question: "Who won the 2022 football World Cup?", error: { kind: "offline" } });
+});
+
+test("only the latest turn's suggestions are offered, and only while nothing is in flight or failed", () => {
+  const two = run([{ type: "answered", turn: deductible }, { type: "answered", turn: exclusions }]);
+  assert.deepEqual(offered(two), ["What is the Estimated Annual Payroll?", "What is the Rate per $1,000 of Payroll?", "What is the Policy Number?"]);
+  const asking = step(two, { type: "sent", question: perOccurrence.question });
+  assert.deepEqual(offered(asking), []);
+  assert.deepEqual(offered(run([lost, { type: "history", result: { ok: true, value: [deductible, exclusions] } }], asking)), []);
+  assert.deepEqual(offered(started), []);
 });
