@@ -2,18 +2,35 @@
 
 from __future__ import annotations
 
+import json
+from decimal import Decimal
 from uuid import UUID
 
+import httpx2
 import pytest
 from pydantic import BaseModel
 
-from docvault import pages, prompts
+from docvault import compare, documents, pages, prompts
 from docvault.ai import AI, ComparisonOwner, FakeChat, FakeEmbedder, ProviderError, RawCompletion, Tokens
 from docvault.config import Settings
-from docvault.domain import Cell, ComparisonId, ErrorCode, Failure, KeyFact, Page, PageBasis, Purpose, Row, VaultError
-from docvault.prompts import CompareDoc, ComparisonDraft, Msg, Prompt
+from docvault.domain import (
+    Cell,
+    ComparisonId,
+    ErrorCode,
+    Failure,
+    KeyFact,
+    Page,
+    PageBasis,
+    Purpose,
+    Row,
+    Usage,
+    VaultError,
+)
+from docvault.prompts import CellDraft, CompareDoc, ComparisonDraft, Msg, Prompt, RowDraft
 
-from .conftest import POLICY, QUOTE, SAMPLES
+from .conftest import POLICY, QUOTE, SAMPLES, scalar
+from .test_ai import CHAT_COMPLETION, openai_chat, openai_client
+from .test_insights import indexed, with_chat
 
 
 def row(*values: str | None) -> Row:
@@ -138,3 +155,125 @@ def test_the_fake_aligns_every_label_the_policy_and_the_renewal_quote_share():
         ("Estimated Annual Payroll", ("D1", "$640,000", 2), ("D2", "$710,000", 2)),
         ("Rate per $1,000 of Payroll", ("D1", "$28.83", 2), ("D2", "$30.85", 2)),
     ]
+
+
+# ------------------------------------------------------------------ grounding
+
+DECLARATIONS = CompareDoc("D1", POLICY, PageBasis.PHYSICAL, (), (
+    Page(1, "Named Insured: Example Contractors LLC"), Page(2, "Property Damage Deductible\n$2,500 per occurrence")))
+RENEWAL = CompareDoc("D2", QUOTE, PageBasis.PHYSICAL, (), (
+    Page(1, "Named Insured: Example Contractors LLC"), Page(2, "Property Damage Deductible\n$5,000 per occurrence")))
+
+
+def cell(document: str, value: str | None = None, page: int | None = None, quote: str | None = None) -> CellDraft:
+    return CellDraft(document=document, value=value, page=page, quote=quote)
+
+
+def drafted(*rows: tuple[str, list[CellDraft]]) -> ComparisonDraft:
+    return ComparisonDraft(rows=[RowDraft(field=field, cells=cells) for field, cells in rows])
+
+
+def test_ground_keeps_a_cell_only_when_its_quote_is_on_the_page_it_cites_and_quotes_the_source():
+    rows, dropped = compare.ground(drafted(("Property Damage  Deductible", [
+        cell("D1", "$2,500  per occurrence", 2, "property damage deductible $2,500 per occurrence"),
+        cell("D2", "$5,000 per occurrence", 1, "Property Damage Deductible $5,000 per occurrence")])),
+        [DECLARATIONS, RENEWAL])
+
+    assert (rows, dropped) == ((Row("Property Damage Deductible", (
+        Cell("$2,500 per occurrence", 2, "Property Damage Deductible $2,500 per occurrence"), None)),), 1)
+
+
+def test_ground_counts_only_values_it_could_not_keep_and_removes_rows_left_empty():
+    rows, dropped = compare.ground(drafted(
+        ("Flood Sublimit", [cell("D1"), cell("D2", "  ", 1, "Named Insured")]),
+        ("Named Insured", [cell("D1", "Example Contractors LLC", 1, "Named Insured: Example Contractors LLC"),
+                           cell("D2"), cell("D9", "Example Contractors LLC", 1, "Named Insured")]),
+        ("Property Damage Deductible", [cell("D1", "$2,500 per occurrence", 2, None),
+                                        cell("D2", "$5,000 per occurrence", None, "$5,000 per occurrence")])),
+        [DECLARATIONS, RENEWAL])
+
+    assert rows == (Row("Named Insured", (
+        Cell("Example Contractors LLC", 1, "Named Insured: Example Contractors LLC"), None)),)
+    assert dropped == 3
+
+
+def test_ground_gives_a_column_to_the_first_cell_that_names_its_document():
+    rows, dropped = compare.ground(drafted(("Property Damage Deductible", [
+        cell("D2"), cell("D2", "$5,000 per occurrence", 2, "$5,000 per occurrence"),
+        cell("D1", "$2,500 per occurrence", 2, "$2,500 per occurrence")])), [DECLARATIONS, RENEWAL])
+
+    assert (rows, dropped) == ((Row("Property Damage Deductible", (
+        Cell("$2,500 per occurrence", 2, "$2,500 per occurrence"), None)),), 1)
+
+
+def test_ground_removes_empty_rows_before_it_keeps_the_first_30():
+    named = cell("D1", "Example Contractors LLC", 1, "Example Contractors LLC")
+    draft = drafted(("Empty", [cell("D1")]), *((f"Row {n}", [named]) for n in range(1, 32)))
+
+    rows, dropped = compare.ground(draft, [DECLARATIONS, RENEWAL])
+
+    assert ([row.field for row in rows], dropped) == ([f"Row {n}" for n in range(1, 31)], 0)
+
+
+# ------------------------------------------------------------------ the pipeline
+
+
+def completion(draft: dict) -> dict:
+    return {**CHAT_COMPLETION, "choices": [{"index": 0, "finish_reason": "stop", "logprobs": None, "message": {
+        "role": "assistant", "content": json.dumps(draft), "refusal": None}}]}
+
+
+def test_the_openai_path_stores_grounded_cells_and_tries_a_failing_call_once(ctx):
+    policy, quote = indexed(ctx, SAMPLES / POLICY), indexed(ctx, SAMPLES / QUOTE)
+    draft = completion({"rows": [{"field": "Property Damage Deductible", "cells": [
+        {"document": "D1", "value": "$2,500 per occurrence", "page": 2,
+         "quote": "Property Damage Deductible $2,500 per occurrence"},
+        {"document": "D2", "value": "$5,000 per occurrence", "page": 1,
+         "quote": "Property Damage Deductible $5,000 per occurrence"}]}]})
+    sent: list[tuple[str, dict]] = []
+    client = openai_client(httpx2.Response(200, json=draft), httpx2.Response(500, json={"error": {
+        "message": "Internal error", "type": "server_error", "code": None}}), httpx2.Response(200, json=draft),
+        sent=sent)
+    live = with_chat(ctx, openai_chat(client))
+
+    stored = compare.create(live, [policy, quote], None)
+    with pytest.raises(VaultError) as raised:
+        compare.create(live, [quote, policy], None)
+
+    assert (stored.rows, stored.dropped_cells) == ((Row("Property Damage Deductible", (
+        Cell("$2,500 per occurrence", 2, "Property Damage Deductible $2,500 per occurrence"), None)),), 1)
+    assert (stored.model, stored.prompt_version, stored.usage) == (
+        "gpt-6.1-sol", "compare-v1", Usage(1, 2000, 300, Decimal("0.005100")))
+    assert raised.value.failure == Failure(
+        ErrorCode.AI_UNAVAILABLE, "The AI provider could not complete the request (server_error).", True)
+    assert len(sent) == 2
+    path, request = sent[0]
+    response_format = request["response_format"]
+    assert (path, request["model"], response_format["type"], response_format["json_schema"]["name"],
+            response_format["json_schema"]["strict"]) == (
+        "/v1/chat/completions", "gpt-6.1-sol", "json_schema", "ComparisonDraft", True)
+    assert response_format["json_schema"]["schema"]["$defs"]["CellDraft"]["required"] == [
+        "document", "value", "page", "quote"]
+    with ctx.db.connection() as conn:
+        ledger = [tuple(row.values()) for row in conn.execute(
+            "SELECT comparison_id, ok, error_code FROM llm_calls WHERE purpose = 'compare' ORDER BY id")]
+    assert [(ok, error) for _, ok, error in ledger] == [(True, None), (False, "server_error")]
+    assert ledger[0][0] == stored.id and ledger[1][0] not in (None, stored.id)
+    assert scalar(ctx.db, "SELECT count(*) FROM comparisons") == 1
+
+
+def test_a_document_deleted_during_the_model_call_reads_back_as_deleted(ctx):
+    policy, quote = indexed(ctx, SAMPLES / POLICY), indexed(ctx, SAMPLES / QUOTE)
+
+    def delete_the_quote_then_compare(prompt: Prompt) -> ComparisonDraft:
+        documents.delete(ctx, quote)
+        return FakeChat.handlers["compare"](prompt)
+
+    class DeletingChat(FakeChat):
+        handlers = {**FakeChat.handlers, "compare": delete_the_quote_then_compare}
+
+    stored = compare.create(with_chat(ctx, DeletingChat()), [policy, quote], None)
+
+    assert [(doc.filename, doc.deleted, doc.pages_read, doc.page_count) for doc in stored.documents] == [
+        (POLICY, False, 7, 7), (QUOTE, True, 3, 3)]
+    assert len(stored.rows) == 12
