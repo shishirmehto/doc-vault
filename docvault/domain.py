@@ -148,7 +148,7 @@ class Parsed:
 
 @dataclass(frozen=True, slots=True)
 class Queued:
-    pass
+    parsed: Parsed | None   # set when a retry re-queued a document that failed after its parse checkpoint
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +171,12 @@ class Ready:
 class Failed:
     failure: Failure
     parsed: Parsed | None   # None when parsing itself failed
+
+    @property
+    def stage(self) -> Literal[Step.PARSE, Step.EMBED]:
+        """The step that failed. Parse facts are written once, by the parse checkpoint, so their presence says
+        whether parsing finished."""
+        return Step.PARSE if self.parsed is None else Step.EMBED
 
 
 type Lifecycle = Queued | Parsing | Embedding | Ready | Failed
@@ -203,7 +209,7 @@ class InsightsReady:
     body: InsightsBody
     pages_read: int         # coverage: pages 1..pages_read fit the prompt budget
     page_count: int
-    page_basis: PageBasis   # here because a retried document reads as Queued, which carries no Parsed
+    page_basis: PageBasis   # labels each key fact's page
     dropped_key_facts: int  # facts the model cited whose quote was not on the cited page
     model: str
     prompt_version: str

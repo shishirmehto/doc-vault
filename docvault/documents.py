@@ -382,7 +382,7 @@ def _row_to_document(row: Mapping[str, object]) -> Document:
     lifecycle: Lifecycle
     match DocStatus(row["status"]):
         case DocStatus.QUEUED:
-            lifecycle = Queued()
+            lifecycle = Queued(parsed)
         case DocStatus.PARSING:
             lifecycle = Parsing()
         case DocStatus.EMBEDDING:

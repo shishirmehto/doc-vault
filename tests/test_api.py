@@ -7,9 +7,11 @@ from uuid import UUID, uuid4
 from fastapi.testclient import TestClient
 
 from docvault import documents
+from docvault.ai import ProviderError
 from docvault.domain import DocumentId
 
 from .conftest import ENDORSEMENT, POLICY, QUOTE, SAMPLES
+from .test_documents import FailingEmbedder, scanned_pdf, with_embedder
 
 
 def post(client: TestClient, name: str, content: bytes | None = None):
@@ -91,3 +93,19 @@ def test_retry_and_delete_over_http(client, ctx):
     for response in (client.get(f"/documents/{doc_id}"), client.delete(f"/documents/{doc_id}"),
                      client.post(f"/documents/{uuid4()}/retry")):
         assert (response.status_code, response.json()["error"]["code"]) == (404, "document_not_found")
+
+
+def test_a_failed_document_names_the_step_that_failed_and_a_retried_one_keeps_its_pages(client, ctx, tmp_path):
+    scanned = post(client, "scan.pdf", scanned_pdf(tmp_path).read_bytes()).json()["id"]
+    quote = post(client, QUOTE).json()["id"]
+    documents.run_index(ctx, DocumentId(UUID(scanned)))
+    down = with_embedder(ctx, FailingEmbedder(0, ProviderError("timeout", retryable=True)))
+    documents.run_index(down, DocumentId(UUID(quote)), attempt=documents.MAX_RETRIES + 1)
+
+    def state(doc: dict) -> tuple:
+        return doc["status"], doc["failed_stage"], doc["pages"], doc["page_basis"], doc["error"] and doc["error"]["code"]
+
+    assert state(client.get(f"/documents/{scanned}").json()) == ("failed", "parse", None, None, "no_extractable_text")
+    assert state(client.get(f"/documents/{quote}").json()) == ("failed", "embed", 3, "physical", "ai_unavailable")
+    assert state(client.post(f"/documents/{quote}/retry").json()) == ("queued", None, 3, "physical", None)
+    assert state(client.post(f"/documents/{scanned}/retry").json()) == ("queued", None, None, None, None)

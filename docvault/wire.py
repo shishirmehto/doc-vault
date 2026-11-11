@@ -70,11 +70,12 @@ class DocumentOut(BaseModel):
     size_bytes: int
     status: DocStatus
     progress: Progress | None          # only while status == "embedding"
-    pages: int | None                  # None until parsed
+    pages: int | None                  # None until parsed, then the stored count in every status
     page_basis: PageBasis | None
     empty_pages: list[int] = []
     insights_status: InsightsStatus
     error: ErrorBody | None            # only when status == "failed"
+    failed_stage: Literal["parse", "embed"] | None   # only when status == "failed": the step that failed
     processing_ms: int | None
     created_at: datetime
     links: dict[str, str]
@@ -271,9 +272,9 @@ def error_body(failure: Failure, details: dict[str, object] | None = None) -> Er
 
 
 def document_out(doc: Document) -> DocumentOut:
-    parsed, progress, error = None, None, None
+    parsed, progress, error, failed_stage = None, None, None, None
     match doc.lifecycle:
-        case Queued():
+        case Queued(parsed):
             status = DocStatus.QUEUED
         case Parsing():
             status = DocStatus.PARSING
@@ -282,9 +283,10 @@ def document_out(doc: Document) -> DocumentOut:
             progress = Progress(embedded_chunks=embedded_chunks, total_chunks=parsed.chunk_count)
         case Ready(parsed):
             status = DocStatus.READY
-        case Failed(failure, parsed):
+        case Failed(failure, parsed) as failed:
             status = DocStatus.FAILED
             error = error_body(failure)
+            failed_stage = failed.stage
         case _:
             assert_never(doc.lifecycle)
     match doc.insights:
@@ -302,7 +304,7 @@ def document_out(doc: Document) -> DocumentOut:
         id=doc.id, filename=doc.filename, kind=doc.kind, size_bytes=doc.size_bytes, status=status, progress=progress,
         pages=parsed and parsed.page_count, page_basis=parsed and parsed.basis,
         empty_pages=list(parsed.empty_pages) if parsed else [],
-        insights_status=insights_status, error=error, processing_ms=doc.processing_ms,
+        insights_status=insights_status, error=error, failed_stage=failed_stage, processing_ms=doc.processing_ms,
         created_at=doc.created_at,
         links={"self": f"/documents/{doc.id}", "insights": f"/documents/{doc.id}/insights",
                "pages": f"/documents/{doc.id}/pages/{{n}}"})

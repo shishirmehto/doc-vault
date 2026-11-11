@@ -74,7 +74,7 @@ def test_upload_then_index_reaches_ready_with_every_chunk_embedded(ctx):
     outcome = upload(ctx, POLICY)
     assert isinstance(outcome, Created)
     doc = outcome.document
-    assert (doc.filename, doc.kind, doc.size_bytes, doc.lifecycle) == ("sample-cgl-policy.pdf", "pdf", 11193, Queued())
+    assert (doc.filename, doc.kind, doc.size_bytes, doc.lifecycle) == ("sample-cgl-policy.pdf", "pdf", 11193, Queued(None))
     assert ctx.jobs.indexed == [doc.id]
 
     documents.run_index(ctx, doc.id)
@@ -125,7 +125,7 @@ def test_delivery_while_another_worker_holds_the_document_does_nothing(ctx):
     doc_id = upload(ctx, POLICY).document.id
     with pipeline_steps(ctx.db, doc_id, Lease.INDEX, 1):
         documents.run_index(ctx, doc_id)
-    assert documents.get(ctx.db, doc_id).lifecycle == Queued()
+    assert documents.get(ctx.db, doc_id).lifecycle == Queued(None)
     assert steps(ctx, doc_id) == []
 
 
@@ -142,7 +142,7 @@ def test_scanned_pdf_fails_with_a_reason_and_can_be_retried(ctx, tmp_path):
     documents.run_index(ctx, doc_id)   # a redelivery must not revive a failed document
     assert steps(ctx, doc_id) == [("parse", "failed", "no_extractable_text")]
 
-    assert documents.retry(ctx, doc_id).lifecycle == Queued()
+    assert documents.retry(ctx, doc_id).lifecycle == Queued(None)
     assert ctx.jobs.indexed == [doc_id, doc_id]
 
 
@@ -154,7 +154,7 @@ def test_retry_after_a_provider_failure_resumes_at_embedding_without_parsing_aga
     assert isinstance(failed, Failed) and failed.parsed.chunk_count == 6
     assert (failed.failure.code, failed.failure.retryable) == (ErrorCode.AI_UNAVAILABLE, True)
 
-    assert documents.retry(ctx, doc_id).lifecycle == Queued()
+    assert documents.retry(ctx, doc_id).lifecycle == Queued(Parsed(PageBasis.PHYSICAL, page_count=7, chunk_count=6, empty_pages=()))
     documents.run_index(ctx, doc_id)
 
     assert isinstance(documents.get(ctx.db, doc_id).lifecycle, Ready)
@@ -181,7 +181,7 @@ def test_reconcile_requeues_stalled_documents_only(ctx):
 
     assert documents.reconcile(ctx) == 1
     assert ctx.jobs.indexed == [stalled]
-    assert documents.get(ctx.db, fresh).lifecycle == Queued()
+    assert documents.get(ctx.db, fresh).lifecycle == Queued(None)
 
 
 def test_reconcile_re_embeds_a_ready_document_after_the_embedding_model_changes(ctx):
