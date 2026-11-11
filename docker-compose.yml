@@ -17,7 +17,8 @@ services:
     command: uvicorn docvault.api:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 5 --no-access-log
     env_file: [{path: .env, required: false}]
     # The fake chat streams its answer a word every 25 ms, so the demo shows streaming without a key.
-    environment: {FAKE_STREAM_DELAY_MS: "25", LOG_FORMAT: json}
+    # DAILY_AI_BUDGET_USD comes from the shell or .env; empty means no cap.
+    environment: {FAKE_STREAM_DELAY_MS: "25", LOG_FORMAT: json, DAILY_AI_BUDGET_USD: "${DAILY_AI_BUDGET_USD:-}"}
     ports: ["${API_PORT:-8000}:8000"]
     volumes: [blobs:/data/blobs]
     depends_on: {db: {condition: service_healthy}, redis: {condition: service_healthy}}
@@ -25,7 +26,7 @@ services:
     build: .
     command: celery -A docvault.tasks worker -Q ingest,llm,celery --concurrency 4 --loglevel info
     env_file: [{path: .env, required: false}]
-    environment: {LOG_FORMAT: json}
+    environment: {LOG_FORMAT: json, DAILY_AI_BUDGET_USD: "${DAILY_AI_BUDGET_USD:-}"}
     volumes: [blobs:/data/blobs]
     depends_on: {db: {condition: service_healthy}, redis: {condition: service_healthy}}
   beat:

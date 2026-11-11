@@ -121,6 +121,7 @@ class ErrorCode(StrEnum):
     INVALID_REQUEST = "invalid_request"           # a parameter or body failed validation
     RATE_LIMITED = "rate_limited"                 # the client spent its per-minute budget for this route
     TOO_MANY_STREAMS = "too_many_streams"         # this API process already has its cap of live event streams
+    QUOTA_EXCEEDED = "quota_exceeded"             # today's AI spend reached DAILY_AI_BUDGET_USD; also stored on insights
 
 
 @dataclass(frozen=True, slots=True)

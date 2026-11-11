@@ -61,12 +61,18 @@ class ErrorOut(BaseModel):
     error: ErrorBody
 
 
+class AIBudgetOut(BaseModel):
+    limit_usd: float                   # DAILY_AI_BUDGET_USD
+    spent_today_usd: float             # since midnight UTC, at most 10 s old; at the limit, model calls get 429
+
+
 class HealthOut(BaseModel):
     db: Literal["ok", "unreachable"]
     redis: Literal["ok", "unreachable"]
     ai_mode: Literal["live", "fake", "mixed"]
     embed_model: str
     max_upload_bytes: int              # POST /documents refuses larger files with 413 file_too_large
+    ai_budget: AIBudgetOut | None      # null when no daily cap is set, or while Postgres is unreachable
 
 
 # ------------------------------------------------------------------ documents

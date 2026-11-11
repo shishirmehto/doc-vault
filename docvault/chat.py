@@ -156,9 +156,12 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
     Retry-After when retryable) and writes no turn; the failed calls stay in llm_calls. No
     connection or transaction is held across a model call.
 
+    Over today's AI spending cap it raises VaultError(QUOTA_EXCEEDED) (HTTP 429) before
+    any model call, even one the gate would have saved.
+
     The optional sinks report progress. on_stage hears each step as it starts, after the
-    chat and its scope are checked, so a missing chat or a deleted document raises
-    before any of them. on_text gets provisional answer text, markers removed, while
+    chat, its scope and the spending cap are checked, so a missing chat, a deleted document
+    or a used-up cap raises before any of them. on_text gets provisional answer text, markers removed, while
     the answer model writes it, and on_reset means "discard the text sent so far"
     (a retry or repair follows). The returned turn replaces all provisional text.
     """
@@ -170,6 +173,7 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
         _require_chat(conn, chat_id)
         documents = _scope(conn, chat_id)
         past = _turns(conn, chat_id, limit=ctx.settings.history_turns)
+    ctx.ai.check_budget(Purpose.ANSWER)
 
     if past:
         stage("condensing")

@@ -65,6 +65,7 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.INVALID_CURSOR: 400,
     ErrorCode.INVALID_REQUEST: 422,
     ErrorCode.RATE_LIMITED: 429,        # with Retry-After: the seconds until the budget allows one more
+    ErrorCode.QUOTA_EXCEEDED: 429,      # with Retry-After: the seconds until midnight UTC, when the daily cap resets
     ErrorCode.TOO_MANY_STREAMS: 503,    # with Retry-After: 5
     ErrorCode.AI_UNAVAILABLE: 503,      # with Retry-After: 5 when retryable
     ErrorCode.AI_BAD_OUTPUT: 502,
@@ -311,7 +312,8 @@ def get_chat(chat_id: UUID, ctx: Deps) -> wire.ChatOut:
 
 @router.post("/chats/{chat_id}/messages", response_model=wire.TurnOut, dependencies=[rate_limited("ask")],
              responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED, ErrorCode.AI_UNAVAILABLE,
-                              ErrorCode.AI_BAD_OUTPUT, ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED))
+                              ErrorCode.AI_BAD_OUTPUT, ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED,
+                              ErrorCode.QUOTA_EXCEEDED))
 def ask(chat_id: UUID, body: wire.AskIn, ctx: Deps) -> wire.TurnOut:
     return wire.turn_out(chat.ask(ctx, ChatId(chat_id), body.question))
 
@@ -381,8 +383,9 @@ class AskInThread:
 
 STREAM_EVENTS = """\
 Asks like `POST /chats/{chat_id}/messages` and spends from the same rate-limit budget, but answers with
-server-sent events while the answer is written. A refusal found before the stream starts (404, 409, 422, 429)
-is the usual status with the error envelope. After a 200, the events are:
+server-sent events while the answer is written. A refusal found before the stream starts (404, 409, 422, 429,
+including `quota_exceeded` when today's AI spending cap is used up) is the usual status with the error envelope.
+After a 200, the events are:
 
 - `stage`, data `{"stage": "condensing" | "searching" | "answering"}`, as each step starts. `condensing` comes
   only when the chat has earlier turns.
@@ -400,7 +403,7 @@ If the client disconnects, the answer still finishes and is stored, so `GET /cha
              responses={200: {"description": "stage, delta, reset, then one turn or error event",
                               "content": {"text/event-stream": {"schema": {"type": "string"}}}},
                         **json_errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED,
-                                      ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED)})
+                                      ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED, ErrorCode.QUOTA_EXCEEDED)})
 def ask_stream(chat_id: UUID, body: wire.AskIn, ctx: Deps) -> EventStreamResponse:
     asking = AskInThread(ctx, ChatId(chat_id), body.question)
     first = asking.first()
@@ -471,7 +474,8 @@ def history(chat_id: UUID, ctx: Deps, limit: Annotated[int, Query(ge=1, le=200)]
 
 @router.post("/comparisons", status_code=201, response_model=wire.ComparisonOut, dependencies=[rate_limited("ask")],
              responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.DOCUMENTS_NOT_READY, ErrorCode.INVALID_REQUEST,
-                              ErrorCode.RATE_LIMITED, ErrorCode.AI_UNAVAILABLE, ErrorCode.AI_BAD_OUTPUT))
+                              ErrorCode.RATE_LIMITED, ErrorCode.QUOTA_EXCEEDED, ErrorCode.AI_UNAVAILABLE,
+                              ErrorCode.AI_BAD_OUTPUT))
 def create_comparison(body: wire.CompareIn, ctx: Deps) -> wire.ComparisonOut:
     """Compare 2 to 5 ready documents field by field, each cell checked against the page it cites."""
     return wire.comparison_out(compare.create(ctx, [DocumentId(doc_id) for doc_id in body.document_ids], body.focus))
@@ -498,7 +502,8 @@ def get_comparison(comparison_id: UUID, ctx: Deps) -> wire.ComparisonOut:
              responses={200: {"model": wire.SummaryOut,
                               "description": "Summarised before with the same options; the stored summary, cached"},
                         **errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.DOCUMENTS_NOT_READY, ErrorCode.INVALID_REQUEST,
-                                 ErrorCode.RATE_LIMITED, ErrorCode.AI_UNAVAILABLE, ErrorCode.AI_BAD_OUTPUT)})
+                                 ErrorCode.RATE_LIMITED, ErrorCode.QUOTA_EXCEEDED, ErrorCode.AI_UNAVAILABLE,
+                                 ErrorCode.AI_BAD_OUTPUT)})
 def create_summary(doc_id: UUID, body: wire.SummaryIn, response: Response, ctx: Deps) -> wire.SummaryOut:
     """Summarise a ready document at the length, focus and tone asked for, each source checked on its page."""
     summary = summaries.create(ctx, DocumentId(doc_id), SummaryOptions.of(body.length, body.focus, body.tone))
@@ -540,8 +545,12 @@ def health(ctx: Deps, response: Response) -> wire.HealthOut:
     broker = _probe(lambda: redis.Redis.from_url(ctx.settings.redis_url, socket_timeout=2).ping())
     if "unreachable" in (db, broker):
         response.status_code = 503
+    # The spend is read from Postgres, so it is left out rather than failing the probe when Postgres is down.
+    budget = ctx.ai.budget() if db == "ok" else None
     return wire.HealthOut(db=db, redis=broker, ai_mode=ctx.ai.mode, embed_model=ctx.ai.embed_model,
-                          max_upload_bytes=ctx.settings.max_upload_bytes)
+                          max_upload_bytes=ctx.settings.max_upload_bytes,
+                          ai_budget=None if budget is None else wire.AIBudgetOut(limit_usd=float(budget[0]),
+                                                                                 spent_today_usd=float(budget[1])))
 
 
 app = FastAPI(title="Doc Vault", version="1.0", lifespan=lifespan)

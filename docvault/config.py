@@ -6,10 +6,11 @@ the code sees a concrete choice and never branches on missing keys.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 type Provider = Literal["auto", "openai", "fake"]
@@ -53,6 +54,14 @@ class Settings(BaseSettings):
     compare_timeout_s: float = 90.0
     summary_timeout_s: float = 90.0
     log_format: Literal["json", "text"] = "text"   # json: one object per line, for compose and log shippers
+    # Model calls stop for the rest of the UTC day once the ledger's spend reaches it. Unset: no cap.
+    daily_ai_budget_usd: Annotated[Decimal, Field(gt=0)] | None = None
+
+    @field_validator("daily_ai_budget_usd", mode="before")
+    @classmethod
+    def _empty_is_unset(cls, value: object) -> object:
+        """Compose passes DAILY_AI_BUDGET_USD through from the shell, as an empty string when it is not set there."""
+        return None if value == "" else value
 
 
 def load_settings() -> Settings:

@@ -3,9 +3,10 @@
 Callers get one object, AI, with two methods: embed() and complete(). Behind
 them sit provider choice, batching, timeouts, retries with backoff,
 JSON-schema output, validation with one repair turn (none for a comparison
-or a summary), cost pricing, and one llm_calls row per provider attempt
-(failed attempts included). No module can reach a provider without going
-through here, so token and cost accounting cannot be skipped.
+or a summary), cost pricing, the daily spending cap on completions, and one
+llm_calls row per provider attempt (failed attempts included). No module can
+reach a provider without going through here, so token and cost accounting
+cannot be skipped.
 """
 
 from __future__ import annotations
@@ -16,10 +17,12 @@ import itertools
 import json
 import math
 import re
+import threading
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Literal, NamedTuple, Protocol
 
@@ -91,6 +94,8 @@ ONE_ATTEMPT = BACKGROUND | {Purpose.COMPARE, Purpose.SUMMARY}
 # at most compare_timeout_s or summary_timeout_s (90 s) lets the API answer first; invalid output fails as a
 # retryable 502, for the UI's Try again.
 NO_REPAIR = frozenset({Purpose.COMPARE, Purpose.SUMMARY})
+
+SPEND_TTL_S = 10.0   # how stale today's spend may be when a budget check reads it
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +217,31 @@ class _Billing:
     prompt: Prompt | None = None
 
 
+class DailySpend:
+    """Today's spend in the ledger, the UTC day so far, read at most once per SPEND_TTL_S. Thread-safe.
+
+    A budget check runs before every model call; the cache keeps that from summing the day's ledger rows each
+    time. The clock is injectable for tests.
+    """
+
+    def __init__(self, clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+        self.clock = clock
+        self._lock = threading.Lock()
+        self._read: tuple[datetime, datetime, Decimal] | None = None   # (read at, that day's midnight, usd)
+
+    def today(self, ledger: Db) -> tuple[Decimal, datetime]:
+        """The spend since midnight UTC and the time it was asked for."""
+        now = self.clock()
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        with self._lock:
+            if self._read is None or self._read[1] != midnight or (now - self._read[0]).total_seconds() >= SPEND_TTL_S:
+                with ledger.connection() as conn:
+                    usd = conn.execute("SELECT coalesce(sum(cost_usd), 0) AS usd FROM llm_calls WHERE at >= %s",
+                                       (midnight,)).fetchone()["usd"]
+                self._read = (now, midnight, usd)
+            return self._read[2], now
+
+
 @dataclass(frozen=True, slots=True)
 class AI:
     """Gateway. Constructed once per process by build()."""
@@ -221,6 +251,7 @@ class AI:
     ledger: Db
     settings: Settings
     sleep: Callable[[float], None] = time.sleep
+    spend: DailySpend = field(default_factory=DailySpend)
 
     @property
     def mode(self) -> Literal["live", "fake", "mixed"]:
@@ -236,6 +267,34 @@ class AI:
     @property
     def min_similarity(self) -> float:
         return self.embedder.min_similarity
+
+    def budget(self) -> tuple[Decimal, Decimal] | None:
+        """(daily_ai_budget_usd, today's spend), or None when no cap is set."""
+        limit = self.settings.daily_ai_budget_usd
+        return None if limit is None else (limit, self.spend.today(self.ledger)[0])
+
+    def check_budget(self, purpose: Purpose) -> None:
+        """Raise VaultError(QUOTA_EXCEEDED) when today's spend (UTC) has reached daily_ai_budget_usd.
+
+        An interactive purpose fails retryable, with details naming the cap, the spend, the next midnight UTC and
+        the seconds until it. Insights fail for good: a Celery retry seconds later would meet the same cap, and
+        the document page offers its own Retry. embed() never checks, so indexing and search keep working.
+        """
+        limit = self.settings.daily_ai_budget_usd
+        if limit is None:
+            return
+        spent, now = self.spend.today(self.ledger)
+        if spent < limit:
+            return
+        resets_at = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        details: dict[str, object] = {
+            "limit_usd": float(limit), "spent_today_usd": float(spent), "resets_at": resets_at.isoformat(),
+            "retry_after_s": max(1, math.ceil((resets_at - now).total_seconds()))}
+        if purpose is Purpose.INSIGHTS:
+            raise VaultError(ErrorCode.QUOTA_EXCEEDED, f"Insights were not written because today's AI spending cap "
+                             f"of {_dollars(limit)} is used up. Retry after midnight UTC.", details=details)
+        raise VaultError(ErrorCode.QUOTA_EXCEEDED, f"Today's AI spending cap of {_dollars(limit)} is used up. "
+                         "It resets at midnight UTC.", retryable=True, details=details)
 
     def embed(self, texts: Sequence[str], *, purpose: Purpose, owner: Owner) -> list[Vector]:
         """Embed any number of texts. Output order matches input order.
@@ -263,6 +322,8 @@ class AI:
         VaultError(AI_BAD_OUTPUT). A NO_REPAIR purpose gets no repair turn: its
         invalid output raises a retryable AI_BAD_OUTPUT. A provider failure raises
         VaultError(AI_UNAVAILABLE), after the gateway's retries for interactive purposes.
+        check_budget runs before the first call and before the repair turn, so either
+        can raise VaultError(QUOTA_EXCEEDED).
         With a stream, every attempt streams its raw output into it, each one announced by
         stream.attempt(). The LLM is never called inside a database transaction: callers commit first.
         """
@@ -281,6 +342,7 @@ class AI:
 
     def _complete_once(self, prompt: Prompt, output: type[BaseModel], owner: Owner,
                        stream: TextSink | None) -> RawCompletion:
+        self.check_budget(prompt.purpose)
         billing = _Billing(prompt.purpose, owner, self.chat.provider, self.chat.models[prompt.tier], prompt)
 
         def attempt(timeout_s: float) -> tuple[RawCompletion, Tokens]:
@@ -353,6 +415,11 @@ def _describe(exc: ValidationError) -> str:
         where = ".".join(str(part) for part in error["loc"])
         errors.append(f"{where}: {error['msg']}" if where else error["msg"])
     return "; ".join(errors)
+
+
+def _dollars(amount: Decimal) -> str:
+    """$5.00, $12.50, $0.000001: two decimals, or as many as the amount needs."""
+    return f"${amount:.{max(2, -int(amount.normalize().as_tuple().exponent))}f}"
 
 
 def _elapsed_ms(started: float) -> int:
