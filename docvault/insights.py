@@ -57,11 +57,11 @@ WHERE document_insights.status = 'failed'
 def run_analyze(ctx: Ctx, doc_id: DocumentId, *, attempt: int = 1) -> None:
     """Generate, verify and store insights. Safe to run any number of times.
 
-    Raises VaultError like documents.run_index: the Celery shim retries a
-    retryable one and calls fail() after the last attempt. Returns quietly for
-    duplicate deliveries, deleted documents, documents not parsed yet (run_index
-    enqueues analysis after its parse checkpoint), insights already ready under
-    the current prompt version, and failed insights, which stay failed until
+    Raises VaultError: the Celery shim retries a retryable one and calls fail()
+    after the last attempt. Returns quietly for duplicate deliveries, deleted
+    documents, documents not parsed yet (run_index enqueues analysis after its
+    parse checkpoint), insights already ready under the current prompt
+    version, and failed insights, which stay failed until
     POST /documents/{id}/retry deletes the row. The document's status is not
     checked: pages are all insights need.
     """

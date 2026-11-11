@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 type Provider = Literal["auto", "openai", "fake"]
@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     history_turns: int = 4
     insights_max_chars: int = 240_000    # about 60k tokens of page-tagged text
     chat_timeout_s: float = 30.0
+    uploads_per_minute: int = Field(30, ge=1)     # per client, per API process
+    questions_per_minute: int = Field(20, ge=1)
     insights_timeout_s: float = 120.0
 
 

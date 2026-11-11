@@ -2,7 +2,9 @@
 
 All pipeline logic is in documents.run_index and insights.run_analyze, which
 tests call directly without Celery. This file only decides delivery
-semantics and maps VaultError.retryable to Celery retry or terminal failure.
+semantics. run_index writes its own terminal failures under its lease, so a
+VaultError it raises always means retry. For insights this file maps
+VaultError.retryable to a Celery retry or insights.fail.
 
 Delivery semantics (each is load-bearing):
   task_acks_late = True              ack after the task body returns, so a crash redelivers
@@ -23,19 +25,17 @@ from __future__ import annotations
 
 import functools
 import logging
-from collections.abc import Callable
 from uuid import UUID
 
-from celery import Celery, Task
+from celery import Celery
 
 from . import documents, insights
 from .config import load_settings
 from .context import Ctx, build_ctx
+from .documents import MAX_RETRIES
 from .domain import DocumentId, ErrorCode, Failure, VaultError
 
 log = logging.getLogger(__name__)
-
-MAX_RETRIES = 5   # backoff 2, 4, 8, 16, 32 s
 
 celery_app = Celery("docvault", broker=load_settings().redis_url)
 celery_app.conf.update(
@@ -68,32 +68,30 @@ def _ctx() -> Ctx:
 
 @celery_app.task(bind=True, max_retries=MAX_RETRIES)
 def index_document(self, doc_id: str) -> None:
-    """A retryable VaultError becomes a Celery retry until the attempts run out.
-    Every other failure ends in a FAILED document, so the user sees a terminal
-    state and a reason, never a spinner."""
-    _deliver(self, doc_id, documents.run_index, documents.fail, "Processing failed unexpectedly. Retry the document.")
+    """run_index ends every failed run in a FAILED document with a reason, so
+    the user never sees a spinner. It raises only when another attempt is due."""
+    try:
+        documents.run_index(_ctx(), DocumentId(UUID(doc_id)), attempt=self.request.retries + 1)
+    except VaultError as exc:
+        raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
 
 
 @celery_app.task(bind=True, max_retries=MAX_RETRIES)
 def analyze_document(self, doc_id: str) -> None:
-    """Same shape as index_document. A terminal failure records failed insights
-    and leaves the document as it is, still searchable."""
-    _deliver(self, doc_id, insights.run_analyze, insights.fail,
-             "Insights failed unexpectedly. Retry the document to try again.")
-
-
-def _deliver(task: Task, doc_id: str, run: Callable[..., None], fail: Callable[[Ctx, DocumentId, Failure], None],
-             crash_message: str) -> None:
+    """A retryable VaultError becomes a Celery retry until the attempts run out.
+    A terminal failure records failed insights and leaves the document as it
+    is, still searchable."""
     ctx, doc = _ctx(), DocumentId(UUID(doc_id))
     try:
-        run(ctx, doc, attempt=task.request.retries + 1)
+        insights.run_analyze(ctx, doc, attempt=self.request.retries + 1)
     except VaultError as exc:
-        if exc.failure.retryable and task.request.retries < MAX_RETRIES:
-            raise task.retry(exc=exc, countdown=2 ** (task.request.retries + 1)) from exc
-        fail(ctx, doc, exc.failure)
+        if exc.failure.retryable and self.request.retries < MAX_RETRIES:
+            raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
+        insights.fail(ctx, doc, exc.failure)
     except Exception:
-        log.exception("%s for document %s failed", task.name, doc_id)
-        fail(ctx, doc, Failure(ErrorCode.INTERNAL, crash_message, retryable=True))
+        log.exception("%s for document %s failed", self.name, doc_id)
+        insights.fail(ctx, doc, Failure(ErrorCode.INTERNAL, "Insights failed unexpectedly. Retry the document to try again.",
+                                        retryable=True))
 
 
 @celery_app.task

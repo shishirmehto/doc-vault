@@ -184,9 +184,8 @@ def test_reconcile_enqueues_analysis_for_aged_documents_without_insights(ctx, tm
 
 def test_a_document_that_failed_after_parsing_keeps_insights_cited_by_section(client, ctx):
     doc_id = post(client, SAMPLES / ENDORSEMENT)
-    with pytest.raises(VaultError) as raised:
-        documents.run_index(with_embedder(ctx, FailingEmbedder(0, ProviderError("timeout", retryable=True))), doc_id)
-    documents.fail(ctx, doc_id, raised.value.failure)
+    documents.run_index(with_embedder(ctx, FailingEmbedder(0, ProviderError("timeout", retryable=True))), doc_id,
+                        attempt=documents.MAX_RETRIES + 1)
     insights.run_analyze(ctx, doc_id)
     assert client.post(f"/documents/{doc_id}/retry").json()["status"] == "queued"
 

@@ -73,6 +73,15 @@ class Purpose(StrEnum):
     ANSWER = "answer"
 
 
+class InsightsStatus(StrEnum):
+    """What GET /documents/{id}/insights reads as. Each value names one InsightsState variant."""
+
+    PENDING = "pending"
+    READY = "ready"
+    FAILED = "failed"
+    UNAVAILABLE = "unavailable"
+
+
 class TurnOutcome(StrEnum):
     ANSWERED = "answered"
     NO_EVIDENCE = "no_evidence"        # retrieval gate refused before any LLM call
@@ -101,6 +110,8 @@ class ErrorCode(StrEnum):
     DOCUMENTS_DELETED = "documents_deleted"
     NOTHING_TO_RETRY = "nothing_to_retry"
     INVALID_CURSOR = "invalid_cursor"
+    INVALID_REQUEST = "invalid_request"           # a parameter or body failed validation
+    RATE_LIMITED = "rate_limited"                 # the client spent its per-minute budget for this route
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,7 +150,7 @@ class Parsed:
 
 @dataclass(frozen=True, slots=True)
 class Queued:
-    pass
+    parsed: Parsed | None   # set when a retry re-queued a document that failed after its parse checkpoint
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +173,12 @@ class Ready:
 class Failed:
     failure: Failure
     parsed: Parsed | None   # None when parsing itself failed
+
+    @property
+    def stage(self) -> Literal[Step.PARSE, Step.EMBED]:
+        """The step that failed. Parse facts are written once, by the parse checkpoint, so their presence says
+        whether parsing finished."""
+        return Step.PARSE if self.parsed is None else Step.EMBED
 
 
 type Lifecycle = Queued | Parsing | Embedding | Ready | Failed
@@ -194,7 +211,7 @@ class InsightsReady:
     body: InsightsBody
     pages_read: int         # coverage: pages 1..pages_read fit the prompt budget
     page_count: int
-    page_basis: PageBasis   # here because a retried document reads as Queued, which carries no Parsed
+    page_basis: PageBasis   # labels each key fact's page
     dropped_key_facts: int  # facts the model cited whose quote was not on the cited page
     model: str
     prompt_version: str
@@ -300,10 +317,17 @@ class DocRef:
 
 
 @dataclass(frozen=True, slots=True)
+class ChatDocument:
+    id: DocumentId
+    filename: str       # snapshot taken when the chat started
+    deleted: bool       # deleted since then; the chat refuses new questions
+
+
+@dataclass(frozen=True, slots=True)
 class Chat:
     id: ChatId
     title: str | None
-    documents: tuple[DocRef, *tuple[DocRef, ...]]   # non-empty, fixed at start
+    documents: tuple[ChatDocument, *tuple[ChatDocument, ...]]   # non-empty, fixed at start
     created_at: datetime
 
 

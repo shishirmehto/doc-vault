@@ -12,6 +12,7 @@ chat.ground / insights.verify have checked every quote against the source.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -87,6 +88,20 @@ class InsightsDraft(BaseModel):
     summary: str
     key_facts: list[KeyFactDraft] = Field(max_length=12)
     tags: list[str] = Field(max_length=6, description="Short lowercase topics.")
+
+
+# ------------------------------------------------------------------ repair
+
+# Why it is worded this way: the model sees its own output and the validator's errors, so it fixes the named
+# fields instead of writing a new answer, and "JSON only" stops it wrapping the fix in prose. The turn keeps the
+# original prompt's name and version, so the ledger counts repairs against the prompt that needed them.
+REPAIR_TEMPLATE = "That JSON failed validation: {errors}. Return the corrected JSON only."
+
+
+def repair(prompt: Prompt, bad_json: str, errors: str) -> Prompt:
+    """The one repair turn ai.AI.complete makes after output fails validation."""
+    return dataclasses.replace(prompt, messages=(
+        *prompt.messages, Msg("assistant", bad_json), Msg("user", REPAIR_TEMPLATE.format(errors=errors))))
 
 
 # ------------------------------------------------------------------ condense

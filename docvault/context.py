@@ -10,13 +10,14 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
 from . import ai, db
 from .config import Settings
 from .domain import DocumentId, ErrorCode, Sha256, VaultError
+from .ratelimit import RateLimiter
 
 _COPY_BLOCK = 1024 * 1024
 
@@ -57,8 +58,7 @@ class BlobStore:
                 while block := stream.read(_COPY_BLOCK):
                     size += len(block)
                     if size > max_bytes:
-                        raise VaultError(ErrorCode.FILE_TOO_LARGE,
-                                         f"The file is larger than the {max_bytes // (1024 * 1024)} MB limit.")
+                        raise too_large(max_bytes)
                     digest.update(block)
                     out.write(block)
             if size == 0:
@@ -74,6 +74,10 @@ class BlobStore:
         self.path(sha).unlink(missing_ok=True)
 
 
+def too_large(max_bytes: int) -> VaultError:
+    return VaultError(ErrorCode.FILE_TOO_LARGE, f"The file is larger than the {max_bytes // (1024 * 1024)} MB limit.")
+
+
 @dataclass(frozen=True, slots=True)
 class Ctx:
     settings: Settings
@@ -81,6 +85,7 @@ class Ctx:
     ai: ai.AI
     blobs: BlobStore
     jobs: Jobs
+    limiter: RateLimiter = field(default_factory=RateLimiter)
 
 
 def build_ctx(settings: Settings, jobs: Jobs) -> Ctx:

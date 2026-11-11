@@ -74,7 +74,7 @@ def test_upload_then_index_reaches_ready_with_every_chunk_embedded(ctx):
     outcome = upload(ctx, POLICY)
     assert isinstance(outcome, Created)
     doc = outcome.document
-    assert (doc.filename, doc.kind, doc.size_bytes, doc.lifecycle) == ("sample-cgl-policy.pdf", "pdf", 11193, Queued())
+    assert (doc.filename, doc.kind, doc.size_bytes, doc.lifecycle) == ("sample-cgl-policy.pdf", "pdf", 11193, Queued(None))
     assert ctx.jobs.indexed == [doc.id]
 
     documents.run_index(ctx, doc.id)
@@ -125,16 +125,13 @@ def test_delivery_while_another_worker_holds_the_document_does_nothing(ctx):
     doc_id = upload(ctx, POLICY).document.id
     with pipeline_steps(ctx.db, doc_id, Lease.INDEX, 1):
         documents.run_index(ctx, doc_id)
-    assert documents.get(ctx.db, doc_id).lifecycle == Queued()
+    assert documents.get(ctx.db, doc_id).lifecycle == Queued(None)
     assert steps(ctx, doc_id) == []
 
 
 def test_scanned_pdf_fails_with_a_reason_and_can_be_retried(ctx, tmp_path):
     doc_id = upload(ctx, scanned_pdf(tmp_path)).document.id
-    with pytest.raises(VaultError) as raised:
-        documents.run_index(ctx, doc_id)
-    assert raised.value.failure.code is ErrorCode.NO_EXTRACTABLE_TEXT
-    documents.fail(ctx, doc_id, raised.value.failure)
+    documents.run_index(ctx, doc_id)
 
     failed = documents.get(ctx.db, doc_id)
     assert isinstance(failed.lifecycle, Failed)
@@ -145,21 +142,19 @@ def test_scanned_pdf_fails_with_a_reason_and_can_be_retried(ctx, tmp_path):
     documents.run_index(ctx, doc_id)   # a redelivery must not revive a failed document
     assert steps(ctx, doc_id) == [("parse", "failed", "no_extractable_text")]
 
-    assert documents.retry(ctx, doc_id).lifecycle == Queued()
+    assert documents.retry(ctx, doc_id).lifecycle == Queued(None)
     assert ctx.jobs.indexed == [doc_id, doc_id]
 
 
 def test_retry_after_a_provider_failure_resumes_at_embedding_without_parsing_again(ctx):
     doc_id = upload(ctx, POLICY).document.id
     down = with_embedder(ctx, FailingEmbedder(1, ProviderError("timeout", retryable=True)))
-    with pytest.raises(VaultError) as raised:
-        documents.run_index(down, doc_id)
-    assert (raised.value.failure.code, raised.value.failure.retryable) == (ErrorCode.AI_UNAVAILABLE, True)
-    documents.fail(ctx, doc_id, raised.value.failure)
+    documents.run_index(down, doc_id, attempt=documents.MAX_RETRIES + 1)
     failed = documents.get(ctx.db, doc_id).lifecycle
     assert isinstance(failed, Failed) and failed.parsed.chunk_count == 6
+    assert (failed.failure.code, failed.failure.retryable) == (ErrorCode.AI_UNAVAILABLE, True)
 
-    assert documents.retry(ctx, doc_id).lifecycle == Queued()
+    assert documents.retry(ctx, doc_id).lifecycle == Queued(Parsed(PageBasis.PHYSICAL, page_count=7, chunk_count=6, empty_pages=()))
     documents.run_index(ctx, doc_id)
 
     assert isinstance(documents.get(ctx.db, doc_id).lifecycle, Ready)
@@ -186,7 +181,29 @@ def test_reconcile_requeues_stalled_documents_only(ctx):
 
     assert documents.reconcile(ctx) == 1
     assert ctx.jobs.indexed == [stalled]
-    assert documents.get(ctx.db, fresh).lifecycle == Queued()
+    assert documents.get(ctx.db, fresh).lifecycle == Queued(None)
+
+
+def test_reconcile_re_enqueues_a_stale_backlog_a_batch_at_a_time_and_reaches_every_document(ctx, monkeypatch):
+    monkeypatch.setattr(documents, "INDEX_BATCH", 2)
+    oldest, older, old = (upload(ctx, path).document.id for path in (POLICY, QUOTE, SAMPLES / conftest.ENDORSEMENT))
+    with ctx.db.connection() as conn:
+        for doc_id, minutes in ((oldest, 9), (older, 8), (old, 7)):
+            conn.execute("UPDATE documents SET updated_at = now() - %s * interval '1 minute' WHERE id = %s",
+                         (minutes, doc_id))
+    ctx.jobs.indexed.clear()
+
+    ticks = []
+    for _ in range(3):
+        documents.reconcile(ctx)
+        ticks.append(set(ctx.jobs.indexed))
+        ctx.jobs.indexed.clear()
+    assert ticks == [{oldest, older}, {old}, set()]
+
+    with ctx.db.connection() as conn:   # two more minutes pass
+        conn.execute("UPDATE documents SET requeued_at = requeued_at - interval '3 minutes'")
+    assert documents.reconcile(ctx) == 2
+    assert set(ctx.jobs.indexed) == {oldest, older}
 
 
 def test_reconcile_re_embeds_a_ready_document_after_the_embedding_model_changes(ctx):

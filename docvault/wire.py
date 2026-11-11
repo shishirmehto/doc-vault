@@ -7,6 +7,7 @@ OpenAPI schema honest about which fields exist in which state.
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime
 from typing import Annotated, Literal, assert_never
 from uuid import UUID
@@ -26,14 +27,19 @@ from .domain import (
     InsightsFailed,
     InsightsPending,
     InsightsReady,
+    InsightsStatus,
     InsightsUnavailable,
     Page,
     PageBasis,
     Parsing,
+    Purpose,
     Queued,
     Ready,
+    Step,
     Turn,
+    TurnOutcome,
 )
+from .metrics import DocumentStats, ProcessingStats
 
 # ------------------------------------------------------------------ shared
 
@@ -47,6 +53,14 @@ class ErrorBody(BaseModel):
 
 class ErrorOut(BaseModel):
     error: ErrorBody
+
+
+class HealthOut(BaseModel):
+    db: Literal["ok", "unreachable"]
+    redis: Literal["ok", "unreachable"]
+    ai_mode: Literal["live", "fake", "mixed"]
+    embed_model: str
+    max_upload_bytes: int              # POST /documents refuses larger files with 413 file_too_large
 
 
 # ------------------------------------------------------------------ documents
@@ -64,11 +78,12 @@ class DocumentOut(BaseModel):
     size_bytes: int
     status: DocStatus
     progress: Progress | None          # only while status == "embedding"
-    pages: int | None                  # None until parsed
+    pages: int | None                  # None until parsed, then the stored count in every status
     page_basis: PageBasis | None
     empty_pages: list[int] = []
-    insights_status: Literal["pending", "ready", "failed", "unavailable"]
+    insights_status: InsightsStatus
     error: ErrorBody | None            # only when status == "failed"
+    failed_stage: Literal["parse", "embed"] | None   # only when status == "failed": the step that failed
     processing_ms: int | None
     created_at: datetime
     links: dict[str, str]
@@ -141,11 +156,22 @@ class StartChatIn(BaseModel):
     title: str | None = None
 
 
+class ChatDocumentOut(BaseModel):
+    id: UUID
+    filename: str                      # as it was when the chat started
+    deleted: bool                      # true: the chat answers no new questions (409 documents_deleted)
+
+
 class ChatOut(BaseModel):
     id: UUID
     title: str | None
-    documents: list[dict[str, str]]    # [{"id", "filename"}]
+    documents: list[ChatDocumentOut]
     created_at: datetime
+
+
+class ChatPage(BaseModel):
+    items: list[ChatOut]
+    next_cursor: str | None
 
 
 class AskIn(BaseModel):
@@ -188,6 +214,75 @@ class HistoryOut(BaseModel):
     turns: list[TurnOut]
 
 
+# ------------------------------------------------------------------ metrics
+
+
+class PercentilesOut(BaseModel):
+    p50: int | None                    # null when the window holds no sample
+    p95: int | None
+
+
+class DocumentMetricsOut(BaseModel):
+    total: int
+    by_status: dict[DocStatus, int]
+    by_kind: dict[DocKind, int]
+    insights: dict[InsightsStatus, int]
+    pages: int
+    chunks: int
+    bytes: int
+    failures_by_code: dict[str, int]   # documents failed now, by error code
+
+
+class StepMetricsOut(BaseModel):
+    runs: int
+    ok: int
+    failed: int
+    abandoned: int                     # crashed runs, closed by the next worker
+    retries: int                       # runs with attempt > 1
+    duration_ms: PercentilesOut        # ok runs only
+    failures_by_code: dict[str, int]
+
+
+class AIUsageOut(BaseModel):
+    purpose: Purpose
+    model: str
+    calls: int
+    errors: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float                    # priced calls only
+    unpriced_calls: int
+    latency_ms: PercentilesOut
+
+
+class AIMetricsOut(BaseModel):
+    calls: int
+    errors: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    unpriced_calls: int
+    by_purpose_and_model: list[AIUsageOut]
+
+
+class ChatMetricsOut(BaseModel):
+    turns: int
+    outcomes: dict[TurnOutcome, int]
+    latency_ms: PercentilesOut
+
+
+class ProcessingMetricsOut(BaseModel):
+    window: str
+    since: datetime
+    uploaded: int                      # documents created in the window that still exist
+    indexed: int                       # documents with a successful embed in the window
+    time_to_ready_ms: PercentilesOut   # upload to first successful embed
+    queue_wait_ms: PercentilesOut      # upload to first parse start
+    steps: dict[Step, StepMetricsOut]
+    ai: AIMetricsOut
+    chat: ChatMetricsOut
+
+
 # ------------------------------------------------------------------ mapping
 
 
@@ -196,9 +291,9 @@ def error_body(failure: Failure, details: dict[str, object] | None = None) -> Er
 
 
 def document_out(doc: Document) -> DocumentOut:
-    parsed, progress, error = None, None, None
+    parsed, progress, error, failed_stage = None, None, None, None
     match doc.lifecycle:
-        case Queued():
+        case Queued(parsed):
             status = DocStatus.QUEUED
         case Parsing():
             status = DocStatus.PARSING
@@ -207,27 +302,28 @@ def document_out(doc: Document) -> DocumentOut:
             progress = Progress(embedded_chunks=embedded_chunks, total_chunks=parsed.chunk_count)
         case Ready(parsed):
             status = DocStatus.READY
-        case Failed(failure, parsed):
+        case Failed(failure, parsed) as failed:
             status = DocStatus.FAILED
             error = error_body(failure)
+            failed_stage = failed.stage
         case _:
             assert_never(doc.lifecycle)
     match doc.insights:
         case InsightsPending():
-            insights_status = "pending"
+            insights_status = InsightsStatus.PENDING
         case InsightsReady():
-            insights_status = "ready"
+            insights_status = InsightsStatus.READY
         case InsightsFailed():
-            insights_status = "failed"
+            insights_status = InsightsStatus.FAILED
         case InsightsUnavailable():
-            insights_status = "unavailable"
+            insights_status = InsightsStatus.UNAVAILABLE
         case _:
             assert_never(doc.insights)
     return DocumentOut(
         id=doc.id, filename=doc.filename, kind=doc.kind, size_bytes=doc.size_bytes, status=status, progress=progress,
         pages=parsed and parsed.page_count, page_basis=parsed and parsed.basis,
         empty_pages=list(parsed.empty_pages) if parsed else [],
-        insights_status=insights_status, error=error, processing_ms=doc.processing_ms,
+        insights_status=insights_status, error=error, failed_stage=failed_stage, processing_ms=doc.processing_ms,
         created_at=doc.created_at,
         links={"self": f"/documents/{doc.id}", "insights": f"/documents/{doc.id}/insights",
                "pages": f"/documents/{doc.id}/pages/{{n}}"})
@@ -260,7 +356,8 @@ def insights_out(doc: Document) -> InsightsReadyOut | InsightsPendingOut | Insig
 
 def chat_out(chat: Chat) -> ChatOut:
     return ChatOut(id=chat.id, title=chat.title, created_at=chat.created_at,
-                   documents=[{"id": str(doc.id), "filename": doc.filename} for doc in chat.documents])
+                   documents=[ChatDocumentOut(id=doc.id, filename=doc.filename, deleted=doc.deleted)
+                              for doc in chat.documents])
 
 
 def turn_out(turn: Turn) -> TurnOut:
@@ -282,3 +379,11 @@ def turn_out(turn: Turn) -> TurnOut:
 def _page_url(doc_id: UUID, page: int) -> str:
     """The GET /documents/{id}/pages/{n} route a citation links to."""
     return f"/documents/{doc_id}/pages/{page}"
+
+
+def document_metrics_out(stats: DocumentStats) -> DocumentMetricsOut:
+    return DocumentMetricsOut.model_validate(dataclasses.asdict(stats))
+
+
+def processing_metrics_out(window: str, stats: ProcessingStats) -> ProcessingMetricsOut:
+    return ProcessingMetricsOut.model_validate({"window": window, **dataclasses.asdict(stats)})

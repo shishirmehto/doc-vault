@@ -10,7 +10,6 @@ cannot be skipped.
 
 from __future__ import annotations
 
-import dataclasses
 import functools
 import hashlib
 import itertools
@@ -27,6 +26,7 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError, Internal
 from openai.lib import type_to_response_format_param
 from pydantic import BaseModel, ValidationError
 
+from . import prompts
 from .config import ReasoningEffort, Settings
 from .db import Db
 from .domain import DocumentId, ErrorCode, Page, Purpose, Source, Turn, TurnId, VaultError
@@ -38,7 +38,6 @@ from .prompts import (
     EvidenceDraft,
     InsightsDraft,
     KeyFactDraft,
-    Msg,
     Prompt,
     Tier,
 )
@@ -204,9 +203,7 @@ class AI:
         try:
             return _validated(output, raw)
         except ValidationError as exc:
-            repair = dataclasses.replace(prompt, messages=(
-                *prompt.messages, Msg("assistant", raw.text),
-                Msg("user", f"That JSON failed validation: {_describe(exc)}. Return the corrected JSON only.")))
+            repair = prompts.repair(prompt, raw.text, _describe(exc))
         try:
             return _validated(output, self._complete_once(repair, output, owner))
         except ValidationError as exc:
@@ -333,7 +330,7 @@ class OpenAIChat:
 
 class OpenAIEmbedder:
     provider = "openai"
-    min_similarity = 0.25   # an uncalibrated starting value; evals/ calibrates it on the sample policies
+    min_similarity = 0.25   # uncalibrated; docs/evals.md gives the command that calibrates it with a key
 
     def __init__(self, client: OpenAI, model: str, dimensions: int) -> None:
         self.model, self.dimensions = model, dimensions
@@ -389,8 +386,9 @@ class FakeEmbedder:
 
     provider = "fake"
     model = "fake-hash"
-    # Measured on the sample chunks: answerable questions score 0.205-0.252, absent topics 0.080-0.189.
-    min_similarity = 0.20
+    # Calibrated by `python -m docvault.evals --calibrate` on evals/cases.yaml (docs/evals.md has the margins).
+    # tests/test_evals.py fails when the best value on the case set moves.
+    min_similarity = 0.184
 
     def __init__(self, dimensions: int = 1536) -> None:
         self.dimensions = dimensions
@@ -493,14 +491,16 @@ def _fake_insights(prompt: Prompt) -> InsightsDraft:
 
 
 _REFERENCE_WORD = re.compile(r"\b(?:it|its|that|this|these|those|they|them|one|same|other)\b", re.IGNORECASE)
+_CONTINUATION = re.compile(r"^\W*(?:and|also|but|or|what about|how about)\b", re.IGNORECASE)
 
 
 def _fake_condense(prompt: Prompt) -> CondensedQuery:
-    """A question with a reference word ("does it", "that limit") is appended to the previous turn's standalone
-    query, so it carries the earlier topic's words; any other question already stands alone."""
+    """A follow-up is appended to the previous turn's standalone query, so it carries the earlier topic's words.
+    A question is a follow-up when it has a reference word ("does it", "that limit") or opens by continuing the
+    last one ("And the premium?", "What about flood?"); any other question already stands alone."""
     history: tuple[Turn, ...] = prompt.inputs["history"]
     question: str = prompt.inputs["question"]
-    if _REFERENCE_WORD.search(question):
+    if _REFERENCE_WORD.search(question) or _CONTINUATION.search(question):
         return CondensedQuery(standalone=f"{history[-1].standalone_query} {question}")
     return CondensedQuery(standalone=question)
 

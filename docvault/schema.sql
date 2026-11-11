@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS documents (
   error_retryable boolean,
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now(),
+  requeued_at   timestamptz,                          -- last re-enqueue by reconcile, its only reader and writer
   CONSTRAINT documents_kind_values CHECK (kind IN ('pdf', 'docx', 'txt')),
   CONSTRAINT documents_status_values CHECK (status IN ('queued', 'parsing', 'embedding', 'ready', 'failed')),
   CONSTRAINT documents_page_basis_values CHECK (page_basis IN ('physical', 'synthetic')),
@@ -128,6 +129,7 @@ CREATE TABLE IF NOT EXISTS chats (
   title      text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS chats_listing ON chats (created_at DESC, id DESC);
 
 -- The document scope is fixed when the chat starts. No FK to documents: a deleted
 -- document stays in the scope, so its chats refuse new questions instead of quietly
@@ -156,6 +158,7 @@ CREATE TABLE IF NOT EXISTS chat_turns (
   CONSTRAINT answered_iff_cited CHECK ((outcome = 'answered') = (jsonb_array_length(citations) > 0))
 );
 CREATE INDEX IF NOT EXISTS chat_turns_history ON chat_turns (chat_id, started_at, id);
+CREATE INDEX IF NOT EXISTS chat_turns_window  ON chat_turns (started_at);
 
 -- Every provider call, successful or not, one row. The only place tokens and
 -- cost exist. No FKs: cost history outlives document and chat deletes.
@@ -203,3 +206,5 @@ ALTER TABLE chat_documents DROP CONSTRAINT IF EXISTS chat_documents_document_id_
 ALTER TABLE chat_documents ADD COLUMN IF NOT EXISTS filename text;
 UPDATE chat_documents cd SET filename = d.filename FROM documents d WHERE cd.filename IS NULL AND d.id = cd.document_id;
 ALTER TABLE chat_documents ALTER COLUMN filename SET NOT NULL;
+
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS requeued_at timestamptz;

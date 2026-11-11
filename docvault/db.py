@@ -6,12 +6,16 @@ This file only holds what every module needs.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from uuid import UUID
 
 import psycopg
 from pgvector.psycopg import register_vector
@@ -72,6 +76,20 @@ def open_pool(url: str, *, min_size: int = 1, max_size: int = 10) -> Db:
     """
     return ConnectionPool(url, min_size=min_size, max_size=max_size, open=True, configure=register_vector,
                           kwargs={"autocommit": True, "row_factory": dict_row})
+
+
+def encode_cursor(created_at: datetime, row_id: UUID) -> str:
+    """The keyset position after (created_at, id) in a newest-first listing. Opaque to clients."""
+    return base64.urlsafe_b64encode(f"{created_at.isoformat()}|{row_id}".encode()).decode()
+
+
+def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
+    """Raises VaultError(INVALID_CURSOR) for anything encode_cursor did not produce."""
+    try:
+        created_at, row_id = base64.urlsafe_b64decode(cursor.encode()).decode().split("|")
+        return datetime.fromisoformat(created_at), UUID(row_id)
+    except (ValueError, binascii.Error) as exc:
+        raise VaultError(ErrorCode.INVALID_CURSOR, "The cursor is not one this API returned.") from exc
 
 
 @dataclass(frozen=True, slots=True)

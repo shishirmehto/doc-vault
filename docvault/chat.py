@@ -28,11 +28,12 @@ from psycopg.types.json import Jsonb
 from . import pages, prompts
 from .ai import TurnOwner, Vector
 from .context import Ctx
-from .db import Db
+from .db import Db, decode_cursor, encode_cursor
 from .domain import (
     Answer,
     Answered,
     Chat,
+    ChatDocument,
     ChatId,
     ChunkId,
     Citation,
@@ -79,29 +80,49 @@ def start(db: Db, document_ids: Sequence[DocumentId], *, title: str | None = Non
     """Open a chat over a fixed, non-empty document set. Duplicate ids collapse.
 
     Unknown ids -> DOCUMENT_NOT_FOUND (404) listing them.
-    Any id not READY -> DOCUMENTS_NOT_READY (409) listing id and status.
+    Any id not READY -> DOCUMENTS_NOT_READY (409) listing id, filename and status.
     The set is stored in chat_documents and never changes; a document uploaded
     later needs a new chat. This keeps every turn's scope reproducible.
     """
     wanted = list(dict.fromkeys(document_ids))
     with db.connection() as conn, conn.transaction():
         # SHARE holds off a delete or a status change between this check and the chat_documents insert.
-        status = {row["id"]: row["status"] for row in conn.execute(
-            "SELECT id, status FROM documents WHERE id = ANY(%s) FOR SHARE", (wanted,))}
-        if missing := [doc_id for doc_id in wanted if doc_id not in status]:
+        found = {row["id"]: row for row in conn.execute(
+            "SELECT id, filename, status FROM documents WHERE id = ANY(%s) FOR SHARE", (wanted,))}
+        if missing := [doc_id for doc_id in wanted if doc_id not in found]:
             raise VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"{len(missing)} of {len(wanted)} documents do not exist.",
                              details={"missing": [str(doc_id) for doc_id in missing]})
-        if not_ready := [{"id": str(doc_id), "status": status[doc_id]} for doc_id in wanted
-                         if status[doc_id] != DocStatus.READY]:
+        if not_ready := [{"id": str(doc_id), "filename": found[doc_id]["filename"], "status": found[doc_id]["status"]}
+                         for doc_id in wanted if found[doc_id]["status"] != DocStatus.READY]:
             raise VaultError(ErrorCode.DOCUMENTS_NOT_READY,
                              f"{len(not_ready)} of {len(wanted)} documents are not ready.",
                              details={"not_ready": not_ready})
-        chat = conn.execute("INSERT INTO chats (title) VALUES (%s) RETURNING id, title, created_at",
-                            (title,)).fetchone()
+        chat_id = conn.execute("INSERT INTO chats (title) VALUES (%s) RETURNING id", (title,)).fetchone()["id"]
         conn.execute("INSERT INTO chat_documents (chat_id, document_id, filename)"
-                     " SELECT %s, id, filename FROM documents WHERE id = ANY(%s)", (chat["id"], wanted))
-        documents = _scope(conn, chat["id"])
-    return Chat(ChatId(chat["id"]), chat["title"], documents, chat["created_at"])
+                     " SELECT %s, id, filename FROM documents WHERE id = ANY(%s)", (chat_id, wanted))
+        return _row_to_chat(conn.execute(_CHAT_SQL + "WHERE c.id = %s GROUP BY c.id", (chat_id,)).fetchone())
+
+
+def get(db: Db, chat_id: ChatId) -> Chat:
+    """A chat and its document scope, deleted documents marked. Raises CHAT_NOT_FOUND."""
+    with db.connection() as conn:
+        row = conn.execute(_CHAT_SQL + "WHERE c.id = %s GROUP BY c.id", (chat_id,)).fetchone()
+    if row is None:
+        raise _chat_not_found(chat_id)
+    return _row_to_chat(row)
+
+
+def list_chats(db: Db, *, limit: int, cursor: str | None) -> tuple[list[Chat], str | None]:
+    """Newest first. Keyset pagination on (created_at DESC, id DESC), the same cursor as list_documents."""
+    after = decode_cursor(cursor) if cursor else None
+    with db.connection() as conn:
+        rows = conn.execute(
+            _CHAT_SQL + "WHERE (%(created_at)s::timestamptz IS NULL"
+            " OR (c.created_at, c.id) < (%(created_at)s::timestamptz, %(id)s::uuid))"
+            " GROUP BY c.id ORDER BY c.created_at DESC, c.id DESC LIMIT %(limit)s",
+            {"created_at": after and after[0], "id": after and after[1], "limit": limit + 1}).fetchall()
+    last = rows[limit - 1] if len(rows) > limit else None
+    return [_row_to_chat(row) for row in rows[:limit]], last and encode_cursor(last["created_at"], last["id"])
 
 
 def ask(ctx: Ctx, chat_id: ChatId, question: str) -> Turn:
@@ -164,9 +185,29 @@ FROM chat_turns t LEFT JOIN llm_calls l ON l.turn_id = t.id
 """
 
 
+# A chat with its scope in the fixed order _scope uses. A document deleted since the chat started has no
+# documents row; its filename comes from the snapshot.
+_CHAT_SQL = """
+SELECT c.id, c.title, c.created_at,
+       jsonb_agg(jsonb_build_object('id', cd.document_id, 'filename', cd.filename, 'deleted', d.id IS NULL)
+                 ORDER BY cd.filename, cd.document_id) AS documents
+FROM chats c JOIN chat_documents cd ON cd.chat_id = c.id LEFT JOIN documents d ON d.id = cd.document_id
+"""
+
+
+def _row_to_chat(row: Mapping[str, Any]) -> Chat:
+    first, *rest = (ChatDocument(DocumentId(UUID(doc["id"])), doc["filename"], doc["deleted"])
+                    for doc in row["documents"])
+    return Chat(ChatId(row["id"]), row["title"], (first, *rest), row["created_at"])
+
+
+def _chat_not_found(chat_id: ChatId) -> VaultError:
+    return VaultError(ErrorCode.CHAT_NOT_FOUND, f"No chat has the id {chat_id}.")
+
+
 def _require_chat(conn: Connection, chat_id: ChatId) -> None:
     if conn.execute("SELECT 1 FROM chats WHERE id = %s", (chat_id,)).fetchone() is None:
-        raise VaultError(ErrorCode.CHAT_NOT_FOUND, f"No chat has the id {chat_id}.")
+        raise _chat_not_found(chat_id)
 
 
 def _scope(conn: Connection, chat_id: ChatId) -> tuple[DocRef, *tuple[DocRef, ...]]:
@@ -179,7 +220,7 @@ def _scope(conn: Connection, chat_id: ChatId) -> tuple[DocRef, *tuple[DocRef, ..
         "SELECT cd.document_id, cd.filename, d.page_basis FROM chat_documents cd"
         " LEFT JOIN documents d ON d.id = cd.document_id WHERE cd.chat_id = %s ORDER BY cd.filename, cd.document_id",
         (chat_id,)).fetchall()
-    if deleted := [{"id": str(row["document_id"]), "filename": row["filename"]} for row in rows
+    if deleted := [{"id": str(row["document_id"]), "filename": row["filename"], "status": "deleted"} for row in rows
                    if row["page_basis"] is None]:
         raise VaultError(ErrorCode.DOCUMENTS_DELETED,
                          f"{len(deleted)} of {len(rows)} documents in this chat were deleted. "

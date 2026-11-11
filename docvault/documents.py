@@ -17,13 +17,11 @@ Idempotency model:
 
 from __future__ import annotations
 
-import base64
-import binascii
+import logging
 from collections.abc import Mapping
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import PurePath
 from typing import BinaryIO
-from uuid import UUID
 
 from pgvector import Vector
 from psycopg import Connection
@@ -32,7 +30,7 @@ from psycopg.types.json import Jsonb
 from . import insights, pages
 from .ai import DocOwner
 from .context import Ctx
-from .db import Db, Lease, pipeline_steps
+from .db import Db, Lease, PipelineSteps, decode_cursor, encode_cursor, pipeline_steps
 from .domain import (
     Created,
     DocKind,
@@ -47,6 +45,7 @@ from .domain import (
     InsightsFailed,
     InsightsPending,
     InsightsState,
+    InsightsStatus,
     InsightsUnavailable,
     Lifecycle,
     Page,
@@ -62,6 +61,8 @@ from .domain import (
     VaultError,
 )
 
+log = logging.getLogger(__name__)
+
 # Allowed moves. Re-asserting the current state is also allowed (see transition),
 # so a redelivered task can pick up in the state it crashed in.
 TRANSITIONS: Mapping[DocStatus, frozenset[DocStatus]] = {
@@ -74,7 +75,9 @@ TRANSITIONS: Mapping[DocStatus, frozenset[DocStatus]] = {
 }
 
 STALE_AFTER = timedelta(minutes=2)
+INDEX_BATCH = 50
 ANALYZE_BATCH = 50
+MAX_RETRIES = 5   # Celery retries after the first attempt (tasks.py); backoff 2, 4, 8, 16, 32 s
 
 # A chunk still to embed: never embedded, or embedded by a model that is no longer the current one.
 _PENDING = "embedding_model IS DISTINCT FROM %s"
@@ -154,36 +157,54 @@ def delete(ctx: Ctx, doc_id: DocumentId) -> None:
 def run_index(ctx: Ctx, doc_id: DocumentId, *, attempt: int = 1) -> None:
     """Drive one document from QUEUED to READY. Safe to call any number of times.
 
-    Raises VaultError(retryable=True) for transient faults; the Celery shim
-    retries with backoff and calls fail() after the last attempt. Raises
-    VaultError(retryable=False) for bad files; the shim calls fail() at once.
+    Raises VaultError(retryable=True) only while attempts remain (attempt runs
+    from 1 to MAX_RETRIES + 1); the Celery shim retries it and no status changes.
+    Every failure that ends the run writes FAILED before the lease is released:
+    a non-retryable VaultError, a retryable one on the last attempt, and any
+    other Exception (INTERNAL). Writing it after the release would let a
+    re-queued worker take the lease and start parsing a document the user
+    already sees as Failed.
     Returns quietly for duplicate deliveries, failed documents and deleted documents.
     """
     with pipeline_steps(ctx.db, doc_id, Lease.INDEX, attempt) as steps:
         if steps is None:
             return
-        conn = steps.conn
-        doc = conn.execute(
-            "SELECT sha256, filename, kind, status, page_count IS NOT NULL AS parsed,"
-            f" EXISTS (SELECT 1 FROM chunks c WHERE c.document_id = d.id AND c.{_PENDING}) AS has_pending_chunks"
-            " FROM documents d WHERE id = %s", (ctx.ai.embed_model, doc_id)).fetchone()
-        if doc is None or doc["status"] == DocStatus.FAILED:
+        try:
+            _index(ctx, steps)
             return
-        if doc["status"] == DocStatus.READY and not doc["has_pending_chunks"]:
-            return
+        except VaultError as exc:
+            if exc.failure.retryable and attempt <= MAX_RETRIES:
+                raise
+            failure = exc.failure
+        except Exception:
+            log.exception("Indexing document %s failed", doc_id)
+            failure = Failure(ErrorCode.INTERNAL, "Processing failed unexpectedly. Retry the document.", retryable=True)
+        _move(steps.conn, doc_id, DocStatus.FAILED, sources_of(DocStatus.FAILED), failure)
 
-        if not doc["parsed"]:
-            if not transition(conn, doc_id, DocStatus.PARSING):
-                return
-            with steps.record(Step.PARSE):
-                _parse(ctx, conn, doc_id, DocKind(doc["kind"]), Sha256(doc["sha256"]))
-            ctx.jobs.analyze(doc_id)
-        elif not transition(conn, doc_id, DocStatus.EMBEDDING):
-            return
 
-        with steps.record(Step.EMBED):
-            _embed_pending_chunks(ctx, conn, doc_id, doc["filename"])
-            transition(conn, doc_id, DocStatus.READY)
+def _index(ctx: Ctx, steps: PipelineSteps) -> None:
+    conn, doc_id = steps.conn, steps.doc_id
+    doc = conn.execute(
+        "SELECT sha256, filename, kind, status, page_count IS NOT NULL AS parsed,"
+        f" EXISTS (SELECT 1 FROM chunks c WHERE c.document_id = d.id AND c.{_PENDING}) AS has_pending_chunks"
+        " FROM documents d WHERE id = %s", (ctx.ai.embed_model, doc_id)).fetchone()
+    if doc is None or doc["status"] == DocStatus.FAILED:
+        return
+    if doc["status"] == DocStatus.READY and not doc["has_pending_chunks"]:
+        return
+
+    if not doc["parsed"]:
+        if not transition(conn, doc_id, DocStatus.PARSING):
+            return
+        with steps.record(Step.PARSE):
+            _parse(ctx, conn, doc_id, DocKind(doc["kind"]), Sha256(doc["sha256"]))
+        ctx.jobs.analyze(doc_id)
+    elif not transition(conn, doc_id, DocStatus.EMBEDDING):
+        return
+
+    with steps.record(Step.EMBED):
+        _embed_pending_chunks(ctx, conn, doc_id, doc["filename"])
+        transition(conn, doc_id, DocStatus.READY)
 
 
 def _parse(ctx: Ctx, conn: Connection, doc_id: DocumentId, kind: DocKind, sha: Sha256) -> None:
@@ -213,12 +234,6 @@ def _embed_pending_chunks(ctx: Ctx, conn: Connection, doc_id: DocumentId, filena
                             [(Vector(vector), model, row["id"]) for row, vector in zip(batch, vectors, strict=True)])
 
 
-def fail(ctx: Ctx, doc_id: DocumentId, failure: Failure) -> None:
-    """Terminal. A READY or already FAILED document is left alone."""
-    with ctx.db.connection() as conn:
-        _move(conn, doc_id, DocStatus.FAILED, sources_of(DocStatus.FAILED), failure)
-
-
 def transition(conn: Connection, doc_id: DocumentId, to: DocStatus, *, reassert: bool = True) -> bool:
     """Compare-and-swap to a non-failed state. The table decides what is legal, not the caller.
 
@@ -243,8 +258,14 @@ def reconcile(ctx: Ctx) -> int:
     """Celery beat every 60 s. Returns how many jobs it enqueued.
 
     Converges the system after lost messages, crashes and config changes:
-      1. QUEUED, PARSING or EMBEDDING and untouched for STALE_AFTER -> jobs.index.
-         A document still being worked on costs one failed lock attempt.
+      1. QUEUED, PARSING or EMBEDDING, untouched for STALE_AFTER and not
+         re-enqueued within STALE_AFTER -> jobs.index, at most INDEX_BATCH per
+         tick, never re-enqueued first, then longest ago. A document still being
+         worked on, or still waiting in a long queue, gets one duplicate message
+         that returns at once on the lease. The batch caps those duplicates at
+         INDEX_BATCH a tick however long the backlog, and the order reaches every
+         stale document within backlog / INDEX_BATCH ticks. A crash between the
+         stamp and the enqueue delays that batch by STALE_AFTER.
       2. READY documents with chunks from another embedding model (a reviewer
          adds a provider key after a fake run) -> EMBEDDING, jobs.index.
       3. Parsed documents untouched for STALE_AFTER, with no insights row and
@@ -257,8 +278,11 @@ def reconcile(ctx: Ctx) -> int:
     in_flight = [DocStatus.QUEUED, DocStatus.PARSING, DocStatus.EMBEDDING]
     with ctx.db.connection() as conn:
         stale = [row["id"] for row in conn.execute(
-            "SELECT id FROM documents WHERE status = ANY(%s) AND updated_at < now() - %s",
-            (in_flight, STALE_AFTER))]
+            "UPDATE documents SET requeued_at = now() WHERE id IN ("
+            " SELECT id FROM documents WHERE status = ANY(%(in_flight)s) AND updated_at < now() - %(stale)s"
+            "   AND (requeued_at IS NULL OR requeued_at < now() - %(stale)s)"
+            " ORDER BY requeued_at NULLS FIRST, updated_at LIMIT %(batch)s FOR UPDATE SKIP LOCKED)"
+            " RETURNING id", {"in_flight": in_flight, "stale": STALE_AFTER, "batch": INDEX_BATCH})]
         outdated = [row["id"] for row in conn.execute(
             "SELECT id FROM documents d WHERE status = %s AND EXISTS"
             f" (SELECT 1 FROM chunks c WHERE c.document_id = d.id AND c.{_PENDING})",
@@ -280,10 +304,17 @@ def reconcile(ctx: Ctx) -> int:
 
 # ------------------------------------------------------------------ reads
 
-_DOCUMENT_SQL = """
+# The insights status of documents d LEFT JOIN document_insights i. An absent row reads as pending, or as
+# unavailable when the document failed before its pages existed: parsed is the one test, as in run_analyze and
+# reconcile. metrics.py counts with the same expression.
+INSIGHTS_STATUS_SQL = """CASE WHEN i.status IS NOT NULL THEN i.status
+            WHEN d.page_count IS NULL AND d.status = 'failed' THEN 'unavailable'
+            ELSE 'pending' END"""
+
+_DOCUMENT_SQL = f"""
 SELECT d.id, d.filename, d.kind, d.size_bytes, d.status, d.page_basis, d.page_count, d.chunk_count, d.empty_pages,
        d.error_code, d.error_message, d.error_retryable, d.created_at,
-       to_jsonb(i) AS insights,
+       to_jsonb(i) AS insights, {INSIGHTS_STATUS_SQL} AS insights_status,
        CASE WHEN d.status = 'embedding' THEN
          (SELECT count(*) FROM chunks c WHERE c.document_id = d.id AND c.embedding IS NOT NULL) END AS embedded_chunks,
        CASE WHEN d.status = 'ready' THEN
@@ -305,7 +336,7 @@ def get(db: Db, doc_id: DocumentId) -> Document:
 def list_documents(db: Db, *, status: DocStatus | None, limit: int,
                    cursor: str | None) -> tuple[list[Document], str | None]:
     """Keyset pagination on (created_at DESC, id DESC). The cursor encodes the last pair."""
-    after = _decode_cursor(cursor) if cursor else None
+    after = decode_cursor(cursor) if cursor else None
     with db.connection() as conn:
         rows = conn.execute(
             _DOCUMENT_SQL + "WHERE (%(status)s::text IS NULL OR d.status = %(status)s)"
@@ -314,7 +345,7 @@ def list_documents(db: Db, *, status: DocStatus | None, limit: int,
             {"status": status, "created_at": after and after[0], "id": after and after[1],
              "limit": limit + 1}).fetchall()
     last = rows[limit - 1] if len(rows) > limit else None
-    return [_row_to_document(row) for row in rows[:limit]], last and _encode_cursor(last["created_at"], last["id"])
+    return [_row_to_document(row) for row in rows[:limit]], last and encode_cursor(last["created_at"], last["id"])
 
 
 def page(db: Db, doc_id: DocumentId, number: int) -> tuple[PageBasis, Page]:
@@ -335,18 +366,6 @@ def _not_found(doc_id: DocumentId) -> VaultError:
     return VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"No document has the id {doc_id}.")
 
 
-def _encode_cursor(created_at: datetime, doc_id: UUID) -> str:
-    return base64.urlsafe_b64encode(f"{created_at.isoformat()}|{doc_id}".encode()).decode()
-
-
-def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
-    try:
-        created_at, doc_id = base64.urlsafe_b64decode(cursor.encode()).decode().split("|")
-        return datetime.fromisoformat(created_at), UUID(doc_id)
-    except (ValueError, binascii.Error) as exc:
-        raise VaultError(ErrorCode.INVALID_CURSOR, "The cursor is not one this API returned.") from exc
-
-
 def _row_to_document(row: Mapping[str, object]) -> Document:
     """The database-to-domain boundary for documents.
 
@@ -358,7 +377,7 @@ def _row_to_document(row: Mapping[str, object]) -> Document:
     lifecycle: Lifecycle
     match DocStatus(row["status"]):
         case DocStatus.QUEUED:
-            lifecycle = Queued()
+            lifecycle = Queued(parsed)
         case DocStatus.PARSING:
             lifecycle = Parsing()
         case DocStatus.EMBEDDING:
@@ -370,13 +389,15 @@ def _row_to_document(row: Mapping[str, object]) -> Document:
             lifecycle = Failed(failure, parsed)
     return Document(
         id=DocumentId(row["id"]), filename=row["filename"], kind=DocKind(row["kind"]), size_bytes=row["size_bytes"],
-        lifecycle=lifecycle, insights=_insights_state(row, lifecycle), created_at=row["created_at"],
+        lifecycle=lifecycle, insights=_insights_state(row), created_at=row["created_at"],
         processing_ms=row["processing_ms"])
 
 
-def _insights_state(row: Mapping[str, object], lifecycle: Lifecycle) -> InsightsState:
-    """An absent document_insights row reads as pending, or as unavailable when the document failed before
-    its pages existed. Parsed is the one test: run_analyze and reconcile use it too."""
-    if row["insights"] is None:
-        return InsightsUnavailable() if row["page_count"] is None and isinstance(lifecycle, Failed) else InsightsPending()
-    return insights.from_row(row["insights"], row["page_count"], PageBasis(row["page_basis"]))
+def _insights_state(row: Mapping[str, object]) -> InsightsState:
+    match InsightsStatus(row["insights_status"]):
+        case InsightsStatus.PENDING:
+            return InsightsPending()
+        case InsightsStatus.UNAVAILABLE:
+            return InsightsUnavailable()
+        case InsightsStatus.READY | InsightsStatus.FAILED:
+            return insights.from_row(row["insights"], row["page_count"], PageBasis(row["page_basis"]))
