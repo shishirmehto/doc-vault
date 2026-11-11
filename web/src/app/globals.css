@@ -432,10 +432,12 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   overflow-wrap: anywhere;
 }
 .compare-table tbody tr:last-child > * { border-bottom: 0; }
-.compare-table thead th { min-width: 14ch; font-size: var(--t-meta); font-weight: 600; color: var(--ink); }
+.compare-table thead th { font-size: var(--t-meta); font-weight: 600; color: var(--ink); }
 .compare-table thead th:first-child { color: var(--graphite); }
-.compare-table th:first-child { width: 16ch; min-width: 12ch; }
-.compare-table tbody th { font-weight: 400; color: var(--graphite); }
+.compare-table th:first-child { width: 16ch; }
+/* The floors sit on the body cells: a ch of the smaller header type would leave about 10ch of text at 375 px. */
+.compare-table tbody th { min-width: calc(12ch + 2 * var(--s3)); font-weight: 400; color: var(--graphite); }
+.compare-table td { min-width: calc(14ch + 2 * var(--s3)); }
 /* The revision bar: the change bar an amended wording prints in the margin beside a changed line. */
 .compare-table tbody th[data-differs] { box-shadow: inset 3px 0 0 var(--ink); color: var(--ink); }
 .differs {
