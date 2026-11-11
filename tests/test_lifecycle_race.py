@@ -17,7 +17,6 @@ from .conftest import QUOTE, SAMPLES
 from .test_documents import FailingEmbedder, scanned_pdf, upload, with_embedder
 
 
-@pytest.mark.xfail(strict=True, reason="F1")
 @pytest.mark.parametrize(("source", "embed_error", "code"), [
     pytest.param("scan", None, ErrorCode.NO_EXTRACTABLE_TEXT, id="parse-no-text-layer"),
     pytest.param("quote", ProviderError("rate_limited", retryable=True), ErrorCode.AI_UNAVAILABLE,

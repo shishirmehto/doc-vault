@@ -131,10 +131,7 @@ def test_delivery_while_another_worker_holds_the_document_does_nothing(ctx):
 
 def test_scanned_pdf_fails_with_a_reason_and_can_be_retried(ctx, tmp_path):
     doc_id = upload(ctx, scanned_pdf(tmp_path)).document.id
-    with pytest.raises(VaultError) as raised:
-        documents.run_index(ctx, doc_id)
-    assert raised.value.failure.code is ErrorCode.NO_EXTRACTABLE_TEXT
-    documents.fail(ctx, doc_id, raised.value.failure)
+    documents.run_index(ctx, doc_id)
 
     failed = documents.get(ctx.db, doc_id)
     assert isinstance(failed.lifecycle, Failed)
@@ -152,12 +149,10 @@ def test_scanned_pdf_fails_with_a_reason_and_can_be_retried(ctx, tmp_path):
 def test_retry_after_a_provider_failure_resumes_at_embedding_without_parsing_again(ctx):
     doc_id = upload(ctx, POLICY).document.id
     down = with_embedder(ctx, FailingEmbedder(1, ProviderError("timeout", retryable=True)))
-    with pytest.raises(VaultError) as raised:
-        documents.run_index(down, doc_id)
-    assert (raised.value.failure.code, raised.value.failure.retryable) == (ErrorCode.AI_UNAVAILABLE, True)
-    documents.fail(ctx, doc_id, raised.value.failure)
+    documents.run_index(down, doc_id, attempt=documents.MAX_RETRIES + 1)
     failed = documents.get(ctx.db, doc_id).lifecycle
     assert isinstance(failed, Failed) and failed.parsed.chunk_count == 6
+    assert (failed.failure.code, failed.failure.retryable) == (ErrorCode.AI_UNAVAILABLE, True)
 
     assert documents.retry(ctx, doc_id).lifecycle == Queued()
     documents.run_index(ctx, doc_id)
