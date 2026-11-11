@@ -110,7 +110,8 @@ function MarkedText({ page, mark }: { page: Page; mark: { quote: string; label: 
     const observer = new ResizeObserver(place);
     observer.observe(box);
     return () => observer.disconnect();
-  }, [page.text, match?.kind]);
+    // A new quote on the same page moves the mark, so it re-runs the placement and the scroll.
+  }, [page.text, mark?.quote]);
 
   return (
     <div className="sheet" ref={sheet}>
@@ -124,7 +125,7 @@ function MarkedText({ page, mark }: { page: Page; mark: { quote: string; label: 
         {match?.kind === "exact" ? (
           <>
             {page.text.slice(0, match.start)}
-            <mark ref={marked} tabIndex={-1} aria-label={`Passage for ${mark?.label}`}>
+            <mark key={mark?.quote} ref={marked} tabIndex={-1} aria-label={`Passage for ${mark?.label}`}>
               {page.text.slice(match.start, match.end)}
             </mark>
             {page.text.slice(match.end)}
