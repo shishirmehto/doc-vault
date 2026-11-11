@@ -1,12 +1,13 @@
-"""Retrieval, answer, insights and comparison evals over the sample documents.
+"""Retrieval, answer, insights, comparison and summary evals over the sample documents.
 
   uv run python -m docvault.evals [--calibrate] [--out docs/evals.md]
 
 Runs the fixed case set in evals/cases.yaml against the configured provider (the fake when no key is set)
 in its own database, <DATABASE_URL name>_evals, dropped and recreated each run. It uploads the samples through
 documents.upload, runs run_index and run_analyze in-process (no Celery, no Redis), asks every case
-through chat.start and chat.ask, then compares the policy with its renewal quote through compare.create. Each
-number is scored apart, so it shows where a miss happens:
+through chat.start and chat.ask, then compares the policy with its renewal quote through compare.create and
+summarises each sample at each length through summaries.create. Each number is scored apart, so it shows where a
+miss happens:
 
   retrieval hit rate   the expected document and page are among the sources given to the answer step
   citation accuracy    a citation of the expected document has the expected page and quotes the fact
@@ -18,6 +19,8 @@ number is scored apart, so it shows where a miss happens:
   difference recall    the changes planted between the policy and the quote (samples/facts.yaml) come back as a
                        differing row whose two cells sit on the fact's page, quote it, and hold a value from it
   equal fields         the fields planted unchanged come back the same way as a row that does not differ
+  summary grounding    summary sources kept / (kept + dropped) per length, over every sample summarised with no
+                       focus in the plain tone
   cost and latency     metrics.processing_stats over the run: llm_calls by purpose and model, chat_turns p95
 
 --calibrate prints each turn's best vector similarity and all-terms match instead, then the relevance-gate
@@ -49,11 +52,22 @@ from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import BaseModel
 
-from . import ai, chat, compare, db, documents, insights, metrics
+from . import ai, chat, compare, db, documents, insights, metrics, summaries
 from .ai import ChatBackend, EmbedBackend, RawCompletion, Tokens, Vector
 from .config import Settings, load_settings
 from .context import BlobStore, Ctx
-from .domain import Cell, Citation, DocumentId, InsightsReady, Row, Source, TurnOutcome
+from .domain import (
+    Cell,
+    Citation,
+    DocumentId,
+    InsightsReady,
+    Row,
+    Source,
+    SummaryLength,
+    SummaryOptions,
+    SummaryTone,
+    TurnOutcome,
+)
 from .pages import collapse_whitespace, locate_quote
 from .prompts import Prompt
 
@@ -264,6 +278,7 @@ class Report:
     recall: Ratio               # planted facts found in a kept key fact's quote, same document and page
     cell_grounding: Ratio       # comparison cells kept / (kept + dropped)
     fields: tuple[FieldResult, ...]
+    summary_grounding: Mapping[SummaryLength, Ratio]    # summary sources kept / (kept + dropped), samples summed
     spend: tuple[metrics.AIUsage, ...]
     turn_p95_ms: int | None
 
@@ -430,6 +445,12 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
         compared = compare.create(ctx, [ids[name] for name in case_set.comparison.documents], None)
         kept = sum(cell is not None for row in compared.rows for cell in row.cells)
         fields = tuple(match_field(expected, compared.rows) for expected in case_set.comparison.fields)
+        summary_grounding = {}
+        for length in SummaryLength:
+            made = [summaries.create(ctx, doc_id, SummaryOptions.of(length, None, SummaryTone.PLAIN))
+                    for doc_id in ids.values()]
+            sources = sum(len(summary.sources) for summary in made)
+            summary_grounding[length] = Ratio(sources, sources + sum(summary.dropped_sources for summary in made))
 
         grounding, recall = _insights(pool, ids, case_set.planted)
         stats = metrics.processing_stats(pool, timedelta(days=1))   # the database holds this run only
@@ -437,8 +458,8 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
         setup = (f"chat {ctx.ai.chat.provider} ({chat_models}); embeddings {ctx.ai.embedder.provider} "
                  f"{ctx.ai.embed_model}")
         return Report(setup, ctx.ai.min_similarity, tuple(turns), tuple(suggested), grounding, recall,
-                      Ratio(kept, kept + compared.dropped_cells), fields, tuple(stats.ai.by_purpose_and_model),
-                      stats.chat.latency_ms.p95)
+                      Ratio(kept, kept + compared.dropped_cells), fields, summary_grounding,
+                      tuple(stats.ai.by_purpose_and_model), stats.chat.latency_ms.p95)
 
 
 def _insights(pool: db.Db, ids: Mapping[str, DocumentId], planted: Sequence[Fact]) -> tuple[Ratio, Ratio]:
@@ -482,6 +503,8 @@ def render(report: Report, command: str) -> str:
         f"{report.difference_recall} |",
         f"| Equal fields kept equal (planted unchanged fields found as a row that does not differ) | "
         f"{report.equal_kept} |",
+        "| Summary source grounding (sources kept / kept + dropped, three samples, by length) | "
+        + ", ".join(f"{length} {ratio}" for length, ratio in report.summary_grounding.items()) + " |",
         f"| Gate at {report.threshold}: answerable passed, out-of-scope refused | {_gate_at(turns, report.threshold)} |",
         f"| Best gate threshold on this set | {_fit_line(fit_gate(turns))} |",
         f"| p95 turn latency | {report.turn_p95_ms} ms |",

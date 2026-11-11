@@ -7,7 +7,7 @@ import pytest
 from docvault import evals
 from docvault.ai import FakeEmbedder
 from docvault.config import Settings
-from docvault.domain import Cell, Purpose, Row
+from docvault.domain import Cell, Purpose, Row, SummaryLength
 from docvault.evals import ExpectedField, Fact, FieldResult, Ratio
 
 from .conftest import TEST_DATABASE_URL
@@ -28,9 +28,12 @@ def test_the_case_set_scores_retrieval_citations_and_refusals_apart():
     # The fake aligns fields by label, and the premium is "Total Advance Premium" in one and "Total Annual Premium"
     # in the other.
     assert [(result.expected.field, result.row) for result in report.fields if not result.found] == [("premium", None)]
+    assert report.summary_grounding == {
+        SummaryLength.BRIEF: Ratio(6, 6), SummaryLength.STANDARD: Ratio(12, 12), SummaryLength.DETAILED: Ratio(18, 18)}
     assert [(spend.purpose, spend.model, spend.calls) for spend in report.spend] == [
         (Purpose.ANSWER, "fake-chat", 127), (Purpose.COMPARE, "fake-chat", 1), (Purpose.CONDENSE, "fake-chat", 116),
-        (Purpose.EMBED_CHUNKS, "fake-hash", 3), (Purpose.EMBED_QUERY, "fake-hash", 152), (Purpose.INSIGHTS, "fake-chat", 3)]
+        (Purpose.EMBED_CHUNKS, "fake-hash", 3), (Purpose.EMBED_QUERY, "fake-hash", 152), (Purpose.INSIGHTS, "fake-chat", 3),
+        (Purpose.SUMMARY, "fake-chat", 9)]
     explicit = next(turn for turn in report.turns if turn.case == "deductible-differ-explicit")
     assert [(scored.fact.id, scored.retrieval, scored.cited) for scored in explicit.scored] == [
         ("policy-deductible", None, False), ("quote-deductible", None, True)]
