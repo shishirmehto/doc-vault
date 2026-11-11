@@ -42,6 +42,7 @@ from .domain import (
     Existing,
     Failed,
     Failure,
+    FamilyId,
     InsightsPending,
     InsightsState,
     InsightsStatus,
@@ -58,6 +59,7 @@ from .domain import (
     Step,
     UploadOutcome,
     VaultError,
+    Version,
 )
 
 log = logging.getLogger(__name__)
@@ -90,30 +92,76 @@ def sources_of(target: DocStatus) -> list[DocStatus]:
 # ------------------------------------------------------------------ commands
 
 
-def upload(ctx: Ctx, stream: BinaryIO, filename: str) -> UploadOutcome:
-    """Store bytes, dedupe by content, create the document, enqueue indexing.
+def upload(ctx: Ctx, stream: BinaryIO, filename: str, *, replaces: DocumentId | None = None) -> UploadOutcome:
+    """Store bytes, dedupe by content, create the document as a version, enqueue indexing.
 
-    Two concurrent uploads of the same bytes write the same blob path and race on
-    the unique index; one gets Created, the other Existing. A crash after the blob
-    write leaves an orphan file that the next identical upload reuses.
+    Bytes stored before return Existing, whatever the name or `replaces`. New bytes become the next version of
+    `replaces`'s family, or else of the family of the newest document with the same name (ignoring case, after the
+    name is sanitised), or else version 1 of a new family. An unknown `replaces` raises DOCUMENT_NOT_FOUND before
+    the upload is read.
+
+    Two concurrent uploads of the same bytes write the same blob path and race on the unique index; one gets Created,
+    the other Existing. A crash after the blob write leaves an orphan file that the next identical upload reuses.
     A lost enqueue (crash after commit) is caught by reconcile().
     """
+    family = None
+    if replaces is not None:
+        with ctx.db.connection() as conn:
+            row = conn.execute("SELECT family_id FROM documents WHERE id = %s", (replaces,)).fetchone()
+        if row is None:
+            raise _not_found(replaces)
+        family = FamilyId(row["family_id"])
     sha, size = ctx.blobs.put(stream, max_bytes=ctx.settings.max_upload_bytes)
     try:
         kind = pages.sniff_kind(ctx.blobs.path(sha))
     except VaultError:
         ctx.blobs.delete(sha)   # a stored document always sniffs, so this blob belongs to nobody
         raise
+    name = PurePath(filename.replace("\x00", "")).name[:255] or "upload"
     with ctx.db.connection() as conn:
-        created = conn.execute(
-            "INSERT INTO documents (sha256, filename, kind, size_bytes) VALUES (%s, %s, %s, %s)"
-            " ON CONFLICT (sha256) DO NOTHING RETURNING id",
-            (sha, PurePath(filename.replace("\x00", "")).name[:255] or "upload", kind, size)).fetchone()
-        doc_id = (created or conn.execute("SELECT id FROM documents WHERE sha256 = %s", (sha,)).fetchone())["id"]
+        doc_id, created = _insert_version(conn, sha, name, kind, size, family)
     if not created:
         return Existing(get(ctx.db, doc_id))
     ctx.jobs.index(doc_id)
     return Created(get(ctx.db, doc_id))
+
+
+# The family is `family` when given, else the newest document's with this name; the version is the family's highest
+# number plus one. A new family takes the new row's own id. ON CONFLICT names no index, so it covers both unique keys:
+# the bytes (sha256) and the version number (documents_family_version).
+_INSERT_VERSION_SQL = """
+WITH new AS (SELECT gen_random_uuid() AS id),
+family AS (
+  SELECT %(family)s::uuid AS id WHERE %(family)s::uuid IS NOT NULL
+  UNION ALL
+  (SELECT family_id FROM documents WHERE %(family)s::uuid IS NULL AND lower(filename) = lower(%(filename)s)
+   ORDER BY created_at DESC, id DESC LIMIT 1))
+INSERT INTO documents (id, sha256, filename, kind, size_bytes, family_id, version)
+SELECT new.id, %(sha)s, %(filename)s, %(kind)s, %(size)s, coalesce(family.id, new.id),
+       coalesce((SELECT max(d.version) FROM documents d WHERE d.family_id = family.id), 0) + 1
+FROM new LEFT JOIN family ON true
+ON CONFLICT DO NOTHING RETURNING id
+"""
+
+VERSION_ATTEMPTS = 10
+
+
+def _insert_version(conn: Connection, sha: Sha256, filename: str, kind: DocKind, size: int,
+                    family: FamilyId | None) -> tuple[DocumentId, bool]:
+    """The new document's id and True, or the id of the document with these bytes and False.
+
+    No row back means the bytes exist, or a concurrent upload committed this version number first. Each attempt is
+    its own statement and snapshot, so the next one sees that version and takes the number after it. Every retry
+    follows another upload's commit, so the loop ends.
+    """
+    params = {"sha": sha, "filename": filename, "kind": kind, "size": size, "family": family}
+    for _ in range(VERSION_ATTEMPTS):
+        if created := conn.execute(_INSERT_VERSION_SQL, params).fetchone():
+            return DocumentId(created["id"]), True
+        if same := conn.execute("SELECT id FROM documents WHERE sha256 = %s", (sha,)).fetchone():
+            return DocumentId(same["id"]), False
+    raise VaultError(ErrorCode.INTERNAL, "Too many versions of this document arrived at once. Upload it again.",
+                     retryable=True)
 
 
 def retry(ctx: Ctx, doc_id: DocumentId) -> Document:
@@ -139,11 +187,12 @@ def retry(ctx: Ctx, doc_id: DocumentId) -> Document:
 
 
 def delete(ctx: Ctx, doc_id: DocumentId) -> None:
-    """DELETE the row (pages, chunks and insights cascade), then remove the blob.
+    """DELETE the row (pages, chunks, insights and summaries cascade), then remove the blob.
 
     A pipeline task in flight finds its compare-and-swap matches no row and exits.
     step_runs and llm_calls keep their rows, so history and spend outlive the
-    document. Chat turns keep their citation snapshots.
+    document. Chat turns keep their citation snapshots, and comparisons keep
+    their column snapshots. The family's other versions keep their numbers.
     """
     with ctx.db.connection() as conn:
         deleted = conn.execute("DELETE FROM documents WHERE id = %s RETURNING sha256", (doc_id,)).fetchone()
@@ -314,7 +363,8 @@ INSIGHTS_STATUS_SQL = """CASE WHEN i.status IS NOT NULL THEN i.status
 
 _DOCUMENT_SQL = f"""
 SELECT d.id, d.filename, d.kind, d.size_bytes, d.status, d.page_basis, d.page_count, d.chunk_count, d.empty_pages,
-       d.error_code, d.error_message, d.error_retryable, d.created_at,
+       d.error_code, d.error_message, d.error_retryable, d.created_at, d.family_id, d.version,
+       (SELECT max(f.version) FROM documents f WHERE f.family_id = d.family_id) AS latest_version,
        to_jsonb(i) AS insights, {INSIGHTS_STATUS_SQL} AS insights_status,
        CASE WHEN d.status = 'embedding' THEN
          (SELECT count(*) FROM chunks c WHERE c.document_id = d.id AND c.embedding IS NOT NULL) END AS embedded_chunks,
@@ -334,19 +384,34 @@ def get(db: Db, doc_id: DocumentId) -> Document:
     return _row_to_document(row)
 
 
-def list_documents(db: Db, *, status: DocStatus | None, limit: int,
+def list_documents(db: Db, *, status: DocStatus | None, latest: bool, limit: int,
                    cursor: str | None) -> tuple[list[Document], str | None]:
-    """Keyset pagination on (created_at DESC, id DESC). The cursor encodes the last pair."""
+    """Keyset pagination on (created_at DESC, id DESC). The cursor encodes the last pair.
+
+    With `latest`, only each family's highest version, so a family sits where its newest upload does.
+    """
     after = decode_cursor(cursor) if cursor else None
     with db.connection() as conn:
         rows = conn.execute(
             _DOCUMENT_SQL + "WHERE (%(status)s::text IS NULL OR d.status = %(status)s)"
+            " AND (NOT %(latest)s OR NOT EXISTS"
+            "      (SELECT 1 FROM documents n WHERE n.family_id = d.family_id AND n.version > d.version))"
             " AND (%(created_at)s::timestamptz IS NULL OR (d.created_at, d.id) < (%(created_at)s::timestamptz, %(id)s::uuid))"
             " ORDER BY d.created_at DESC, d.id DESC LIMIT %(limit)s",
-            {"status": status, "created_at": after and after[0], "id": after and after[1],
+            {"status": status, "latest": latest, "created_at": after and after[0], "id": after and after[1],
              "limit": limit + 1}).fetchall()
     last = rows[limit - 1] if len(rows) > limit else None
     return [_row_to_document(row) for row in rows[:limit]], last and encode_cursor(last["created_at"], last["id"])
+
+
+def versions(db: Db, doc_id: DocumentId) -> list[Document]:
+    """Every version in the document's family, oldest first. Raises DOCUMENT_NOT_FOUND."""
+    with db.connection() as conn:
+        rows = conn.execute(_DOCUMENT_SQL + "WHERE d.family_id = (SELECT family_id FROM documents WHERE id = %s)"
+                            " ORDER BY d.version", (doc_id,)).fetchall()
+    if not rows:
+        raise _not_found(doc_id)
+    return [_row_to_document(row) for row in rows]
 
 
 def page(db: Db, doc_id: DocumentId, number: int) -> tuple[PageBasis, Page]:
@@ -391,7 +456,8 @@ def _row_to_document(row: Mapping[str, object]) -> Document:
     return Document(
         id=DocumentId(row["id"]), filename=row["filename"], kind=DocKind(row["kind"]), size_bytes=row["size_bytes"],
         lifecycle=lifecycle, insights=_insights_state(row), created_at=row["created_at"],
-        processing_ms=row["processing_ms"])
+        processing_ms=row["processing_ms"],
+        version=Version(FamilyId(row["family_id"]), row["version"], row["latest_version"]))
 
 
 def _insights_state(row: Mapping[str, object]) -> InsightsState:

@@ -169,10 +169,15 @@ router = APIRouter()
 
 @router.post("/documents", status_code=202, response_model=wire.DocumentOut, dependencies=[rate_limited("upload")],
              responses={200: {"model": wire.DocumentOut, "description": "Same bytes uploaded before; existing document"},
-                        **errors(ErrorCode.FILE_TOO_LARGE, ErrorCode.UNSUPPORTED_TYPE, ErrorCode.EMPTY_FILE,
-                                 ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED)})
-def upload(file: UploadFile, response: Response, ctx: Deps) -> wire.DocumentOut:
-    outcome = documents.upload(ctx, file.file, file.filename or "upload")
+                        **errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.FILE_TOO_LARGE, ErrorCode.UNSUPPORTED_TYPE,
+                                 ErrorCode.EMPTY_FILE, ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED)})
+def upload(file: UploadFile, response: Response, ctx: Deps,
+           replaces: Annotated[UUID | None, Query(description=(
+               "A document id. New bytes become the next version of its family, whatever their name. Without it, "
+               "new bytes whose name matches a stored document's become the next version of that document's family."))] = None,
+           ) -> wire.DocumentOut:
+    outcome = documents.upload(ctx, file.file, file.filename or "upload",
+                               replaces=None if replaces is None else DocumentId(replaces))
     match outcome:
         case Created(doc):
             response.headers["Location"] = f"/documents/{doc.id}"
@@ -185,9 +190,10 @@ def upload(file: UploadFile, response: Response, ctx: Deps) -> wire.DocumentOut:
 @router.get("/documents", response_model=wire.DocumentPage,
             responses=errors(ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
 def list_documents(ctx: Deps, status: DocStatus | None = None,
+                         latest: Annotated[bool, Query(description="Only the latest version of each document")] = False,
                          limit: Annotated[int, Query(ge=1, le=100)] = 20,
                          cursor: str | None = None) -> wire.DocumentPage:
-    docs, next_cursor = documents.list_documents(ctx.db, status=status, limit=limit, cursor=cursor)
+    docs, next_cursor = documents.list_documents(ctx.db, status=status, latest=latest, limit=limit, cursor=cursor)
     return wire.DocumentPage(items=[wire.document_out(doc) for doc in docs], next_cursor=next_cursor)
 
 
@@ -195,6 +201,13 @@ def list_documents(ctx: Deps, status: DocStatus | None = None,
             responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def get_document(doc_id: UUID, ctx: Deps) -> wire.DocumentOut:
     return wire.document_out(documents.get(ctx.db, DocumentId(doc_id)))
+
+
+@router.get("/documents/{doc_id}/versions", response_model=wire.VersionList,
+            responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.INVALID_REQUEST))
+def get_versions(doc_id: UUID, ctx: Deps) -> wire.VersionList:
+    """Every version of this document, oldest first. Deleting one leaves the others and their numbers."""
+    return wire.VersionList(items=[wire.document_out(doc) for doc in documents.versions(ctx.db, DocumentId(doc_id))])
 
 
 @router.get("/documents/{doc_id}/insights", response_model=wire.InsightsOut,

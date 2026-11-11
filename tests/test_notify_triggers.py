@@ -46,8 +46,8 @@ class Channel:
     def new_document(self, chunks: int = 0) -> UUID:
         doc_id = uuid4()
         with self.writer.transaction():
-            self.writer.execute("INSERT INTO documents (id, sha256, filename, kind, size_bytes)"
-                                " VALUES (%s, %s, 'notes.txt', 'txt', 1)", (doc_id, os.urandom(32)))
+            self.writer.execute("INSERT INTO documents (id, sha256, filename, kind, size_bytes, family_id)"
+                                " VALUES (%s, %s, 'notes.txt', 'txt', 1, %s)", (doc_id, os.urandom(32), doc_id))
             for ord in range(chunks):
                 self.writer.execute("INSERT INTO chunks (document_id, ord, text, page_map)"
                                     " VALUES (%s, %s, 'text', '[[0, 1]]')", (doc_id, ord))
@@ -66,8 +66,8 @@ def channel(database_url: str) -> Iterator[Channel]:
 def test_a_document_insert_update_and_delete_each_notify_on_commit_only(channel):
     doc_id = uuid4()
 
-    inserted = channel.counts(doc_id, "INSERT INTO documents (id, sha256, filename, kind, size_bytes)"
-                                      " VALUES (%s, %s, 'notes.txt', 'txt', 1)", (doc_id, os.urandom(32)))
+    inserted = channel.counts(doc_id, "INSERT INTO documents (id, sha256, filename, kind, size_bytes, family_id)"
+                                      " VALUES (%s, %s, 'notes.txt', 'txt', 1, %s)", (doc_id, os.urandom(32), doc_id))
     updated = channel.counts(doc_id, "UPDATE documents SET status = 'parsing' WHERE id = %s", (doc_id,))
     deleted = channel.counts(doc_id, "DELETE FROM documents WHERE id = %s", (doc_id,))
 

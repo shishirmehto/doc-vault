@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS documents (
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now(),
   requeued_at   timestamptz,                          -- last re-enqueue by reconcile, its only reader and writer
+  -- Versions: uploads of one file share family_id, the first version's id, and number 1, 2, 3 in upload order.
+  -- UNIQUE (family_id, version) is the index documents_family_version in the upgrades section.
+  family_id     uuid        NOT NULL,
+  version       int         NOT NULL DEFAULT 1 CHECK (version >= 1),
   CONSTRAINT documents_kind_values CHECK (kind IN ('pdf', 'docx', 'txt')),
   CONSTRAINT documents_status_values CHECK (status IN ('queued', 'parsing', 'embedding', 'ready', 'failed')),
   CONSTRAINT documents_page_basis_values CHECK (page_basis IN ('physical', 'synthetic')),
@@ -302,6 +306,14 @@ UPDATE chat_documents cd SET filename = d.filename FROM documents d WHERE cd.fil
 ALTER TABLE chat_documents ALTER COLUMN filename SET NOT NULL;
 
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS requeued_at timestamptz;
+
+-- Versions. Every document from before them is its own family, version 1.
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS family_id uuid;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS version int NOT NULL DEFAULT 1 CHECK (version >= 1);
+UPDATE documents SET family_id = id WHERE family_id IS NULL;
+ALTER TABLE documents ALTER COLUMN family_id SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS documents_family_version ON documents (family_id, version);
+CREATE INDEX IF NOT EXISTS documents_filename ON documents (lower(filename));   -- an upload's family by its name
 
 ALTER TABLE chat_turns ADD COLUMN IF NOT EXISTS suggestions jsonb NOT NULL DEFAULT '[]';
 

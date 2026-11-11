@@ -24,6 +24,7 @@ ChunkId = NewType("ChunkId", UUID)
 ChatId = NewType("ChatId", UUID)
 TurnId = NewType("TurnId", UUID)
 ComparisonId = NewType("ComparisonId", UUID)
+FamilyId = NewType("FamilyId", UUID)   # the versions of one document; the first version's id
 SummaryId = NewType("SummaryId", UUID)
 Sha256 = NewType("Sha256", bytes)
 
@@ -239,6 +240,16 @@ type InsightsState = InsightsPending | InsightsReady | InsightsFailed | Insights
 
 
 @dataclass(frozen=True, slots=True)
+class Version:
+    """Where a document sits among the uploads of one file. Numbers are never renumbered, so a deleted version leaves
+    a gap. A new version takes the highest number in the family plus one, so a deleted latest number is used again."""
+
+    family_id: FamilyId
+    number: int
+    latest: int                 # the highest number in the family, read at query time
+
+
+@dataclass(frozen=True, slots=True)
 class Document:
     id: DocumentId
     filename: str
@@ -248,6 +259,7 @@ class Document:
     insights: InsightsState     # merged at read time from document_insights; documents.py never writes it
     created_at: datetime
     processing_ms: int | None   # derived from step_runs: last ok embed finish - created_at
+    version: Version
 
 
 @dataclass(frozen=True, slots=True)

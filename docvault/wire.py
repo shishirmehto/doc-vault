@@ -93,12 +93,19 @@ class DocumentOut(BaseModel):
     failed_stage: Literal["parse", "embed"] | None   # only when status == "failed": the step that failed
     processing_ms: int | None
     created_at: datetime
+    family_id: UUID                    # shared by every version of this document: the first version's id
+    version: int                       # 1, 2, 3 in upload order; a deleted version leaves a gap
+    latest_version: int                # the family's highest version now
     links: dict[str, str]
 
 
 class DocumentPage(BaseModel):
     items: list[DocumentOut]
     next_cursor: str | None
+
+
+class VersionList(BaseModel):
+    items: list[DocumentOut]           # the family, oldest first
 
 
 class PageOut(BaseModel):
@@ -442,8 +449,9 @@ def document_out(doc: Document) -> DocumentOut:
         document_type=doc.insights.body.document_type if isinstance(doc.insights, InsightsReady) else None,
         error=error, failed_stage=failed_stage, processing_ms=doc.processing_ms,
         created_at=doc.created_at,
+        family_id=doc.version.family_id, version=doc.version.number, latest_version=doc.version.latest,
         links={"self": f"/documents/{doc.id}", "insights": f"/documents/{doc.id}/insights",
-               "pages": f"/documents/{doc.id}/pages/{{n}}"})
+               "pages": f"/documents/{doc.id}/pages/{{n}}", "versions": f"/documents/{doc.id}/versions"})
 
 
 def page_out(doc_id: UUID, basis: PageBasis, page: Page) -> PageOut:

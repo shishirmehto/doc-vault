@@ -51,16 +51,17 @@ try:
     started = time.perf_counter()
     with pool.connection() as conn:
         conn.execute("""
-          INSERT INTO documents (sha256, filename, kind, size_bytes, status, page_basis, page_count, chunk_count,
-                                 empty_pages, created_at, updated_at)
-          SELECT sha256(i::text::bytea), 'doc-' || i || '.pdf', 'pdf', 50000,
+          INSERT INTO documents (id, family_id, sha256, filename, kind, size_bytes, status, page_basis, page_count,
+                                 chunk_count, empty_pages, created_at, updated_at)
+          SELECT id, id, sha256(i::text::bytea), 'doc-' || i || '.pdf', 'pdf', 50000,
                  CASE WHEN i %% 10 = 0 THEN 'queued' ELSE 'ready' END,
                  CASE WHEN i %% 10 = 0 THEN NULL ELSE 'physical' END,
                  CASE WHEN i %% 10 = 0 THEN NULL ELSE 12 END,
                  CASE WHEN i %% 10 = 0 THEN NULL ELSE %(chunks)s END,
                  CASE WHEN i %% 10 = 0 THEN NULL ELSE '{}'::int[] END,
                  now() - (i %% 168) * interval '1 hour', now() - interval '10 minutes'
-          FROM generate_series(1, %(n)s) i""", {"n": N, "chunks": CHUNKS_PER_DOC})
+          FROM (SELECT gen_random_uuid() AS id, i FROM generate_series(1, %(n)s) i) AS seeded""",
+                     {"n": N, "chunks": CHUNKS_PER_DOC})
         conn.execute("""
           INSERT INTO step_runs (document_id, step, attempt, started_at, finished_at, outcome)
           SELECT d.id, s.step, 1, d.created_at + interval '1 second', d.created_at + interval '3 seconds', 'ok'
@@ -95,7 +96,7 @@ try:
     timed("GET /metrics/processing?window=24h", lambda: metrics.processing_stats(pool, timedelta(hours=24)))
     timed("GET /metrics/processing?window=7d", lambda: metrics.processing_stats(pool, timedelta(days=7)))
     timed("documents.list_documents (first page of 20)",
-          lambda: documents.list_documents(pool, status=None, limit=20, cursor=None))
+          lambda: documents.list_documents(pool, status=None, latest=False, limit=20, cursor=None))
 
     queued = N // 10
     with pool.connection() as conn:

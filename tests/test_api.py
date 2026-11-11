@@ -125,7 +125,7 @@ def test_every_error_response_in_the_openapi_schema_is_the_error_envelope(client
         ("/health", "get", "503"): "HealthOut"}
     assert "HTTPValidationError" not in schema["components"]["schemas"]
     assert sorted(status for path, method, status in declared if (path, method) == ("/documents", "post")) == [
-        "413", "415", "422", "429"]
+        "404", "413", "415", "422", "429"]
     assert schema["paths"]["/documents"]["post"]["responses"]["422"]["description"] == "empty_file, invalid_request"
 
 

@@ -10,7 +10,17 @@ from uuid import uuid4
 
 import pytest
 
-from docvault.domain import DocKind, Document, DocumentId, ErrorCode, InsightsPending, Queued, VaultError
+from docvault.domain import (
+    DocKind,
+    Document,
+    DocumentId,
+    ErrorCode,
+    FamilyId,
+    InsightsPending,
+    Queued,
+    VaultError,
+    Version,
+)
 from docvault.events import Changed, Event, Feed, Hub, Resync
 
 A, B, C, D = (DocumentId(uuid4()) for _ in range(4))
@@ -18,7 +28,8 @@ A, B, C, D = (DocumentId(uuid4()) for _ in range(4))
 
 def document(doc_id: DocumentId) -> Document:
     return Document(id=doc_id, filename="notes.txt", kind=DocKind.TXT, size_bytes=1, lifecycle=Queued(None),
-                    insights=InsightsPending(), created_at=datetime(2026, 11, 11, tzinfo=UTC), processing_ms=None)
+                    insights=InsightsPending(), created_at=datetime(2026, 11, 11, tzinfo=UTC), processing_ms=None,
+                    version=Version(FamilyId(doc_id), 1, 1))
 
 
 class Reads:
