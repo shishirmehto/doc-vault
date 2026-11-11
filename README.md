@@ -41,6 +41,7 @@ Built:
 - `db.pipeline_steps()`: the per-document advisory lease and the `step_runs` log.
 - `GET /health`.
 - The sample documents and `samples/facts.yaml`.
+- `docvault/pages.py`: format detection from file bytes, text extraction for PDF, DOCX, and TXT, the chunker with per-chunk page maps, and `locate_quote`. `find_on_page` is not built yet.
 
 Not built yet (the functions raise `NotImplementedError`):
 
