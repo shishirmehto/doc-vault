@@ -4,11 +4,11 @@ import { startTransition, useCallback, useState } from "react";
 import { api } from "@/api/client";
 import type { ApiError, Doc, DocumentId, Result } from "@/api/domain";
 import { useSelection } from "@/hooks/useSelection";
-import { usePolled } from "@/hooks/usePolled";
+import { useDocuments } from "@/hooks/useDocuments";
 import { useUploads } from "@/hooks/useUploads";
 import { useFetched } from "@/hooks/useFetched";
 import { useHealth } from "@/hooks/useHealth";
-import { isSettled } from "@/lib/lifecycle";
+import { applyDocEvent, upsertDoc } from "@/lib/docList";
 import { threads } from "@/hooks/useThread";
 import { Rail } from "./Rail";
 import { ChatScreen } from "./ChatScreen";
@@ -17,28 +17,16 @@ import { NewChat } from "./NewChat";
 import { Metrics } from "./Metrics";
 import { MissingChat, MissingDocument } from "./Missing";
 
-const POLL_MS = 1000;
-
-type DocList = { docs: Doc[]; complete: boolean };
-
-/** Puts a document the server just returned into the list: in place if known, newest first if not. */
-function upsert(doc: Doc) {
-  return (list: DocList): DocList => ({
-    ...list,
-    docs: list.docs.some((d) => d.id === doc.id) ? list.docs.map((d) => (d.id === doc.id ? doc : d)) : [doc, ...list.docs],
-  });
-}
-
 /**
  * Three columns: your documents; a chat, or what the system says about one document; and what the
- * document itself says. The URL holds the selection; the document list is polled until nothing in it
- * can still change.
+ * document itself says. The URL holds the selection; the document list follows the live feed of document
+ * changes.
  */
 export function Workspace() {
   const { selection, push, replace } = useSelection();
-  const documents = usePolled(api.documents, (list) => (isSettled(list.docs) ? null : POLL_MS));
+  const documents = useDocuments();
   const { patch, refresh } = documents;
-  const uploads = useUploads((doc) => patch(upsert(doc)));
+  const uploads = useUploads((doc) => patch((list) => upsertDoc(list, doc)));
   const health = useHealth();
   const uploadLimit = health?.ok ? health.value.maxUploadBytes : null;
 
@@ -46,7 +34,7 @@ export function Workspace() {
     async (id: DocumentId): Promise<ApiError | null> => {
       const result = await api.retry(id);
       if (result.ok) {
-        patch(upsert(result.value));
+        patch((list) => upsertDoc(list, result.value));
         return null;
       }
       refresh();
@@ -81,7 +69,7 @@ export function Workspace() {
       // list changes in one too; otherwise one frame shows the document page with its document gone.
       replace({ kind: "none" });
       startTransition(() => {
-        patch((list) => ({ ...list, docs: list.docs.filter((d) => d.id !== doc.id) }));
+        patch((list) => applyDocEvent(list, { kind: "deleted", id: doc.id }));
         setDeleted(doc.filename);
       });
       return null;

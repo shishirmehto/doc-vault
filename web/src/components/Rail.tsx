@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ApiError, Doc, DocumentId, Failure } from "@/api/domain";
 import { selectionQuery } from "@/api/parse";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { FIND_AFTER, findDocs } from "@/lib/find";
+import { isSettled } from "@/lib/lifecycle";
 import type { Upload } from "@/lib/uploads";
 import { docMeta, explain, formatBytes, statusLine } from "@/copy";
 import { DropZone } from "./DropZone";
@@ -24,10 +25,13 @@ type Props = {
   onRetry(id: DocumentId): Promise<ApiError | null>;
 };
 
+const IN_FLIGHT_SHOWN = 3;
+
 /**
  * The documents column. The whole rail takes dropped files. Below 760px it folds into a "Documents (n)"
  * button over the centre column: open while the vault is empty or uploads are listed, so the upload target
- * and their progress show, and closed once a document is opened from it.
+ * and their progress show, and closed once a document is opened from it. Folded, it still shows the documents
+ * in flight, so one uploaded elsewhere shows its progress.
  */
 export function Rail({ docs, complete, connection, uploads, selected, onFiles, onDismiss, onOpen, onRetry }: Props) {
   const drop = useFileDrop(onFiles);
@@ -46,14 +50,39 @@ export function Rail({ docs, complete, connection, uploads, selected, onFiles, o
     setChoice(false);
     onOpen(id);
   };
+  const toggle = useRef<HTMLButtonElement>(null);
+  const inFlight = open || docs === null ? [] : docs.filter((d) => !isSettled([d]));
 
   return (
     <aside className="rail" aria-label="Documents" data-open={open} data-dragging={drop.dragging || undefined} {...drop.handlers}>
-      <button type="button" className="rail-toggle" aria-expanded={open} aria-controls="rail-body" onClick={() => setChoice(!open)}>
+      <button ref={toggle} type="button" className="rail-toggle" aria-expanded={open} aria-controls="rail-body" onClick={() => setChoice(!open)}>
         Documents{docs ? ` (${docs.length})` : ""}
       </button>
       {/* Outside the fold, so a phone shows it with the list folded away. */}
       {connection && <p className="rail-note rail-alert" data-tone="failed" role="alert">{explain(connection)} Retrying.</p>}
+      {inFlight.length > 0 && (
+        <div className="rail-flight">
+          <ul className="rows">
+            {inFlight.slice(0, IN_FLIGHT_SHOWN).map((doc) => (
+              <DocumentRow key={doc.id} doc={doc} current={doc.id === selected} onOpen={openDoc} onRetry={onRetry} />
+            ))}
+          </ul>
+          {inFlight.length > IN_FLIGHT_SHOWN && (
+            <button
+              type="button"
+              className="text-button"
+              aria-controls="rail-body"
+              onClick={() => {
+                // This button goes once the rail opens; the toggle keeps the focus where the reader was.
+                toggle.current?.focus();
+                setChoice(true);
+              }}
+            >
+              {inFlight.length - IN_FLIGHT_SHOWN} more processing
+            </button>
+          )}
+        </div>
+      )}
       <div className="rail-body" id="rail-body">
         <DropZone dragging={drop.dragging} onFiles={onFiles} />
         {docs === null && !connection && <RailSkeleton />}

@@ -5,15 +5,18 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { parseSelection } from "@/api/parse";
 import { useHealth } from "@/hooks/useHealth";
+import { useLiveStatus } from "@/hooks/useLiveFeed";
 
+/** One note at a time: a service that is down, then live updates that are paused, then the fake provider. */
 function ServiceNote() {
   const health = useHealth();
-  if (health === null) return null;
-  if (!health.ok) return <span className="service" data-tone="failed">Vault service unreachable</span>;
-  if (health.value.unreachable.length > 0) {
+  const live = useLiveStatus();
+  if (health?.ok === false) return <span className="service" data-tone="failed">Vault service unreachable</span>;
+  if (health?.ok && health.value.unreachable.length > 0) {
     return <span className="service" data-tone="failed">Unreachable: {health.value.unreachable.join(", ")}</span>;
   }
-  if (health.value.aiMode === "fake") {
+  if (live === "paused") return <span className="service" role="status">Live updates paused, retrying</span>;
+  if (health?.ok && health.value.aiMode === "fake") {
     return (
       <>
         <button type="button" className="service" popoverTarget="ai-note">Fake AI provider</button>

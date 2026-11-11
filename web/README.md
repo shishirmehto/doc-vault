@@ -6,7 +6,7 @@ A small Next.js app for the doc-vault API. You can upload documents and watch th
 
 The page itself never scrolls. `html`, `body` and the `.app` wrapper are flex and grid boxes down to the three columns, so each column scrolls on its own. Anything a browser extension adds to the page, or a margin it sets, takes its own share of the height instead of pushing content off the window. On the chat and new-chat screens the content scrolls above a footer row that holds the question box, and nothing is `position: sticky`. The question box stays on screen at every window height down to 500 px.
 
-Below 1100 px the source pane covers the centre column. Below 760 px the rail folds into a "Documents (n)" button above the centre column. It is open while the vault is empty or uploads are listed, closes when a document is opened from it, and takes at most half the height, with its own scroll.
+Below 1100 px the source pane covers the centre column. Below 760 px the rail folds into a "Documents (n)" button above the centre column. It is open while the vault is empty or uploads are listed, closes when a document is opened from it, and takes at most half the height, with its own scroll. Folded, it still lists up to three documents that are processing under the button, so a document uploaded from another tab shows its progress. Past three, an "N more processing" button opens the rail.
 
 An empty vault shows the steps from upload to first question, with a large drop target in step 1. Over six documents, the rail shows a "Find a document" field and the new-chat picker a "Find a document to ask about" field. Each matches the filename and the document type, except the type "other", which rows do not show. The picker's "Select all ready" ticks the ready documents the search shows, up to the 50 a chat allows. Each row's meta leads with the document type once insights know it ("Policy. PDF, 7 pages, 11 KB").
 
@@ -35,7 +35,7 @@ Two proxy limits are raised in `next.config.ts`:
 - `proxyClientMaxBodySize` is 60 MB. The default 10 MB would truncate the API's 50 MiB uploads.
 - `proxyTimeout` is 120 s, so a slow model answer can finish.
 
-The rewrite also compresses responses, and a compressed `text/event-stream` arrives in one burst when the answer ends. The API marks the stream `Cache-Control: no-cache, no-transform`, and the proxy's compression skips such a response, so the streamed answer needs no route handler of its own. Measured in a browser on port 3000, the deltas of a fake answer arrived at 61, 87, 117 and 144 ms and the final turn at 546 ms.
+The rewrite also compresses responses, and a compressed `text/event-stream` arrives in one burst when the answer ends. The API marks the stream `Cache-Control: no-cache, no-transform`, and the proxy's compression skips such a response, so the streamed answer needs no route handler of its own. Measured in a browser on port 3000, the deltas of a fake answer arrived at 61, 87, 117 and 144 ms and the final turn at 546 ms. The document event stream takes the same rewrite with the same headers.
 
 ## Scripts
 
@@ -58,8 +58,8 @@ The rewrite also compresses responses, and a compressed `text/event-stream` arri
 | `src/api/client.ts` | One function per endpoint. Each returns `Result<T>` and never throws. Uploads use XHR for progress. `askStream` reads the streamed ask with `fetch`, because `EventSource` cannot POST |
 | `src/api/sse.ts` | Frames a `text/event-stream` body into messages, from text split anywhere |
 | `src/api/domain.ts` | Types the components read: branded ids, the lifecycle, insights and turn unions, `SourceRef` |
-| `src/lib/` | Pure functions: `locateQuote`, `isSettled`, `stageProgress`, the upload scheduler, the chat thread's state machine, and `findDocs` and `chooseAll` for long lists |
-| `src/hooks/` | `usePolled`, `useFetched`, `useSelection`, `useUploads`, `useHealth` (one shared `/health` poll), `useFileDrop`, and `useThread`, which sends one question at a time per chat |
+| `src/lib/` | Logic with no React, tested on Node: `locateQuote`, `isSettled`, `stageProgress`, the upload scheduler, the chat thread's state machine, `findDocs` and `chooseAll` for long lists, the rail list's rules (`docList`), `ListSync`, which keeps a list read and the events around it consistent, and `LiveFeed`, which reopens the event stream and says when it is paused |
+| `src/hooks/` | `useDocuments` (the list, kept current by the live feed, with polling as the fallback), `useLiveFeed` (the page's one event stream and its status), `useFetched`, `useSelection`, `useUploads`, `useHealth` (one shared `/health` poll), `useFileDrop`, and `useThread`, which sends one question at a time per chat |
 | `src/components/` | The top bar, the rail, the new-chat screen, the chat, the document view and its delete dialog, the source pane, the metrics screen, and the missing-page message |
 | `src/copy.ts` | Every sentence the UI writes about state |
 
@@ -78,6 +78,8 @@ Starting a chat, opening a fact and opening a citation each add a history entry,
 
 A file larger than `/health`'s `max_upload_bytes` is refused in the browser and never sent. Until `/health` answers, the API's 413 decides.
 
+The document list follows `GET /events/documents` through one `EventSource` for the page, open while the list is on screen. A document uploaded, retried or deleted from another tab or client shows up in the rail and moves through its stages with no reload, and the list is not polled while the stream is open. A `deleted` event removes the row, and a tab showing that document shows the missing-document page. The list is read again each time the stream opens and on a `resync` event. Every event applied after a list read starts is applied again to the read's result, so the result loses neither an event it already holds nor one it missed. While the stream is down, polling takes over: every second while a document can still change, and 5 s after a failed read. A failed read is also retried after 5 s while the stream is open, since nothing else would bring the list. When the browser gives up on the stream, after a non-200 answer such as the 503 past 100 streams or a proxy error while the API restarts, the page opens it again after 2 s, doubling to 30 s. After 3 s without the stream, the top bar reads "Live updates paused, retrying".
+
 The metrics screen has two halves, documents and processing. Each half loads and fails on its own, so one failing route leaves the other on screen with its numbers. Under the fake provider, the cost reads "fake provider, no cost".
 
 Questions go to `POST /chats/{id}/messages/stream`. While the answer streams, the turn shows its provisional text, without citations, under a status line. It reads "Sending the question" until the server names its first step, then follows the steps in the order the server sends them: "Reading the follow-up against the conversation" (follow-ups only), "Searching N documents", "Writing the answer", and "Checking citations" once no text has arrived for 300 ms. A `reset` event clears the text. The `turn` event replaces it with the grounded answer. The latest turn's suggestions show as buttons only while no question is in flight, and a click asks one at once.
@@ -93,5 +95,7 @@ While an answer streams, the column follows its text until the reader scrolls up
 At bonus phase A, `TurnOut` gained `suggestions`, so the `turn-*` and history fixtures were recaptured with the same questions over the same documents, and `ask-stream-deductible.txt` holds the raw body of a streamed ask. The stream tests read it split at every byte.
 
 At phase G1, `DocumentOut` gained `document_type`. `documents-page.json` was captured again. The other document fixtures are snapshots of states that have passed, so the field was added as the API writes it: null while insights are not ready, and, for the two with ready insights, the value `GET /documents/{id}` returned. `delete-404-not-found.json` is a real `DELETE` of an id the vault does not have.
+
+At bonus phase B, `events-documents.txt` holds the raw body of `GET /events/documents` read through the proxy on port 3000 while a 2.5 MB text file processed. It has the `: connected` comment, six `document` events from parsing through 128, 512, 896 and 1280 of 1604 passages to ready, a keepalive, a `resync` and the `deleted` event. The event tests read it split at every byte. The feed's reconnect delays and pause timing are tested against a fake `EventSource` with Node's mock timers.
 
 The `locateQuote` cases come from the backend's `tests/test_pages.py`. They were checked against the Python `locate_quote` on the same inputs.
