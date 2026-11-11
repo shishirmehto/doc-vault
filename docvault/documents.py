@@ -109,7 +109,7 @@ def upload(ctx: Ctx, stream: BinaryIO, filename: str) -> UploadOutcome:
         created = conn.execute(
             "INSERT INTO documents (sha256, filename, kind, size_bytes) VALUES (%s, %s, %s, %s)"
             " ON CONFLICT (sha256) DO NOTHING RETURNING id",
-            (sha, PurePath(filename).name[:255] or "upload", kind, size)).fetchone()
+            (sha, PurePath(filename.replace("\x00", "")).name[:255] or "upload", kind, size)).fetchone()
         doc_id = (created or conn.execute("SELECT id FROM documents WHERE sha256 = %s", (sha,)).fetchone())["id"]
     if not created:
         return Existing(get(ctx.db, doc_id))

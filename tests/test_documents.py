@@ -283,3 +283,15 @@ def test_task_turns_a_bug_into_a_retryable_internal_error(ctx, monkeypatch):
     assert isinstance(lifecycle, Failed)
     assert (lifecycle.failure.code, lifecycle.failure.retryable) == (ErrorCode.INTERNAL, True)
     assert steps(ctx, doc_id) == [("parse", "ok", None), ("embed", "failed", "internal_error")]
+
+
+def test_a_nul_byte_past_the_sniffed_head_is_dropped_and_the_text_still_indexes(ctx, tmp_path):
+    path = tmp_path / "notes.txt"
+    path.write_bytes(b"Clean text. " * 700 + b"Each Occurrence\x00 Limit $500.\n")   # 8,400 clean bytes, then a NUL
+    doc_id = upload(ctx, path).document.id
+
+    documents.run_index(ctx, doc_id)
+
+    ready = documents.get(ctx.db, doc_id).lifecycle
+    assert isinstance(ready, Ready)
+    assert documents.page(ctx.db, doc_id, ready.parsed.page_count)[1].text.endswith("Each Occurrence Limit $500.")

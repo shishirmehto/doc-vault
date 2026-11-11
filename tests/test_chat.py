@@ -325,3 +325,14 @@ def test_the_gate_passes_on_similarity_or_an_all_terms_match_and_refuses_nothing
 
     assert [chat.gate(found, 0.2) for found in ([near], [far], [dataclasses.replace(far, lexical_hit=True)], [])] == [
         True, False, True, False]
+
+
+def test_a_nul_in_a_question_or_a_chat_title_is_an_invalid_request(client, ctx):
+    policy = ready(ctx, POLICY)
+    titled = client.post("/chats", json={"document_ids": [str(policy)], "title": "CGL\x00 policy"})
+    chat_id = client.post("/chats", json={"document_ids": [str(policy)]}).json()["id"]
+    asked = client.post(f"/chats/{chat_id}/messages", json={"question": "What is the\x00 limit?"})
+
+    assert [(r.status_code, r.json()["error"]["code"], r.json()["error"]["details"]["errors"][0]["field"])
+            for r in (titled, asked)] == [(422, "invalid_request", "body.title"), (422, "invalid_request", "body.question")]
+    assert scalar(ctx.db, "SELECT count(*) FROM chats") == 1

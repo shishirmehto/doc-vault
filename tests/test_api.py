@@ -176,3 +176,12 @@ def test_health_reports_the_upload_limit_and_503_when_the_broker_is_down(client,
     assert (response.status_code, response.json()) == (503, {
         "db": "ok", "redis": "unreachable", "ai_mode": "fake", "embed_model": "fake-hash-1536",
         "max_upload_bytes": 1024 * 1024})
+
+
+def test_a_nul_in_the_uploaded_filename_is_dropped(client):
+    body = (b'--b\r\nContent-Disposition: form-data; name="file"; filename="cgl\x00policy.txt"\r\n'
+            b"Content-Type: text/plain\r\n\r\nEach Occurrence Limit $500.\r\n--b--\r\n")
+
+    response = client.post("/documents", content=body, headers={"content-type": "multipart/form-data; boundary=b"})
+
+    assert (response.status_code, response.json()["filename"]) == (202, "cglpolicy.txt")

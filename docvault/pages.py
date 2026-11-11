@@ -120,8 +120,9 @@ def _extract_pdf(path: Path, max_pages: int) -> ExtractedText:
 
 
 def _tidy(text: str) -> str:
-    """Collapse runs of spaces and drop blank edges. Newlines stay, so sentence and paragraph ends survive."""
-    lines = (re.sub(r"[ \t\xa0]+", " ", line).strip() for line in text.splitlines())
+    """Drop NUL (Postgres text refuses it), collapse runs of spaces and drop blank edges. Newlines stay, so
+    sentence and paragraph ends survive."""
+    lines = (re.sub(r"[ \t\xa0]+", " ", line).strip() for line in text.replace("\x00", "").splitlines())
     return "\n".join(lines).strip()
 
 

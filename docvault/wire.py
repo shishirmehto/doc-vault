@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Annotated, Literal, assert_never
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 from . import pages
 from .domain import (
@@ -151,9 +151,18 @@ InsightsOut = Annotated[
 # ------------------------------------------------------------------ chat
 
 
+def _no_nul(text: str) -> str:
+    if "\x00" in text:
+        raise ValueError("must not contain a NUL character")
+    return text
+
+
+NoNul = AfterValidator(_no_nul)   # Postgres text refuses NUL, so it is a 422 here rather than a 500 at the INSERT
+
+
 class StartChatIn(BaseModel):
     document_ids: list[UUID] = Field(min_length=1, description="The documents the chat answers from, fixed for its life.")
-    title: str | None = None
+    title: Annotated[str, NoNul] | None = None
 
 
 class ChatDocumentOut(BaseModel):
@@ -175,7 +184,7 @@ class ChatPage(BaseModel):
 
 
 class AskIn(BaseModel):
-    question: str = Field(min_length=1, max_length=2000)
+    question: Annotated[str, NoNul] = Field(min_length=1, max_length=2000)
 
 
 class CitationOut(BaseModel):
