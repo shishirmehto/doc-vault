@@ -132,8 +132,9 @@ function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry }:
           <KeyFacts facts={insights.keyFacts} active={activeFact} onOpen={onOpenFact} />
           {insights.droppedKeyFacts > 0 && (
             <p className="quiet">
-              {insights.droppedKeyFacts === 1 ? "One more fact was" : `${insights.droppedKeyFacts} more facts were`} left
-              out because its quote was not on the page it cited.
+              {insights.droppedKeyFacts === 1
+                ? "One more fact was left out because its quote was not on the page it cited."
+                : `${insights.droppedKeyFacts} more facts were left out because their quotes were not on the pages they cited.`}
             </p>
           )}
           <p className="written-by">Written by {insights.writtenBy.model} with prompt {insights.writtenBy.promptVersion}.</p>

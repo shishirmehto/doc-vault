@@ -13,6 +13,10 @@ function fill(s: Segment): { width: string; state: string } {
       return { width: "100%", state: "done" };
     case "failed":
       return { width: "100%", state: "failed" };
+    default: {
+      const unknown: never = s;
+      return unknown;
+    }
   }
 }
 
