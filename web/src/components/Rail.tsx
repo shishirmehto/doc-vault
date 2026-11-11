@@ -134,7 +134,7 @@ function UploadRow({ upload, onDismiss, onOpen }: { upload: Upload; onDismiss():
           <span className="row-name">{upload.filename}</span>
           <span className="row-status" data-tone="failed">Not uploaded</span>
           <p className="row-message">
-            The file is {formatBytes(upload.sizeBytes)}, over the vault&apos;s {formatBytes(upload.limitBytes)} limit, so it was not sent.
+            The file is larger than the vault&apos;s {formatBytes(upload.limitBytes)} limit, so it was not sent.
           </p>
           <button type="button" className="text-button" onClick={onDismiss}>Dismiss</button>
         </li>
