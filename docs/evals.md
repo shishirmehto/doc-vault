@@ -39,7 +39,7 @@ Each answerable turn names one or more expected facts. A comparison names one fa
 | Key-fact grounding | Insights key facts kept, over kept plus dropped, summed over the three documents. `insights.verify` keeps a fact only when its quote is on the page it cites, so every kept fact is grounded by construction. This number says how often the model cited the wrong page or misquoted, not whether the kept facts are the right ones. |
 | Key-fact recall | Planted facts whose text appears in a kept key fact's quote on the same document and page. The denominator is `samples/facts.yaml` without the two running footers (28 facts), because a footer repeated on every page is not a key fact. |
 | Gate rows | A turn passes the gate when one chunk holds every query term or its best vector similarity reaches `min_similarity`. "Refused" here means refused by the gate. An out-of-scope turn that passes can still come back `not_found` from the answer step. |
-| Cost and latency | `llm_calls` grouped by purpose: calls, failed calls, tokens, cost, and p95 `latency_ms`. p95 turn latency is over `chat_turns.finished_at - started_at`. Every row in the eval database belongs to the run. Under the fake, latency measures Postgres and Python, not a model. |
+| Cost and latency | `metrics.processing_stats`, the reader behind `GET /metrics/processing`: `llm_calls` grouped by purpose and model (calls, failed calls, tokens, cost, p95 `latency_ms`), and p95 turn latency over `chat_turns.finished_at - started_at`. Every row in the eval database belongs to the run. Under the fake, latency measures Postgres and Python, not a model. |
 
 ## The case set
 
