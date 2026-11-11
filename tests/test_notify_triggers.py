@@ -113,3 +113,20 @@ def test_closing_an_embed_step_ok_notifies_on_commit_and_closing_a_parse_step_do
     channel.writer.execute("DELETE FROM step_runs WHERE document_id = %s", (doc_id,))
 
     assert (parse_closed, embed_closed) == (0, (0, 1))
+
+
+def test_a_version_inserted_or_deleted_also_notifies_the_other_versions_but_an_update_does_not(channel):
+    first, second = channel.new_document(), uuid4()
+    insert = ("INSERT INTO documents (id, sha256, filename, kind, size_bytes, family_id, version)"
+              " VALUES (%s, %s, 'notes.txt', 'txt', 1, %s, 2)")
+
+    on_insert = channel.sent(insert, (second, os.urandom(32), first))
+    on_update = channel.sent("UPDATE documents SET status = 'parsing' WHERE id = %s", (second,))
+    rolled_back = channel.sent("DELETE FROM documents WHERE id = %s", (second,), rollback=True)
+    on_delete = channel.sent("DELETE FROM documents WHERE id = %s", (second,))
+    channel.sent("DELETE FROM documents WHERE id = %s", (first,))
+
+    assert sorted(on_insert) == sorted([str(first), str(second)])
+    assert on_update == [str(second)]
+    assert rolled_back == []
+    assert sorted(on_delete) == sorted([str(first), str(second)])

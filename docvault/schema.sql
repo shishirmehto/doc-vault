@@ -242,12 +242,18 @@ CREATE INDEX IF NOT EXISTS llm_calls_doc    ON llm_calls (document_id) WHERE doc
 -- after a rollback, and delivers identical payloads from one transaction once, so a checkpoint that writes many
 -- rows of a document sends its id once.
 
+-- latest_version is read across a family, so a version inserted or deleted changes every other member's body too.
+-- An UPDATE never moves a document between families, so it names only its own row.
 CREATE OR REPLACE FUNCTION notify_document() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP = 'DELETE' THEN
-    PERFORM pg_notify('documents', OLD.id::text);
-  ELSE
+  IF TG_OP = 'UPDATE' THEN
     PERFORM pg_notify('documents', NEW.id::text);
+  ELSIF TG_OP = 'INSERT' THEN
+    PERFORM pg_notify('documents', NEW.id::text);
+    PERFORM pg_notify('documents', f.id::text) FROM documents f WHERE f.family_id = NEW.family_id AND f.id <> NEW.id;
+  ELSE
+    PERFORM pg_notify('documents', OLD.id::text);
+    PERFORM pg_notify('documents', f.id::text) FROM documents f WHERE f.family_id = OLD.family_id;
   END IF;
   RETURN NULL;
 END $$;

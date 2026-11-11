@@ -183,6 +183,27 @@ def test_a_ready_event_read_before_the_embed_step_closed_is_followed_by_one_with
     assert ready == [True, False], seen
 
 
+def test_version_1_hears_the_latest_version_change_when_version_2_arrives_and_when_it_goes(live):
+    def post(text: str) -> str:
+        return live.client.post("/documents", files={"file": ("terms.txt", text.encode())}).json()["id"]
+
+    v1 = post("Premium: $1,000")
+    with live.stream() as stream:
+        v2 = post("Premium: $1,200")
+        on_insert = stream.read_until(lambda frame: for_doc(v1)(frame) and frame[1]["latest_version"] == 2)
+        assert live.client.delete(f"/documents/{v2}").status_code == 204
+        on_delete = stream.read_until(lambda frame: for_doc(v1)(frame) and frame[1]["latest_version"] == 1)
+
+    def latest(frames: list[Frame], doc_id: str) -> list[tuple[int, int]]:
+        return [(data["version"], data["latest_version"]) for event, data in frames
+                if event == "document" and data["id"] == doc_id]
+
+    assert latest(on_insert, v1)[-1] == (1, 2)
+    assert latest(on_insert, v2) == [(2, 2)]
+    assert ("deleted", {"id": v2}) in on_delete
+    assert latest(on_delete, v1)[-1] == (1, 1)
+
+
 def test_past_the_cap_a_stream_is_refused_with_503_until_a_client_leaves(live):
     with live.stream():
         with live.stream(), live.client.stream("GET", "/events/documents") as refused:
