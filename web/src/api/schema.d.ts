@@ -176,6 +176,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/events/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Document Events
+         * @description Live status of every document, as server-sent events that never end. Each event is about one document whose
+         *     `GET /documents/{id}` body may have changed:
+         *
+         *     - `document`, data: that document's `GET /documents/{id}` body, read after the change was committed.
+         *     - `deleted`, data `{"id": "..."}`: the document no longer exists.
+         *     - `resync`, data `{}`: events may have been missed, so reload the list with `GET /documents`. Sent when the
+         *       server reconnects to the database, when a read fails, and to a client that fell more than 1000 events behind.
+         *
+         *     The stream opens with the comment `: connected` and sends `: keepalive` after 15 s with nothing else to send.
+         *     Past 100 open streams per API process the request is refused with 503 `too_many_streams` and
+         *     `Retry-After`, before the stream starts.
+         */
+        get: operations["document_events_events_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/documents": {
         parameters: {
             query?: never;
@@ -1351,6 +1381,35 @@ export interface operations {
             };
             /** @description rate_limited */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    document_events_events_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description document, deleted and resync events, and keepalive comments */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description too_many_streams */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -47,6 +47,12 @@ export type Doc = {
 
 export type UploadReceipt = { doc: Doc; duplicate: boolean };
 
+/**
+ * One event of GET /events/documents. `document` carries the body GET /documents/{id} would return after the
+ * change; `resync` means events may have been missed, so the list must be read again.
+ */
+export type DocEvent = { kind: "document"; doc: Doc } | { kind: "deleted"; id: DocumentId } | { kind: "resync" };
+
 /** A passage on a page. Key facts and chat citations both become this. */
 export type SourceRef = { documentId: DocumentId; page: number; quote: string };
 

@@ -3,7 +3,7 @@
 
 import type * as W from "./wire.ts";
 import type {
-  AnswerPart, ApiError, AskProgress, AskStage, Chat, ChatId, Citation, CodeCount, Doc, DocumentId, DocumentMetrics,
+  AnswerPart, ApiError, AskProgress, AskStage, Chat, ChatId, Citation, CodeCount, Doc, DocEvent, DocumentId, DocumentMetrics,
   FactCite, Failure, Health, Insights, Lifecycle, Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument,
   Selection, Spread, Step, Turn, TurnCite, TurnId, TurnOutcome,
 } from "./domain.ts";
@@ -75,6 +75,23 @@ export function parseDoc(w: W.DocumentOut): Doc {
     processingMs: w.processing_ms,
     createdAt: new Date(w.created_at),
   };
+}
+
+/** An event of GET /events/documents. Throws on an event or data the contract does not name. */
+export function parseDocEvent(m: SseMessage): DocEvent {
+  const data: unknown = JSON.parse(m.data);
+  switch (m.event) {
+    case "document":
+      if (!isRecord(data)) throw new TypeError("a document event without a document");
+      return { kind: "document", doc: parseDoc(data as W.DocumentOut) };
+    case "deleted":
+      if (!isRecord(data) || typeof data.id !== "string") throw new TypeError("a deleted event without an id");
+      return { kind: "deleted", id: documentId(data.id) };
+    case "resync":
+      return { kind: "resync" };
+    default:
+      throw new TypeError(`unknown document event: ${m.event}`);
+  }
 }
 
 /** `complete` is false when older documents exist past this page. */

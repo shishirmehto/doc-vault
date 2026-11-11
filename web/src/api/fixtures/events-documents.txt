@@ -1,0 +1,28 @@
+: connected
+
+event: document
+data: {"id":"e84608c0-522b-44af-a62f-427e7b5b7784","filename":"phase-b-capture-large.txt","kind":"txt","size_bytes":2515470,"status":"parsing","progress":null,"pages":null,"page_basis":null,"empty_pages":[],"insights_status":"pending","document_type":null,"error":null,"failed_stage":null,"processing_ms":null,"created_at":"2026-11-11T14:14:42.021757Z","links":{"self":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784","insights":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/insights","pages":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/pages/{n}"}}
+
+event: document
+data: {"id":"e84608c0-522b-44af-a62f-427e7b5b7784","filename":"phase-b-capture-large.txt","kind":"txt","size_bytes":2515470,"status":"embedding","progress":{"embedded_chunks":128,"total_chunks":1604},"pages":866,"page_basis":"synthetic","empty_pages":[],"insights_status":"ready","document_type":"other","error":null,"failed_stage":null,"processing_ms":null,"created_at":"2026-11-11T14:14:42.021757Z","links":{"self":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784","insights":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/insights","pages":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/pages/{n}"}}
+
+event: document
+data: {"id":"e84608c0-522b-44af-a62f-427e7b5b7784","filename":"phase-b-capture-large.txt","kind":"txt","size_bytes":2515470,"status":"embedding","progress":{"embedded_chunks":512,"total_chunks":1604},"pages":866,"page_basis":"synthetic","empty_pages":[],"insights_status":"ready","document_type":"other","error":null,"failed_stage":null,"processing_ms":null,"created_at":"2026-11-11T14:14:42.021757Z","links":{"self":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784","insights":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/insights","pages":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/pages/{n}"}}
+
+event: document
+data: {"id":"e84608c0-522b-44af-a62f-427e7b5b7784","filename":"phase-b-capture-large.txt","kind":"txt","size_bytes":2515470,"status":"embedding","progress":{"embedded_chunks":896,"total_chunks":1604},"pages":866,"page_basis":"synthetic","empty_pages":[],"insights_status":"ready","document_type":"other","error":null,"failed_stage":null,"processing_ms":null,"created_at":"2026-11-11T14:14:42.021757Z","links":{"self":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784","insights":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/insights","pages":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/pages/{n}"}}
+
+event: document
+data: {"id":"e84608c0-522b-44af-a62f-427e7b5b7784","filename":"phase-b-capture-large.txt","kind":"txt","size_bytes":2515470,"status":"embedding","progress":{"embedded_chunks":1280,"total_chunks":1604},"pages":866,"page_basis":"synthetic","empty_pages":[],"insights_status":"ready","document_type":"other","error":null,"failed_stage":null,"processing_ms":null,"created_at":"2026-11-11T14:14:42.021757Z","links":{"self":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784","insights":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/insights","pages":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/pages/{n}"}}
+
+event: document
+data: {"id":"e84608c0-522b-44af-a62f-427e7b5b7784","filename":"phase-b-capture-large.txt","kind":"txt","size_bytes":2515470,"status":"ready","progress":null,"pages":866,"page_basis":"synthetic","empty_pages":[],"insights_status":"ready","document_type":"other","error":null,"failed_stage":null,"processing_ms":1051,"created_at":"2026-11-11T14:14:42.021757Z","links":{"self":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784","insights":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/insights","pages":"/documents/e84608c0-522b-44af-a62f-427e7b5b7784/pages/{n}"}}
+
+: keepalive
+
+event: resync
+data: {}
+
+event: deleted
+data: {"id": "e84608c0-522b-44af-a62f-427e7b5b7784"}
+
