@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     uploads_per_minute: int = Field(30, ge=1)     # per client, per API process
     questions_per_minute: int = Field(20, ge=1)
     insights_timeout_s: float = 120.0
+    compare_timeout_s: float = 90.0
 
 
 def load_settings() -> Settings:

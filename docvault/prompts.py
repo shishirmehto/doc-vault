@@ -42,7 +42,7 @@ class Msg:
 
 @dataclass(frozen=True, slots=True)
 class Prompt:
-    name: Literal["condense", "answer", "insights"]
+    name: Literal["condense", "answer", "insights", "compare"]
     version: str
     purpose: Purpose
     tier: Tier                              # which configured model runs it

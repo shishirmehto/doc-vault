@@ -49,7 +49,7 @@ def pool(database_url: str) -> Iterator[dbmod.Db]:
 @pytest.fixture
 def db(pool: dbmod.Db) -> dbmod.Db:
     with pool.connection() as conn:
-        conn.execute("TRUNCATE documents, step_runs, llm_calls, chats CASCADE")
+        conn.execute("TRUNCATE documents, step_runs, llm_calls, chats, comparisons CASCADE")
     return pool
 
 

@@ -39,7 +39,7 @@ from pydantic import BaseModel, ValidationError
 from . import prompts
 from .config import ReasoningEffort, Settings
 from .db import Db
-from .domain import DocumentId, ErrorCode, Page, Purpose, Source, Turn, TurnId, VaultError
+from .domain import ComparisonId, DocumentId, ErrorCode, Page, Purpose, Source, Turn, TurnId, VaultError
 from .pages import SENTENCE_OR_PARAGRAPH_END, TABLE_CELL, collapse_whitespace
 from .prompts import (
     DOCUMENT_TYPES,
@@ -62,6 +62,10 @@ MAX_RETRY_WAIT_S = 10.0
 # tries. Retrying them here too would multiply the attempts and hold both while sleeping.
 BACKGROUND = frozenset({Purpose.EMBED_CHUNKS, Purpose.INSIGHTS})
 
+# A comparison is synchronous and the web proxy gives up at 120 s, so one attempt of at most compare_timeout_s
+# lets the API answer first, and the UI offers Try again.
+ONE_ATTEMPT = BACKGROUND | {Purpose.COMPARE}
+
 
 @dataclass(frozen=True, slots=True)
 class DocOwner:
@@ -73,7 +77,12 @@ class TurnOwner:
     turn_id: TurnId
 
 
-type Owner = DocOwner | TurnOwner   # every call is billed to exactly one document or one chat turn
+@dataclass(frozen=True, slots=True)
+class ComparisonOwner:
+    comparison_id: ComparisonId
+
+
+type Owner = DocOwner | TurnOwner | ComparisonOwner   # every call is billed to exactly one of them
 
 
 class Tokens(NamedTuple):
@@ -252,12 +261,13 @@ class AI:
         """Call the provider with the purpose's timeout, writing one ledger row per attempt.
 
         Interactive purposes get ai_max_attempts tries with doubling backoff;
-        BACKGROUND purposes get one. Only ProviderError counts as an attempt.
+        ONE_ATTEMPT purposes get one. Only ProviderError counts as an attempt.
         Anything else is a bug or a crash, and it propagates without a row.
         """
-        purpose = billing.purpose
-        timeout_s = self.settings.insights_timeout_s if purpose is Purpose.INSIGHTS else self.settings.chat_timeout_s
-        attempts = 1 if purpose in BACKGROUND else self.settings.ai_max_attempts
+        purpose, settings = billing.purpose, self.settings
+        timeout_s = {Purpose.INSIGHTS: settings.insights_timeout_s,
+                     Purpose.COMPARE: settings.compare_timeout_s}.get(purpose, settings.chat_timeout_s)
+        attempts = 1 if purpose in ONE_ATTEMPT else settings.ai_max_attempts
         for attempt in itertools.count(1):
             started = time.perf_counter()
             try:
@@ -284,11 +294,12 @@ class AI:
         with self.ledger.connection() as conn:
             conn.execute(
                 "INSERT INTO llm_calls (purpose, provider, model, prompt_name, prompt_version, document_id, turn_id,"
-                " input_tokens, output_tokens, cost_usd, latency_ms, ok, error_code)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " comparison_id, input_tokens, output_tokens, cost_usd, latency_ms, ok, error_code)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (billing.purpose, billing.provider, billing.model, prompt and prompt.name, prompt and prompt.version,
                  owner.document_id if isinstance(owner, DocOwner) else None,
                  owner.turn_id if isinstance(owner, TurnOwner) else None,
+                 owner.comparison_id if isinstance(owner, ComparisonOwner) else None,
                  tokens.input, tokens.output, None if price is None else price.usd(tokens), latency_ms,
                  error_code is None, error_code))
 

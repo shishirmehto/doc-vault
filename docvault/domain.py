@@ -74,6 +74,7 @@ class Purpose(StrEnum):
     INSIGHTS = "insights"
     CONDENSE = "condense"
     ANSWER = "answer"
+    COMPARE = "compare"
 
 
 class InsightsStatus(StrEnum):

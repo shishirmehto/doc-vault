@@ -13,6 +13,7 @@
 --   step_runs (append-only)              -> db.pipeline_steps(), used by both pipelines
 --   document_insights                    -> insights.py
 --   chats, chat_documents, chat_turns    -> chat.py
+--   comparisons                          -> compare.py
 --   llm_calls                            -> ai.py
 --   (metrics.py reads all, writes none)
 --   *_notify triggers (live events)      -> NOTIFY documents, heard by events.py
@@ -162,8 +163,23 @@ CREATE TABLE IF NOT EXISTS chat_turns (
 CREATE INDEX IF NOT EXISTS chat_turns_history ON chat_turns (chat_id, started_at, id);
 CREATE INDEX IF NOT EXISTS chat_turns_window  ON chat_turns (started_at);
 
+-- One row per comparison, written once after the model call; a provider failure writes none. documents is a
+-- snapshot in column order (id, filename, page_basis, pages_read, page_count), so labels and coverage survive a
+-- delete. rows are positional: cells[i] belongs to documents[i], and an empty cell is null. No FK to documents.
+CREATE TABLE IF NOT EXISTS comparisons (
+  id             uuid PRIMARY KEY,                    -- generated before the model call, used as ledger attribution
+  focus          text,
+  documents      jsonb NOT NULL,
+  rows           jsonb NOT NULL,
+  dropped_cells  int   NOT NULL,                      -- cells whose quote was not on the page they cite
+  model          text  NOT NULL,
+  prompt_version text  NOT NULL,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS comparisons_listing ON comparisons (created_at DESC, id DESC);
+
 -- Every provider call, successful or not, one row. The only place tokens and
--- cost exist. No FKs: cost history outlives document and chat deletes.
+-- cost exist. No FKs: cost history outlives document, chat and comparison deletes.
 CREATE TABLE IF NOT EXISTS llm_calls (
   id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   at             timestamptz NOT NULL DEFAULT now(),
@@ -174,19 +190,22 @@ CREATE TABLE IF NOT EXISTS llm_calls (
   prompt_version text,
   document_id    uuid,
   turn_id        uuid,
+  comparison_id  uuid,
   input_tokens   int  NOT NULL DEFAULT 0,
   output_tokens  int  NOT NULL DEFAULT 0,
   cost_usd       numeric(12, 6),                      -- NULL when the model has no price entry; never guessed
   latency_ms     int  NOT NULL,
   ok             boolean NOT NULL,
   error_code     text,
-  CONSTRAINT llm_calls_purpose_values CHECK (purpose IN ('embed_chunks', 'embed_query', 'insights', 'condense', 'answer')),
-  CONSTRAINT one_owner CHECK (num_nonnulls(document_id, turn_id) = 1),
+  CONSTRAINT llm_calls_purpose_values CHECK (
+    purpose IN ('embed_chunks', 'embed_query', 'insights', 'condense', 'answer', 'compare')),
+  CONSTRAINT one_owner CHECK (num_nonnulls(document_id, turn_id, comparison_id) = 1),
   CONSTRAINT error_iff_not_ok CHECK (ok = (error_code IS NULL))
 );
 CREATE INDEX IF NOT EXISTS llm_calls_window ON llm_calls (at);
 CREATE INDEX IF NOT EXISTS llm_calls_turn   ON llm_calls (turn_id) WHERE turn_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS llm_calls_doc    ON llm_calls (document_id) WHERE document_id IS NOT NULL;
+-- llm_calls_comparison is in the upgrades section, after the column it indexes exists in every database.
 
 -- ------------------------------------------------------------------ live events
 -- GET /events/documents (events.py) listens on channel 'documents'. Each payload is the id of a document whose
@@ -260,3 +279,21 @@ ALTER TABLE chat_documents ALTER COLUMN filename SET NOT NULL;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS requeued_at timestamptz;
 
 ALTER TABLE chat_turns ADD COLUMN IF NOT EXISTS suggestions jsonb NOT NULL DEFAULT '[]';
+
+-- Comparisons are billed to their own owner. The constraints are replaced only while they lack it, so a later
+-- hash change does not re-validate every ledger row.
+ALTER TABLE llm_calls ADD COLUMN IF NOT EXISTS comparison_id uuid;
+CREATE INDEX IF NOT EXISTS llm_calls_comparison ON llm_calls (comparison_id) WHERE comparison_id IS NOT NULL;
+DO $$
+BEGIN
+  IF (SELECT pg_get_constraintdef(oid) FROM pg_constraint
+      WHERE conrelid = 'llm_calls'::regclass AND conname = 'one_owner') NOT LIKE '%comparison_id%' THEN
+    ALTER TABLE llm_calls DROP CONSTRAINT one_owner,
+      ADD CONSTRAINT one_owner CHECK (num_nonnulls(document_id, turn_id, comparison_id) = 1);
+  END IF;
+  IF (SELECT pg_get_constraintdef(oid) FROM pg_constraint
+      WHERE conrelid = 'llm_calls'::regclass AND conname = 'llm_calls_purpose_values') NOT LIKE '%''compare''%' THEN
+    ALTER TABLE llm_calls DROP CONSTRAINT llm_calls_purpose_values, ADD CONSTRAINT llm_calls_purpose_values CHECK (
+      purpose IN ('embed_chunks', 'embed_query', 'insights', 'condense', 'answer', 'compare'));
+  END IF;
+END $$;

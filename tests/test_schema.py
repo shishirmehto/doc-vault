@@ -32,4 +32,4 @@ def test_migrate_again_applies_nothing_and_takes_no_table_locks(db, database_url
         writer.execute("LOCK TABLE documents IN ACCESS EXCLUSIVE MODE")
         dbmod.migrate(database_url)   # would block forever if it re-ran the DDL
     assert scalar(db, "SELECT count(*) FROM schema_version") == applied
-    assert scalar(db, "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'") == 10
+    assert scalar(db, "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'") == 11
