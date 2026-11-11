@@ -3,6 +3,7 @@
 No business rules live here. The only table in this file maps domain error
 codes to HTTP statuses, so the domain never imports HTTP concepts. The streamed
 ask runs chat.ask in a worker thread and turns its progress into server-sent events.
+GET /events/documents turns an events.Feed into server-sent events.
 """
 
 from __future__ import annotations
@@ -22,8 +23,9 @@ from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response, Uploa
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
+from starlette.types import Receive, Scope, Send
 
-from . import chat, documents, metrics, wire
+from . import chat, documents, events, metrics, wire
 from .config import load_settings
 from .context import Ctx, build_ctx, too_large
 from .domain import ChatId, Created, DocStatus, DocumentId, ErrorCode, Existing, Failure, Turn, VaultError
@@ -45,6 +47,7 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.INVALID_CURSOR: 400,
     ErrorCode.INVALID_REQUEST: 422,
     ErrorCode.RATE_LIMITED: 429,        # with Retry-After: the seconds until the budget allows one more
+    ErrorCode.TOO_MANY_STREAMS: 503,    # with Retry-After: 5
     ErrorCode.AI_UNAVAILABLE: 503,      # with Retry-After: 5 when retryable
     ErrorCode.AI_BAD_OUTPUT: 502,
     # Stored-only codes (ENCRYPTED_PDF, UNREADABLE_FILE, NO_EXTRACTABLE_TEXT, TOO_MANY_PAGES, INTERNAL)
@@ -84,7 +87,9 @@ Deps = Annotated[Ctx, Depends(get_ctx)]
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ctx = build_ctx(load_settings(), CeleryJobs())
     app.state.ctx = ctx
-    yield
+    async with events.running(ctx.settings.database_url, ctx.db) as hub:
+        app.state.events = hub
+        yield
     ctx.db.close()
 
 
@@ -319,6 +324,57 @@ def ask_stream(chat_id: UUID, body: wire.AskIn, ctx: Deps) -> EventStreamRespons
     if isinstance(first, Exception):
         raise first
     return EventStreamResponse(asking.frames(first), headers=STREAM_HEADERS)
+
+
+async def document_frames(feed: events.Feed) -> AsyncIterator[str]:
+    yield ": connected\n\n"
+    while True:
+        match await feed.next():
+            case None:
+                yield ": keepalive\n\n"
+            case events.Changed(doc):
+                yield sse("document", wire.document_out(doc))
+            case events.Deleted(doc_id):
+                yield sse("deleted", {"id": str(doc_id)})
+            case events.Resync():
+                yield sse("resync", {})
+
+
+class FeedResponse(EventStreamResponse):
+    """Frees the feed's slot however the response ends. A generator's own finally would not run for a client
+    that left before the body started, and that slot would stay taken for good."""
+
+    def __init__(self, feed: events.Feed) -> None:
+        super().__init__(document_frames(feed), headers=STREAM_HEADERS)
+        self.feed = feed
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.feed.close()
+
+
+DOCUMENT_EVENTS = """\
+Live status of every document, as server-sent events that never end. Each event is about one document whose
+`GET /documents/{id}` body may have changed:
+
+- `document`, data: that document's `GET /documents/{id}` body, read after the change was committed.
+- `deleted`, data `{"id": "..."}`: the document no longer exists.
+- `resync`, data `{}`: events may have been missed, so reload the list with `GET /documents`. Sent when the
+  server reconnects to the database, when a read fails, and to a client that fell more than 1000 events behind.
+
+The stream opens with the comment `: connected` and sends `: keepalive` after 15 s with nothing else to send.
+Past 100 open streams per API process the request is refused with 503 `too_many_streams` and
+`Retry-After`, before the stream starts."""
+
+
+@router.get("/events/documents", response_class=EventStreamResponse, description=DOCUMENT_EVENTS,
+            responses={200: {"description": "document, deleted and resync events, and keepalive comments",
+                             "content": {"text/event-stream": {"schema": {"type": "string"}}}},
+                       **json_errors(ErrorCode.TOO_MANY_STREAMS)})
+async def document_events(request: Request) -> FeedResponse:
+    return FeedResponse(request.app.state.events.subscribe())
 
 
 @router.get("/chats/{chat_id}/messages", response_model=wire.HistoryOut,

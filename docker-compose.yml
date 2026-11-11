@@ -12,7 +12,8 @@ services:
     healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 2s, retries: 30}
   api:
     build: .
-    command: uvicorn docvault.api:app --host 0.0.0.0 --port 8000
+    # Open live-status streams never end on their own, so a stop gives requests 5 s and then cancels them.
+    command: uvicorn docvault.api:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 5
     env_file: [{path: .env, required: false}]
     # The fake chat streams its answer a word every 25 ms, so the demo shows streaming without a key.
     environment: {FAKE_STREAM_DELAY_MS: "25"}
