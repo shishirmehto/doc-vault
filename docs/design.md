@@ -58,7 +58,7 @@ The response has `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering:
 
 The web UI opens one `EventSource` per page. It reads the list on load, on every open and on `resync`, and replays every event applied after a read started onto that read's result (`ListSync`). A hidden tab closes its stream and opens a new one when shown, because over HTTP/1.1 a browser allows six connections to one host across all its tabs. While the stream is down it polls as before, and after 3 s down the top bar reads "Live updates paused, retrying". The browser retries a dropped connection by itself but gives up after a non-200 answer, such as the cap's 503 or the proxy's 500 while the API restarts, so the page opens a new one after 2 s, doubling to 30 s.
 
-Measured on the dev stack through the web proxy on port 3000: a 4.9 MB text file uploaded with curl showed in the rail 187 ms after the request started, moved through "Reading pages" and seven "Indexing n of 3331 passages" steps, and read Ready at 1986 ms. The page made no request in that time. A delete reached a second tab showing the document 280 ms after the request started, as the missing-document page.
+Measured on the dev stack through the web proxy on port 3000: a 4.9 MB text file uploaded with curl showed in the rail 186 ms after the request started, moved through "Reading pages" and eight "Indexing n of 3329 passages" steps, and read Ready at 1970 ms. The page made no request in that time. A delete reached a second tab showing the document 282 ms after the request started, as the missing-document page.
 
 ## Retrieval
 
