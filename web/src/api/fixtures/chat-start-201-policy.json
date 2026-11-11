@@ -1,0 +1,15 @@
+{
+  "status": 201,
+  "headers": {},
+  "body": {
+    "id": "fb08c883-7620-4116-957a-29575baec3ba",
+    "title": null,
+    "documents": [
+      {
+        "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+        "filename": "sample-cgl-policy.pdf"
+      }
+    ],
+    "created_at": "2026-11-11T03:40:37.095380Z"
+  }
+}

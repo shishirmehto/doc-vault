@@ -1,0 +1,42 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "id": "56e3ea35-619c-4e3a-bc6f-6122a7c8e6d2",
+    "question": "What is the general aggregate limit?",
+    "interpreted_as": "What is the general aggregate limit?",
+    "status": "answered",
+    "reason": null,
+    "answer": "General Aggregate Limit $3,000,000 [1] General Aggregate Limit $2,000,000 [2]",
+    "citations": [
+      {
+        "ref": 1,
+        "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+        "filename": "sample-renewal-quote.pdf",
+        "page": 2,
+        "page_label": "p. 2",
+        "quote": "General Aggregate Limit $3,000,000",
+        "chunk_id": "d6a70636-43a3-4884-b5f8-184ebf3c9573",
+        "page_url": "/documents/23b7e49c-b644-4ccf-8768-5716b69cb9cc/pages/2"
+      },
+      {
+        "ref": 2,
+        "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+        "filename": "sample-cgl-policy.pdf",
+        "page": 2,
+        "page_label": "p. 2",
+        "quote": "General Aggregate Limit $2,000,000",
+        "chunk_id": "016551f1-822d-4f35-838c-d7fbca9ac1e2",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/2"
+      }
+    ],
+    "usage": {
+      "calls": 2,
+      "input_tokens": 2415,
+      "output_tokens": 14,
+      "cost_usd": 0.0
+    },
+    "latency_ms": 8,
+    "created_at": "2026-11-11T03:40:37.163436Z"
+  }
+}

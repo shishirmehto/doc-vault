@@ -46,21 +46,22 @@ export function Workspace() {
   );
 
   const docs = documents.data?.docs ?? null;
-  const current = selection.doc && docs ? (docs.find((d) => d.id === selection.doc) ?? null) : null;
+  const selectedDoc = selection.kind === "doc" ? selection.doc : null;
+  const current = selectedDoc && docs ? (docs.find((d) => d.id === selectedDoc) ?? null) : null;
 
   return (
-    <div className="workspace" data-pane={current && selection.pane ? "open" : "closed"}>
+    <div className="workspace" data-pane={current && selection.kind === "doc" && selection.pane ? "open" : "closed"}>
       <Rail
         docs={docs}
         connection={documents.error}
         uploads={uploads.uploads}
-        selected={selection.doc}
+        selected={selectedDoc}
         onFiles={uploads.add}
         onDismiss={uploads.dismiss}
-        onOpen={(id) => push({ doc: id, pane: null })}
+        onOpen={(id) => push({ kind: "doc", doc: id, pane: null })}
         onRetry={retry}
       />
-      {selection.doc === null ? (
+      {selection.kind !== "doc" ? (
         <main className="centre">
           <div className="welcome">
             <h1>{docs !== null && docs.length === 0 ? "Upload a document to start" : "Choose a document"}</h1>

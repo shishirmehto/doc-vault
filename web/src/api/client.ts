@@ -1,7 +1,7 @@
 // One function per endpoint. Browser only: every call goes to same-origin /api/*, which
 // next.config.ts rewrites to the API. Every call returns Result<T> and never throws.
 
-import type { Doc, DocumentId, Health, Insights, Page, Result, UploadReceipt } from "./domain.ts";
+import type { Chat, ChatId, Doc, DocumentId, Health, Insights, NonEmpty, Page, Result, Turn, UploadReceipt } from "./domain.ts";
 import * as P from "./parse.ts";
 import type * as W from "./wire.ts";
 
@@ -21,7 +21,18 @@ export const api = {
   page: (id: DocumentId, n: number): Promise<Result<Page>> =>
     call("GET", `/documents/${id}/pages/${n}`, P.parsePage),
 
-  health: (): Promise<Result<Health>> => call("GET", "/health", P.parseHealth, [503]),
+  health: (): Promise<Result<Health>> => call("GET", "/health", P.parseHealth, { dataStatuses: [503] }),
+
+  /** 409 documents_not_ready names the documents that are not ready. */
+  startChat: (ids: NonEmpty<DocumentId>): Promise<Result<Chat>> =>
+    call("POST", "/chats", P.parseChat, { body: { document_ids: [...ids] } satisfies W.StartChatIn }),
+
+  /** Records exactly one turn on success. A 503 records none. */
+  ask: (chat: ChatId, question: string): Promise<Result<Turn>> =>
+    call("POST", `/chats/${chat}/messages`, P.parseTurn, { body: { question } satisfies W.AskIn }),
+
+  /** Oldest first. 200 is the API's maximum. */
+  history: (chat: ChatId): Promise<Result<Turn[]>> => call("GET", `/chats/${chat}/messages?limit=200`, P.parseHistory),
 
   /**
    * XHR, because fetch reports no upload progress. 202 is a new document; 200 means the same
@@ -48,11 +59,15 @@ async function call<WireT, T>(
   method: "GET" | "POST",
   path: string,
   parse: (w: WireT) => T,
-  dataStatuses: readonly number[] = [],
+  { body, dataStatuses = [] }: { body?: object; dataStatuses?: readonly number[] } = {},
 ): Promise<Result<T>> {
   let res: Response;
   try {
-    res = await fetch(BASE + path, { method, cache: "no-store" });
+    res = await fetch(BASE + path, {
+      method,
+      cache: "no-store",
+      ...(body && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    });
   } catch {
     return { ok: false, error: { kind: "offline" } };
   }

@@ -1,0 +1,19 @@
+{
+  "status": 409,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "documents_not_ready",
+      "message": "1 of 2 documents are not ready.",
+      "retryable": false,
+      "details": {
+        "not_ready": [
+          {
+            "id": "723645a0-5244-4242-b8d0-84140e7a7dd0",
+            "status": "failed"
+          }
+        ]
+      }
+    }
+  }
+}

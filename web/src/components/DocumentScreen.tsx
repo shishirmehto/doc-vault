@@ -32,7 +32,7 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry 
     );
   }
 
-  const openFact = (index: number) => push({ doc: id, pane: { kind: "cite", cite: { kind: "fact", index }, page: null } });
+  const openFact = (index: number) => push({ kind: "doc", doc: id, pane: { kind: "cite", cite: { kind: "fact", index }, page: null } });
   const activeFact = pane?.kind === "cite" ? pane.cite.index : null;
 
   return (
@@ -55,7 +55,7 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry 
               <FailureNote failure={doc.lifecycle.failure} onRetry={() => onRetry(id)} />
             )}
             {doc.layout && doc.lifecycle.status !== "failed" && (
-              <button type="button" className="button" onClick={() => push({ doc: id, pane: { kind: "page", page: 1 } })}>
+              <button type="button" className="button" onClick={() => push({ kind: "doc", doc: id, pane: { kind: "page", page: 1 } })}>
                 Read the {unitName(doc.layout.unit, 2)}
               </button>
             )}
@@ -65,8 +65,8 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry 
         </article>
       </main>
       {pane && <SourcePane doc={doc} view={sourceView(pane, insights.result)}
-        onPage={(page) => replace({ doc: id, pane: pane.kind === "cite" ? { ...pane, page } : { kind: "page", page } })}
-        onClose={() => push({ doc: id, pane: null })} />}
+        onPage={(page) => replace({ kind: "doc", doc: id, pane: pane.kind === "cite" ? { ...pane, page } : { kind: "page", page } })}
+        onClose={() => push({ kind: "doc", doc: id, pane: null })} />}
     </>
   );
 }

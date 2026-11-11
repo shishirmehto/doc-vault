@@ -86,7 +86,7 @@ function DocLink({ id, onOpen, children }: { id: DocumentId; onOpen(id: Document
   return (
     <a
       className="row-name"
-      href={selectionQuery({ doc: id, pane: null })}
+      href={selectionQuery({ kind: "doc", doc: id, pane: null })}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey) return;
         e.preventDefault();

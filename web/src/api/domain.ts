@@ -5,6 +5,10 @@ declare const brand: unique symbol;
 type Brand<T, B extends string> = T & { readonly [brand]: B };
 
 export type DocumentId = Brand<string, "DocumentId">;
+export type ChatId = Brand<string, "ChatId">;
+export type TurnId = Brand<string, "TurnId">;
+
+export type NonEmpty<T> = readonly [T, ...T[]];
 
 export type DocKind = "pdf" | "docx" | "txt";
 
@@ -41,7 +45,7 @@ export type Doc = {
 
 export type UploadReceipt = { doc: Doc; duplicate: boolean };
 
-/** A passage on a page. Key facts (and, in pass 2, chat citations) become this. */
+/** A passage on a page. Key facts and chat citations both become this. */
 export type SourceRef = { documentId: DocumentId; page: number; quote: string };
 
 export type Page = { documentId: DocumentId; number: number; label: string; text: string };
@@ -67,20 +71,71 @@ export type Insights =
 
 export type Health = { aiMode: string; unreachable: readonly string[] };
 
-/** Which key fact's passage the source pane marks. Pass 2 adds chat citations. */
-export type CiteKey = { kind: "fact"; index: number };
+// ------------------------------------------------------------------ chat
 
-/** What the source pane shows: a cited passage (on its page, or another page after paging), or a bare page. */
+/** A chat answers from a fixed set of documents, chosen when it starts. */
+export type ChatDocument = { id: DocumentId; filename: string };
+export type Chat = { id: ChatId; documents: NonEmpty<ChatDocument> };
+
+/** `ref` is the number the answer's [n] markers use. pageLabel is the backend's ("p. 2" or "section 2"). */
+export type Citation = { ref: number; source: SourceRef; filename: string; pageLabel: string };
+
+/** The answer text cut at its [n] markers. A marker with no citation stays text. */
+export type AnswerPart = { kind: "text"; text: string } | { kind: "cite"; citation: Citation };
+
+export type NotFoundReason = "no_evidence" | "model_declined" | "unverified";
+
+export type Outcome =
+  | { kind: "answered"; parts: readonly AnswerPart[]; citations: readonly Citation[] }
+  /** A deliberate refusal, not an error. `message` is the backend's own sentence. */
+  | { kind: "not_found"; reason: NotFoundReason; message: string };
+
+/** costUsd is null when a call used a model with no price. */
+export type Usage = { calls: number; inputTokens: number; outputTokens: number; costUsd: number | null };
+
+export type Turn = {
+  id: TurnId;
+  question: string;
+  /** The standalone question a follow-up was read as. Null when it is the question itself. */
+  readAs: string | null;
+  outcome: Outcome;
+  usage: Usage;
+  latencyMs: number;
+};
+
+// ------------------------------------------------------------------ the URL
+
+/** A key fact's passage, by its index in the document's insights. */
+export type FactCite = { kind: "fact"; index: number };
+/** A chat citation, by the turn that made it and its [n]. */
+export type TurnCite = { turn: TurnId; ref: number };
+
+/** The document view's pane: a fact's passage (on its page, or another page after paging), or a bare page. */
 export type PaneRequest =
-  | { kind: "cite"; cite: CiteKey; page: number | null }
+  | { kind: "cite"; cite: FactCite; page: number | null }
   | { kind: "page"; page: number };
 
-/** Everything the URL selects. The pane only exists inside a selected document. */
-export type Selection = { doc: DocumentId | null; pane: PaneRequest | null };
+/** The chat's pane: always a citation, so it always knows its document. `page` is set after paging. */
+export type ChatPane = { cite: TurnCite; page: number | null };
+
+/** Everything the URL selects. Nothing selected is the screen that starts a chat. */
+export type Selection =
+  | { kind: "none" }
+  | { kind: "doc"; doc: DocumentId; pane: PaneRequest | null }
+  | { kind: "chat"; chat: ChatId; pane: ChatPane | null };
 
 export type ApiError =
   /** The backend's error envelope: 404, 409, 413, 415, 422 and 503 (with Retry-After). */
-  | { kind: "refused"; status: number; code: string; message: string; retryable: boolean | null; retryAfterS: number | null }
+  | {
+      kind: "refused";
+      status: number;
+      code: string;
+      message: string;
+      retryable: boolean | null;
+      retryAfterS: number | null;
+      /** The documents a refusal names: not ready (409), missing (404) or deleted from a chat (409). */
+      documents: readonly DocumentId[];
+    }
   /** A non-2xx without the envelope: an unbuilt route's 500, FastAPI's own 422, or the proxy failing to reach the API. */
   | { kind: "broken"; status: number }
   /** A 2xx whose body did not match the contract. Regenerate schema.d.ts. */

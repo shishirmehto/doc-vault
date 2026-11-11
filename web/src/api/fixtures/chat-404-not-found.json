@@ -1,0 +1,12 @@
+{
+  "status": 404,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "chat_not_found",
+      "message": "No chat has the id 00000000-0000-4000-8000-000000000000.",
+      "retryable": false,
+      "details": {}
+    }
+  }
+}

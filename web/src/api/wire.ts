@@ -15,3 +15,9 @@ export type InsightsOut =
   | S["InsightsUnavailableOut"];
 // GET /health declares no response model: {db, redis, ai_mode, embed_model}, on 200 and on 503.
 export type HealthOut = Record<string, string>;
+export type ChatOut = S["ChatOut"];
+export type TurnOut = S["TurnOut"];
+export type HistoryOut = S["HistoryOut"];
+export type CitationOut = S["CitationOut"];
+export type StartChatIn = S["StartChatIn"];
+export type AskIn = S["AskIn"];
