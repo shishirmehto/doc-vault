@@ -161,8 +161,9 @@ NoNul = AfterValidator(_no_nul)   # Postgres text refuses NUL, so it is a 422 he
 
 
 class StartChatIn(BaseModel):
-    document_ids: list[UUID] = Field(min_length=1, description="The documents the chat answers from, fixed for its life.")
-    title: Annotated[str, NoNul] | None = None
+    document_ids: list[UUID] = Field(min_length=1, max_length=50,
+                                     description="The documents the chat answers from, fixed for its life. At most 50.")
+    title: Annotated[str, NoNul, Field(max_length=200)] | None = None
 
 
 class ChatDocumentOut(BaseModel):

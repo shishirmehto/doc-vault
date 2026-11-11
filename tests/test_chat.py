@@ -336,3 +336,17 @@ def test_a_nul_in_a_question_or_a_chat_title_is_an_invalid_request(client, ctx):
     assert [(r.status_code, r.json()["error"]["code"], r.json()["error"]["details"]["errors"][0]["field"])
             for r in (titled, asked)] == [(422, "invalid_request", "body.title"), (422, "invalid_request", "body.question")]
     assert scalar(ctx.db, "SELECT count(*) FROM chats") == 1
+
+
+def test_a_chat_takes_at_most_50_documents_and_a_200_character_title(client, ctx):
+    policy = str(ready(ctx, POLICY))
+    too_many = client.post("/chats", json={"document_ids": [str(uuid4()) for _ in range(51)]})
+    too_long = client.post("/chats", json={"document_ids": [policy], "title": "t" * 201})
+    longest = client.post("/chats", json={"document_ids": [policy], "title": "t" * 200})
+
+    assert [(r.status_code, r.json().get("error", {}).get("code")) for r in (too_many, too_long)] == [
+        (422, "invalid_request"), (422, "invalid_request")]
+    assert (longest.status_code, len(longest.json()["title"])) == (201, 200)
+    schema = client.get("/openapi.json").json()["components"]["schemas"]["StartChatIn"]["properties"]
+    assert (schema["document_ids"]["maxItems"], schema["title"]["anyOf"][0]["maxLength"]) == (50, 200)
+    assert "At most 50." in schema["document_ids"]["description"]
