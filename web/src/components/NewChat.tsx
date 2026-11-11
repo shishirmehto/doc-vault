@@ -59,9 +59,9 @@ export function NewChat({ docs, onOpen }: { docs: readonly Doc[] | null; onOpen(
                   <li key={d.id}>
                     <label className="pick" data-disabled={!isReady || undefined}>
                       <input type="checkbox" checked={isReady && chosen.has(d.id)} disabled={!isReady || busy}
-                        onChange={() => toggle(d.id)} />
-                      <span className="pick-name">{d.filename}</span>
-                      <span className="pick-meta">{isReady ? docMeta(d) : statusLine(d).text}</span>
+                        aria-labelledby={`pick-${d.id}`} aria-describedby={`pick-meta-${d.id}`} onChange={() => toggle(d.id)} />
+                      <span className="pick-name" id={`pick-${d.id}`}>{d.filename}</span>
+                      <span className="pick-meta" id={`pick-meta-${d.id}`}>{isReady ? docMeta(d) : statusLine(d).text}</span>
                     </label>
                   </li>
                 );
