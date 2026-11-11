@@ -14,7 +14,7 @@ Postgres 16 with pgvector holds every table. `docvault/schema.sql` is the only s
 | `step_runs` | `db.pipeline_steps` | Append-only. One row per attempt of `parse`, `embed` or `analyze`, with its outcome and error code. |
 | `document_insights` | `insights.py` | One row per document once insights exist or fail. No row means pending. |
 | `chats`, `chat_documents` | `chat.py` | A chat and its fixed document scope, with a filename snapshot. |
-| `chat_turns` | `chat.py` | One row per question: the standalone query, the outcome, the answer and a citation snapshot. |
+| `chat_turns` | `chat.py` | One row per question: the standalone query, the outcome, the answer, a citation snapshot and up to three follow-up suggestions. |
 | `llm_calls` | `ai.py` | Append-only. One row per provider attempt, failed ones included: purpose, model, prompt version, tokens, cost, latency, and the document or turn it is billed to. |
 
 Uploaded files live on disk at a path derived from their SHA-256 (`context.BlobStore`), so the database stores no path and the same bytes are stored once.
@@ -34,9 +34,20 @@ Uploaded files live on disk at a path derived from their SHA-256 (`context.BlobS
 3. Refuse with `no_evidence`, and spend no answer call, when no chunk passes the relevance gate.
 4. Send eight sources to the main model and get back an answer with `[S#]` markers and a verbatim quote per marker.
 5. Keep a citation only when `pages.locate_quote` finds its quote in the source it names. The citation's page is the page where the quote starts inside the chunk. With nothing verified, the turn is `unverified`.
-6. Write one `chat_turns` row. Usage is read back from `llm_calls` by turn id.
+6. Keep up to three of the model's `follow_ups` as suggestions (`chat.suggestions`): questions that end in "?", are at most 160 characters and differ from the question just asked. A turn the gate refused had no model call, so `chat.fact_suggestions` asks "What is the <label>?" for the documents' verified key-fact labels of two words or more, taken round by round across the documents.
+7. Write one `chat_turns` row. Usage is read back from `llm_calls` by turn id.
 
 No database transaction stays open across a model call.
+
+**Ask, streamed.** `POST /chats/{id}/messages/stream` runs the same `chat.ask`. The only difference is three optional sinks, which the plain route does not pass:
+
+- `on_stage` hears `condensing` (only when there is history), `searching` and `answering` as each step starts. The first one comes after the chat and its scope are checked.
+- `on_text` gets provisional answer text. The gateway streams the answer call's raw JSON into a `TextSink`. `answer_text.AnswerField` decodes the top-level `answer` string as it arrives, and `answer_text.MarkerFilter` removes `[S#]` markers, holding back a partial one until it resolves. `follow_ups` comes after `evidence` in the draft, so the answer streams first.
+- `on_reset` fires when a retry or the repair turn starts after text was sent, because that text is void.
+
+`api.AskInThread` runs `ask` in a worker thread that puts server-sent event frames on an unbounded queue. The route blocks until the first item arrives. If that item is an error (`chat_not_found`, `documents_deleted`), it answers with the usual status and envelope. Otherwise it streams the frames, then one `turn` or `error` event. A client that disconnects stops reading the queue, but the thread runs on, stores the turn and bills every attempt, so the history shows the answer. The provisional text is never trusted: the `turn` event carries the grounded answer, which replaces it.
+
+The response has `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`. `no-transform` matters for the web UI: its Next.js rewrite proxy gzips `text/event-stream` and so delivered every event at once when the answer ended. The proxy's compression skips a response marked `no-transform`.
 
 ## Retrieval
 
@@ -55,7 +66,7 @@ The scan is exact, not approximate, because a chat's scope is a few documents an
 `docvault/prompts.py` holds every prompt, each with a name and version that every `llm_calls` row records. Each prompt carries a comment on why it is worded the way it is. In short:
 
 - **condense** (small model) keeps the user's wording, amounts and defined terms, because the rewrite drives both the embedding and the full-text search. It must not answer, because the answer would be searched instead of the question.
-- **answer** (main model) treats source text as data, never instructions. It asks for a verbatim quote of at most 40 words per marker, because `chat.ground` drops every quote it cannot find. It asks for figures exactly as written and a refusal (`supported: false`) over a guess, because a wrong limit costs a broker more than a follow-up question. It answers the covered part of a question and names the rest.
+- **answer** (main model, `answer-v2`) treats source text as data, never instructions. It asks for a verbatim quote of at most 40 words per marker, because `chat.ground` drops every quote it cannot find. It asks for figures exactly as written and a refusal (`supported: false`) over a guess, because a wrong limit costs a broker more than a follow-up question. It answers the covered part of a question and names the rest. It suggests up to three follow-up questions that its sources answer, so a click on one leads to a cited answer. The schema puts no limit on their count, so a fourth question costs no repair call. `chat.suggestions` keeps three.
 - **insights** (main model) writes the summary for a broker deciding whether to open the document. It asks for the `<page n>` of each key fact and an exact quote, because `insights.verify` checks the quote on that page.
 - **repair** shows the model its invalid JSON and the validator's errors once, under the original prompt's name, so the ledger counts repairs against the prompt that needed them.
 

@@ -120,11 +120,47 @@ curl -s "$API/chats?limit=10"
 curl -s $API/chats/$CHAT
 ```
 
-`POST /chats/{id}/messages` asks a question of at most 2,000 characters. The answer cites each claim (`[1]` matches `citations[0]`), `interpreted_as` shows how a follow-up was read, and `usage` lists the model calls, tokens and cost of the turn. A question the documents do not answer returns `status: not_found` with a `reason`.
+`POST /chats/{id}/messages` asks a question of at most 2,000 characters. The answer cites each claim (`[1]` matches `citations[0]`), `interpreted_as` shows how a follow-up was read, and `usage` lists the model calls, tokens and cost of the turn. A question the documents do not answer returns `status: not_found` with a `reason`. `suggestions` holds up to three follow-up questions that the documents can answer. When the relevance gate refuses a question, they come from the documents' key facts ("What is the Policy Number?").
 
 ```bash
 curl -s $API/chats/$CHAT/messages -H 'content-type: application/json' \
   -d '{"question": "Compare the general aggregate limit in the two documents."}'
+```
+
+`POST /chats/{id}/messages/stream` asks the same way and spends from the same rate-limit budget, but answers with server-sent events while the answer is written. A refusal found before the stream starts (404, 409, 422 or 429) is the usual status and error envelope. After a 200, the events are:
+
+| Event | Data | Meaning |
+|---|---|---|
+| `stage` | `{"stage": "condensing" \| "searching" \| "answering"}` | A step starts. `condensing` comes only after the first turn. |
+| `delta` | `{"text": "..."}` | Provisional answer text, with every `[S#]` marker removed. Append it. |
+| `reset` | `{}` | Discard the provisional text. It comes before a retry or a repair that follows text already sent. |
+| `turn` | the `POST /chats/{id}/messages` body | The grounded answer. It replaces the provisional text and ends the stream. |
+| `error` | the error envelope | `ai_unavailable`, `ai_bad_output` or `internal_error`. It ends the stream. |
+
+If the client disconnects, the answer still finishes and is stored, and `GET /chats/{id}/messages` shows it. A question the gate refuses sends no `delta`.
+
+```bash
+curl -N $API/chats/$CHAT/messages/stream -H 'content-type: application/json' \
+  -d '{"question": "What is the property damage deductible?"}'
+```
+
+```text
+event: stage
+data: {"stage": "searching"}
+
+event: stage
+data: {"stage": "answering"}
+
+event: delta
+data: {"text": "Property"}
+
+event: delta
+data: {"text": " Damage"}
+
+...
+
+event: turn
+data: {"id": "...", "status": "answered", "answer": "Property Damage Deductible $2,500 per occurrence [1]", ...}
 ```
 
 `GET /chats/{id}/messages` returns the chat's turns, oldest first, with the same fields.
@@ -185,6 +221,8 @@ Built:
 - The AI gateway (`docvault/ai.py`): OpenAI and a deterministic fake, retries with backoff for chat calls, strict JSON-schema output with one repair turn, and one priced `llm_calls` row per provider attempt.
 - Insights: title, type, summary, tags and key facts. A key fact is kept only when its quote is on the page it cites, and `coverage` reports how much of a long document was read.
 - Chat: multi-document, follow-ups rewritten into standalone queries, hybrid retrieval (vector and full text fused by reciprocal rank, with a per-document quota), a relevance gate, and citations verified against the source text with their exact page.
+- Streamed answers over server-sent events (`POST /chats/{id}/messages/stream`), through the same `chat.ask` as the plain route. The web UI shows the answer as it is written.
+- Up to three follow-up suggestions per turn, which the UI offers as one-click questions. On the evals, 108 of 108 suggestions asked come back answered.
 - Metrics: `GET /metrics/documents` and `GET /metrics/processing`, each figure read at request time from the one table that records it.
 - Per-client rate limits on upload and ask.
 - Evals: `python -m docvault.evals` scores retrieval, citations, refusals and insights separately on a fixed broker case set, and calibrates the relevance gate. Results are in `docs/evals.md`.
@@ -195,7 +233,8 @@ Known limits:
 
 - On the fake provider, the answer step often quotes a neighbouring passage: citation accuracy is 7 of 34 facts while retrieval finds 21 of 34. Broker-worded questions that share few words with the text are refused by the gate (`docs/evals.md` lists each).
 - The fake gate threshold (0.184) has a margin of 0.003 on each side on the eval set. The OpenAI threshold (0.25) is uncalibrated; `docs/evals.md` gives the command that calibrates it once a key is set.
-- The OpenAI backends are tested against canned HTTP responses only. They have not run against the live API.
+- The OpenAI backends are tested against canned HTTP responses only. They have not run against the live API. Streaming is tested against canned server-sent chunks only.
+- The fake provider simulates a model's pacing when it streams: it sends its finished answer a word at a time, 25 ms apart in compose (`FAKE_STREAM_DELAY_MS`). The plain route has no delay.
 - Insights read a page prefix that fits 240,000 characters. Longer documents report partial coverage; map-reduce over the rest is not built.
 - A key fact is checked only for its quote being on the cited page, not for its value appearing in the quote.
 - Insights rerun only when the prompt version changes, not when the model or the provider key changes.
