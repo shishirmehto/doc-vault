@@ -274,6 +274,8 @@ def test_openai_insufficient_quota_is_not_retried(db):
                                           "code": "context_length_exceeded"}}), "context_length_exceeded", False),
     (httpx2.Response(403, json={"error": {"message": "Forbidden", "type": "invalid_request_error", "code": None}}),
      "http_403", False),
+    (httpx2.Response(200, json={**CHAT_COMPLETION, "choices": []}), "malformed_response", True),
+    (httpx2.Response(200, json={**CHAT_COMPLETION, "usage": None}), "malformed_response", True),
 ])
 def test_openai_failures_map_to_the_retry_policy(db, failure, code, retryable):
     client = openai_client(failure)
@@ -320,6 +322,22 @@ def test_openai_embedding_failures_are_retried_like_chat_failures(db):
     assert live.embed(["a policy"], purpose=Purpose.EMBED_QUERY, owner=OWNER) == [[0.5, 0.5]]
     assert rows(db, "ok, error_code, input_tokens") == [(False, "server_error", 0), (True, None, 3)]
     assert sleeps == [0.5]
+
+
+@pytest.mark.parametrize(("vectors", "usage"), [
+    (1, {"prompt_tokens": 6, "total_tokens": 6}),   # fewer vectors than texts
+    (2, None),
+])
+def test_an_embedding_response_short_of_vectors_or_usage_is_a_provider_error(db, vectors, usage):
+    client = openai_client(httpx2.Response(200, json={
+        "object": "list", "model": "text-embedding-3-small",
+        "data": [{"object": "embedding", "index": i, "embedding": float32(0.5, 0.5)} for i in range(vectors)],
+        "usage": usage}))
+    live = gateway(db, ScriptedChat([]), embedder=OpenAIEmbedder(client, "text-embedding-3-small", 2), ai_max_attempts=1)
+
+    assert failure_of(lambda: live.embed(["a policy", "an endorsement"], purpose=Purpose.EMBED_QUERY, owner=OWNER)) == (
+        unavailable("malformed_response", True))
+    assert rows(db, "ok, error_code") == [(False, "malformed_response")]
 
 
 def test_fake_chat_answers_from_its_handler_and_counts_words_as_tokens(db):

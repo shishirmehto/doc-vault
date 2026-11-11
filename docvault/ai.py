@@ -322,6 +322,8 @@ class OpenAIChat:
                 timeout=timeout_s)
         except (APIConnectionError, APIStatusError) as exc:
             raise _provider_error(exc) from exc
+        if not response.choices or response.usage is None:
+            raise ProviderError("malformed_response", retryable=True)
         message, usage = response.choices[0].message, response.usage
         cached = usage.prompt_tokens_details and usage.prompt_tokens_details.cached_tokens
         return (RawCompletion(message.content or "", message.refusal),
@@ -342,6 +344,8 @@ class OpenAIEmbedder:
                                                       dimensions=self.dimensions, timeout=timeout_s)
         except (APIConnectionError, APIStatusError) as exc:
             raise _provider_error(exc) from exc
+        if len(response.data) != len(texts) or response.usage is None:
+            raise ProviderError("malformed_response", retryable=True)
         ordered = sorted(response.data, key=lambda item: item.index)
         return [item.embedding for item in ordered], Tokens(response.usage.prompt_tokens, 0, 0)
 
