@@ -158,6 +158,12 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .pick input { accent-color: var(--carbon); margin: 0; translate: 0 2px; }
 .pick-name { font-weight: 600; overflow-wrap: anywhere; }
 .pick[data-disabled] .pick-name { font-weight: 400; }
+.recent-chats { max-width: 72ch; padding-bottom: var(--s8); }
+.recent-chats h2 { font-size: var(--t-body); font-weight: 600; margin: 0 0 var(--s2); }
+.recent-chats ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.recent-chats li { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); padding: var(--s2) 0; border-bottom: 1px solid var(--rule); }
+.recent-chats a { color: var(--carbon); overflow-wrap: anywhere; }
+.recent-chats time { color: var(--graphite); font-size: var(--t-meta); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pick-meta { font-size: var(--t-meta); color: var(--graphite); font-variant-numeric: tabular-nums; text-align: right; }
 .start-refusal, .ask-failed { border-left: 3px solid var(--stamp); padding-left: var(--s3); display: grid; gap: var(--s2); }
 .start-refusal { color: var(--stamp); }

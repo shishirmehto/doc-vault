@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { api } from "@/api/client";
 import type { ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Selection, Turn, TurnCite } from "@/api/domain";
+import { useFetched } from "@/hooks/useFetched";
 import { threads, useThread } from "@/hooks/useThread";
 import { canAsk, type Ask, type Thread } from "@/lib/thread";
 import { explain, listNames, NOT_FOUND, usageLine } from "@/copy";
@@ -18,7 +20,11 @@ type Props = {
 
 /** One chat: its turns oldest first, the question in flight, the composer, and the cited page beside them. */
 export function ChatScreen({ id, docs, pane, push, replace }: Props) {
-  const { thread, documents } = useThread(id);
+  const thread = useThread(id);
+  const header = useFetched(`chat:${id}`, () => api.chat(id)).result;
+  const documents = header?.ok ? header.value.documents : null;
+  const deleted = documents?.filter((d) => d.deleted).map((d) => d.filename) ?? [];
+  const accepting = deleted.length === 0;
   const [draft, setDraft] = useState("");
   const turns = thread?.history.kind === "loaded" ? thread.history.turns : null;
   const open = (cite: TurnCite) => push({ kind: "chat", chat: id, pane: { cite, page: null } });
@@ -31,7 +37,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   }, [turnCount, phase]);
 
   const send = () => {
-    if (!thread || !canAsk(thread) || draft.trim() === "") return;
+    if (!thread || !canAsk(thread) || !accepting || draft.trim() === "") return;
     void threads.ask(id, draft);
     setDraft("");
   };
@@ -41,13 +47,13 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
       <main className="centre" ref={column}>
         <section className="chat" aria-label="Chat">
           <header className="chat-header">
-            <h1>{documents ? `Asking ${listNames(documents.map((d) => d.filename))}` : "Chat"}</h1>
+            <h1>{documents ? `Asking ${listNames(documents.map((d) => (d.deleted ? `${d.filename} (deleted)` : d.filename)))}` : "Chat"}</h1>
             <p className="quiet">
-              {documents
-                ? "Answers come only from these documents, and each one cites the page it used. "
-                : turns
-                  ? "This browser did not start this chat, so its documents are not listed. Its answers still cite their pages. "
-                  : null}
+              {!documents
+                ? null
+                : accepting
+                  ? "Answers come only from these documents, and each one cites the page it used. "
+                  : `${listNames(deleted)} ${deleted.length === 1 ? "was" : "were"} deleted, so this chat takes no more questions. Its answers still cite their pages. `}
               <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
             </p>
           </header>
@@ -68,9 +74,15 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
             value={draft}
             onChange={setDraft}
             onSend={send}
-            ready={thread !== undefined && canAsk(thread)}
+            ready={thread !== undefined && canAsk(thread) && accepting}
             label="Ask"
-            placeholder={documents ? `Ask about ${documents.length === 1 ? documents[0].filename : `these ${documents.length} documents`}` : "Ask a question"}
+            placeholder={
+              !accepting
+                ? "Start a new chat to ask more"
+                : documents
+                  ? `Ask about ${documents.length === 1 ? documents[0].filename : `these ${documents.length} documents`}`
+                  : "Ask a question"
+            }
           />
         </section>
       </main>

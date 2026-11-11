@@ -80,7 +80,7 @@ export function Workspace() {
         onRetry={retry}
       />
       {selection.kind === "none" && (
-        <NewChat docs={docs} onStarted={(chat) => push({ kind: "chat", chat, pane: null })} />
+        <NewChat docs={docs} onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
       )}
       {selection.kind === "chat" && (
         <ChatScreen key={selection.chat} id={selection.chat} docs={docs} pane={selection.pane} push={push} replace={replace} />
