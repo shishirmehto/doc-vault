@@ -66,7 +66,12 @@
         if ((outX && !scrolls(s.overflowX)) || (outY && !scrolls(s.overflowY))) return false;
         // A scroller smaller than the control can never show all of it.
         if (a.clientWidth + TOLERANCE < box.width || a.clientHeight + TOLERANCE < box.height) return false;
-        box = r;
+        // The scroller can bring the control anywhere into its own box, so from here on the question is whether a
+        // control-sized box inside it can be seen. Taking the whole scroller would call a sideways-scrolling table
+        // taller than its column unreachable, though the column scrolls each row of it into view.
+        const left = Math.max(r.left, Math.min(box.left, r.right - box.width));
+        const top = Math.max(r.top, Math.min(box.top, r.bottom - box.height));
+        box = { left, top, right: left + box.width, bottom: top + box.height, width: box.width, height: box.height };
       } else if ((outX && clips(s.overflowX)) || (outY && clips(s.overflowY))) {
         return false;
       }
