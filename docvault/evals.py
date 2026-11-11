@@ -11,7 +11,7 @@ through chat.start and chat.ask. Each number is scored apart, so it shows where 
   citation accuracy    a citation of the expected document has the expected page and quotes the fact
   not-found accuracy   an out-of-scope question comes back not_found
   key-fact grounding   insights facts kept / (kept + dropped), and the planted facts they recall
-  cost and latency     from llm_calls by purpose, and p95 turn latency from chat_turns
+  cost and latency     metrics.processing_stats over the run: llm_calls by purpose and model, chat_turns p95
 
 --calibrate prints each turn's best vector similarity and all-terms match instead, then the relevance-gate
 threshold that maximises answerable-passed plus out-of-scope-refused. Results go to docs/evals.md
@@ -31,8 +31,7 @@ from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from decimal import Decimal
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import NamedTuple
@@ -43,11 +42,11 @@ from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import BaseModel
 
-from . import ai, chat, db, documents, insights
+from . import ai, chat, db, documents, insights, metrics
 from .ai import ChatBackend, EmbedBackend, RawCompletion, Tokens, Vector
 from .config import Settings, load_settings
 from .context import BlobStore, Ctx
-from .domain import Citation, DocumentId, InsightsReady, Purpose, Source, TurnOutcome
+from .domain import Citation, DocumentId, InsightsReady, Source, TurnOutcome
 from .pages import collapse_whitespace, locate_quote
 from .prompts import Prompt
 
@@ -193,26 +192,14 @@ def _ratio(flags: Iterable[bool]) -> Ratio:
 
 
 @dataclass(frozen=True, slots=True)
-class Spend:
-    purpose: Purpose
-    calls: int
-    errors: int
-    input_tokens: int
-    output_tokens: int
-    cost_usd: Decimal | None    # None when every call was unpriced
-    unpriced: int
-    p95_ms: int
-
-
-@dataclass(frozen=True, slots=True)
 class Report:
     setup: str
     threshold: float            # the gate threshold the run used
     turns: tuple[TurnResult, ...]
     grounding: Ratio            # insights key facts kept / (kept + dropped)
     recall: Ratio               # planted facts found in a kept key fact's quote, same document and page
-    spend: tuple[Spend, ...]
-    turn_p95_ms: int
+    spend: tuple[metrics.AIUsage, ...]
+    turn_p95_ms: int | None
 
     @property
     def retrieval(self) -> Ratio:
@@ -360,11 +347,12 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
                     tuple(candidates)))
 
         grounding, recall = _insights(pool, ids, case_set.planted)
-        spend, turn_p95 = _spend(pool)
+        stats = metrics.processing_stats(pool, timedelta(days=1))   # the database holds this run only
         chat_models = ", ".join(f"{tier} {model}" for tier, model in ctx.ai.chat.models.items())
         setup = (f"chat {ctx.ai.chat.provider} ({chat_models}); embeddings {ctx.ai.embedder.provider} "
                  f"{ctx.ai.embed_model}")
-        return Report(setup, ctx.ai.min_similarity, tuple(turns), grounding, recall, spend, turn_p95)
+        return Report(setup, ctx.ai.min_similarity, tuple(turns), grounding, recall,
+                      tuple(stats.ai.by_purpose_and_model), stats.chat.latency_ms.p95)
 
 
 def _insights(pool: db.Db, ids: Mapping[str, DocumentId], planted: Sequence[Fact]) -> tuple[Ratio, Ratio]:
@@ -379,26 +367,6 @@ def _insights(pool: db.Db, ids: Mapping[str, DocumentId], planted: Sequence[Fact
     recall = _ratio(any((name, page) == (fact.document, fact.page) and collapse_whitespace(fact.text) in quote
                         for name, page, quote in kept) for fact in planted)
     return Ratio(len(kept), len(kept) + dropped), recall
-
-
-_SPEND_SQL = """
-SELECT purpose, count(*) AS calls, count(*) FILTER (WHERE NOT ok) AS errors,
-       sum(input_tokens) AS input_tokens, sum(output_tokens) AS output_tokens,
-       sum(cost_usd) AS cost_usd, count(*) - count(cost_usd) AS unpriced,
-       percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_ms
-FROM llm_calls GROUP BY purpose
-"""
-_TURN_P95_SQL = ("SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM finished_at - started_at)"
-                 " * 1000) AS p95_ms FROM chat_turns")
-
-
-def _spend(pool: db.Db) -> tuple[tuple[Spend, ...], int]:
-    with pool.connection() as conn:
-        rows = {Purpose(row["purpose"]): row for row in conn.execute(_SPEND_SQL)}
-        turn_p95 = conn.execute(_TURN_P95_SQL).fetchone()["p95_ms"]
-    spend = tuple(Spend(purpose, r["calls"], r["errors"], r["input_tokens"], r["output_tokens"], r["cost_usd"],
-                        r["unpriced"], round(r["p95_ms"])) for purpose in Purpose if (r := rows.get(purpose)))
-    return spend, round(turn_p95)
 
 
 # ------------------------------------------------------------------ output
@@ -426,11 +394,11 @@ def render(report: Report, command: str) -> str:
         f"| Best gate threshold on this set | {_fit_line(fit_gate(turns))} |",
         f"| p95 turn latency | {report.turn_p95_ms} ms |",
         "",
-        "| Purpose | Calls | Errors | Input tokens | Output tokens | Cost (USD) | p95 latency |",
-        "|---|---|---|---|---|---|---|",
-        *(f"| {s.purpose} | {s.calls} | {s.errors} | {s.input_tokens} | {s.output_tokens} | "
-          f"{'unpriced' if s.cost_usd is None else s.cost_usd}{f' ({s.unpriced} unpriced)' if s.unpriced else ''} | "
-          f"{s.p95_ms} ms |" for s in report.spend),
+        "| Purpose | Model | Calls | Errors | Input tokens | Output tokens | Cost (USD) | p95 latency |",
+        "|---|---|---|---|---|---|---|---|",
+        *(f"| {u.purpose} | {u.model} | {u.calls} | {u.errors} | {u.input_tokens} | {u.output_tokens} | "
+          f"{u.cost_usd}{f' ({u.unpriced_calls} unpriced)' if u.unpriced_calls else ''} | "
+          f"{u.latency_ms.p95} ms |" for u in report.spend),
         "",
         "| Case | Question | Interpreted as | Outcome | Retrieval | Citation |",
         "|---|---|---|---|---|---|",
