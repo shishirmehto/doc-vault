@@ -1,7 +1,10 @@
 // Every sentence the interface writes about state. The backend's own messages are shown verbatim.
 
-import type { ApiError, ComparedDoc, CompareRow, Doc, NotFoundReason, PageUnit, Turn } from "./api/domain.ts";
+import type {
+  ApiError, ComparedDoc, CompareRow, Doc, NotFoundReason, PageUnit, Summary, SummaryLength, SummaryOptions, SummaryTone, Turn,
+} from "./api/domain.ts";
 import { COMPARE_MAX, COMPARE_MIN, FOCUS_MAX } from "./lib/compare.ts";
+import { LENGTHS, LISTED } from "./lib/summary.ts";
 import type { Ask } from "./lib/thread.ts";
 
 type InFlight = Extract<Ask, { phase: "asking" | "streaming" }>;
@@ -176,7 +179,8 @@ export const COMPARE_FOCUS_HINT = "Compare uses the question as its focus. Leave
 
 export const COMPARE_FULL = `A comparison takes at most ${COMPARE_MAX} documents. Untick one to choose another.`;
 
-export const COMPARE_LONG = "A long document can take up to a minute and a half.";
+/** After a few seconds of a comparison or a rewritten summary. */
+export const LONG_DOCUMENT = "A long document can take up to a minute and a half.";
 
 export const NO_COMPARISONS = "No comparisons yet. Tick two documents above to make the first.";
 
@@ -246,3 +250,72 @@ export function deletedColumns(filenames: readonly string[]): string {
     ? `${filenames[0]} was deleted. Its values stay, but its pages can no longer be opened.`
     : `${listNames(filenames)} were deleted. Their values stay, but their pages can no longer be opened.`;
 }
+
+// ------------------------------------------------------------------ rewritten summaries
+
+export const REWRITE_LEAD =
+  "Write it again at another length, about one topic, or for your client. Every quote is checked against its page.";
+
+/** "About 150 words." */
+export function wordTarget(length: SummaryLength): string {
+  return `About ${LENGTHS[length].words} words.`;
+}
+
+const TONE_PHRASE: Record<SummaryTone, string> = { plain: "plain", formal: "formal", client: "for your client" };
+
+/** "Brief, for your client, about “deductibles”" or "Standard, plain": a summary's heading and its line in a list. */
+export function rewriteOptions({ length, focus, tone }: SummaryOptions): string {
+  return `${LENGTHS[length].label}, ${TONE_PHRASE[tone]}${focus === null ? "" : `, about “${focus}”`}`;
+}
+
+const TONE_CLAUSE: Record<SummaryTone, string> = { plain: "", formal: " in a formal tone", client: " for your client" };
+
+/** "Writing a brief summary for your client about “deductibles”." */
+export function rewriting({ length, focus, tone }: SummaryOptions): string {
+  return `Writing a ${LENGTHS[length].label.toLowerCase()} summary${TONE_CLAUSE[tone]}${focus === null ? "" : ` about “${focus}”`}.`;
+}
+
+/** Said once a rewrite lands. Also the line on a summary the backend had stored. */
+export const REWRITTEN = "Rewritten.";
+export const SAVED_EARLIER = "Saved earlier, no new model call.";
+
+export const NO_SOURCES =
+  "None of its quotes could be found on the page it cited, so this summary has no sources. Treat it as an overview.";
+
+export function droppedSources(n: number): string {
+  return n === 1
+    ? "One more quote was left out because it was not on the page it cited."
+    : `${n} more quotes were left out because they were not on the pages they cited.`;
+}
+
+const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
+const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+
+/** "14:03" today, "14:03 on 11 Nov" before, in the reader's time zone. */
+export function clockTime(at: Date, now: Date): string {
+  return at.toDateString() === now.toDateString() ? TIME.format(at) : `${TIME.format(at)} on ${DAY.format(at)}`;
+}
+
+/** "Written by fake-chat with prompt summary-v1 at 14:03." */
+export function rewrittenBy(summary: Summary, now: Date): string {
+  return `Written by ${summary.writtenBy.model} with prompt ${summary.writtenBy.promptVersion} at ${clockTime(summary.createdAt, now)}.`;
+}
+
+/** "Source 2 of 4: show the passage on p. 2". */
+export function sourceLabel(index: number, count: number, pageLabel: string): string {
+  return `Source ${index + 1} of ${count}: show the passage on ${pageLabel}`;
+}
+
+export const LOADING_REWRITES = "Loading earlier rewrites.";
+export const NO_REWRITES =
+  "No rewrites yet. The first one you make is kept here, and asking again with the same options reuses it.";
+export const MORE_REWRITES = `Showing the newest ${LISTED}.`;
+
+/** A URL cites a summary the list does not hold: past the newest the list reads, or none of this document's. */
+export function rewriteNotListed(complete: boolean): string {
+  return complete
+    ? "This document has no rewritten summary with that link, so there is no passage to open."
+    : `This rewritten summary is not among the document's newest ${LISTED}, so its passage cannot be opened here.`;
+}
+
+export const NO_SUCH_SOURCE = "This rewritten summary has no source with that number, so there is no passage to open.";

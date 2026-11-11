@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseComparison, parseComparisonPage, parseDocumentPage } from "./api/parse.ts";
+import { parseComparison, parseComparisonPage, parseDocumentPage, parseSummary } from "./api/parse.ts";
 import type { ApiError, DocumentId } from "./api/domain.ts";
 import {
-  cannotOpen, compareBlocked, compareFailed, comparing, deletedColumns, differCount, docMeta, droppedCells, fieldCount,
-  focusLine, notReadyNames, partlyRead,
+  cannotOpen, clockTime, compareBlocked, compareFailed, comparing, deletedColumns, differCount, docMeta, droppedCells,
+  droppedSources, fieldCount, focusLine, notReadyNames, partlyRead, rewriteOptions, rewriting, rewrittenBy, sourceLabel,
+  wordTarget,
 } from "./copy.ts";
 
 const page = JSON.parse(readFileSync(new URL("./api/fixtures/documents-page.json", import.meta.url), "utf8"));
@@ -125,4 +126,40 @@ test("a failed comparison says it was not made, why, and which documents are not
     [cannotOpen({ filename: "a.txt", deleted: true }), cannotOpen({ filename: "a.txt", deleted: false })],
     ["a.txt was deleted, so its pages can no longer be opened.", "a.txt is no longer in the vault."],
   );
+});
+
+test("a rewritten summary's options read as its heading, and as the sentence while it is written", () => {
+  const options = [
+    { length: "brief", focus: "deductibles", tone: "client" },
+    { length: "standard", focus: null, tone: "plain" },
+    { length: "detailed", focus: null, tone: "formal" },
+    { length: "standard", focus: "named insured", tone: "formal" },
+  ] as const;
+  assert.deepEqual(options.map(rewriteOptions), [
+    "Brief, for your client, about “deductibles”",
+    "Standard, plain",
+    "Detailed, formal",
+    "Standard, formal, about “named insured”",
+  ]);
+  assert.deepEqual(options.map(rewriting), [
+    "Writing a brief summary for your client about “deductibles”.",
+    "Writing a standard summary.",
+    "Writing a detailed summary in a formal tone.",
+    "Writing a standard summary in a formal tone about “named insured”.",
+  ]);
+  assert.deepEqual((["brief", "standard", "detailed"] as const).map(wordTarget), ["About 60 words.", "About 150 words.", "About 300 words."]);
+});
+
+test("a rewritten summary's notes: quotes left out, each source's tab, and when it was written", () => {
+  assert.deepEqual([droppedSources(1), droppedSources(3)], [
+    "One more quote was left out because it was not on the page it cited.",
+    "3 more quotes were left out because they were not on the pages they cited.",
+  ]);
+  assert.equal(sourceLabel(1, 4, "p. 2"), "Source 2 of 4: show the passage on p. 2");
+
+  const now = new Date(2026, 10, 12, 18, 30);
+  assert.deepEqual([clockTime(new Date(2026, 10, 12, 14, 3), now), clockTime(new Date(2026, 10, 11, 9, 5), now)], ["14:03", "09:05 on 11 Nov"]);
+  const body = JSON.parse(readFileSync(new URL("./api/fixtures/summary-201-brief-focus-client.json", import.meta.url), "utf8")).body;
+  const summary = { ...parseSummary(body), createdAt: new Date(2026, 10, 12, 14, 3) };
+  assert.equal(rewrittenBy(summary, now), "Written by fake-chat with prompt summary-v1 at 14:03.");
 });

@@ -7,7 +7,7 @@ import { useFetched } from "@/hooks/useFetched";
 import { compareRuns, useCompareRun } from "@/hooks/useCompareRun";
 import { COMPARE_MAX, FOCUS_MAX, columns, withDoc, worthRetrying, type CompareRequest, type Run } from "@/lib/compare";
 import {
-  COMPARE_FULL, COMPARE_LONG, NO_COMPARISONS, NOTHING_TO_COMPARE, compareBlocked, compareFailed, comparing,
+  COMPARE_FULL, LONG_DOCUMENT, NO_COMPARISONS, NOTHING_TO_COMPARE, compareBlocked, compareFailed, comparing,
   differCount, documentNames, explain, focusLine, formatWhen, notReadyNames,
 } from "@/copy";
 import { InAppLink } from "./InAppLink";
@@ -116,7 +116,7 @@ function RunStatus({ run }: { run: Extract<Run, { phase: "running" }> }) {
     <div className="run" aria-busy="true" ref={box}>
       <div role="status">
         <p className="quiet">{comparing(run.request.documents)}</p>
-        {long && <p className="quiet">{COMPARE_LONG}</p>}
+        {long && <p className="quiet">{LONG_DOCUMENT}</p>}
       </div>
       <div className="progress indeterminate"><span /></div>
     </div>
