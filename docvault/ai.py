@@ -2,8 +2,8 @@
 
 Callers get one object, AI, with two methods: embed() and complete(). Behind
 them sit provider choice, batching, timeouts, retries with backoff,
-JSON-schema output, validation with one repair turn (none for ONE_ATTEMPT
-purposes), cost pricing, and one llm_calls row per provider attempt (failed
+JSON-schema output, validation with one repair turn (none for a comparison),
+cost pricing, and one llm_calls row per provider attempt (failed
 attempts included). No module can reach a provider without going through
 here, so token and cost accounting cannot be skipped.
 """
@@ -66,10 +66,12 @@ MAX_RETRY_WAIT_S = 10.0
 # tries. Retrying them here too would multiply the attempts and hold both while sleeping.
 BACKGROUND = frozenset({Purpose.EMBED_CHUNKS, Purpose.INSIGHTS})
 
-# One provider call per request: no gateway retry and no repair turn. Invalid output fails as retryable, and the caller
-# sends the request again: Celery for BACKGROUND, the UI's Try again for a comparison. A comparison is synchronous and
-# the web proxy gives up at 120 s, so one call of at most compare_timeout_s lets the API answer first.
+# One provider attempt per call, with no gateway retry: Celery retries BACKGROUND, and the UI's Try again a comparison.
 ONE_ATTEMPT = BACKGROUND | {Purpose.COMPARE}
+
+# No repair turn either. A comparison is synchronous and the web proxy gives up at 120 s, so one call of at most
+# compare_timeout_s lets the API answer first; its invalid output fails as retryable, for the UI's Try again.
+NO_REPAIR = frozenset({Purpose.COMPARE})
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,7 +236,7 @@ class AI:
 
         Output that fails validation gets one repair turn, which shows the model
         its JSON and the errors. A refusal or a second failure raises
-        VaultError(AI_BAD_OUTPUT). A ONE_ATTEMPT purpose gets no repair turn: its
+        VaultError(AI_BAD_OUTPUT). A NO_REPAIR purpose gets no repair turn: its
         invalid output raises a retryable AI_BAD_OUTPUT. A provider failure raises
         VaultError(AI_UNAVAILABLE), after the gateway's retries for interactive purposes.
         With a stream, every attempt streams its raw output into it, each one announced by
@@ -244,7 +246,7 @@ class AI:
         try:
             return _validated(output, raw)
         except ValidationError as exc:
-            if prompt.purpose in ONE_ATTEMPT:
+            if prompt.purpose in NO_REPAIR:
                 raise VaultError(ErrorCode.AI_BAD_OUTPUT, "The model returned invalid output.", retryable=True) from exc
             repair = prompts.repair(prompt, raw.text, _describe(exc))
         try:
