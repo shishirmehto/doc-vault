@@ -214,7 +214,7 @@ export function focusLine(focus: string | null): string {
 
 /** "12 fields, 5 differ". */
 export function fieldCount(rows: readonly CompareRow[]): string {
-  if (rows.length === 0) return "No field was found in more than one document";
+  if (rows.length === 0) return "No fields were found to compare";
   const differ = rows.filter((r) => r.differs).length;
   const fields = `${rows.length} ${rows.length === 1 ? "field" : "fields"}`;
   return `${fields}, ${differ === 0 ? "none differ" : `${differ} ${differ === 1 ? "differs" : "differ"}`}`;

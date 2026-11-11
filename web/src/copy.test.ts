@@ -63,7 +63,7 @@ test("a comparison's header names its documents, its focus and how many fields d
       "Focus: deductible",
       "12 fields, 5 differ",
       "1 field, 1 differs",
-      "No field was found in more than one document",
+      "No fields were found to compare",
       "1 field, none differ",
     ],
   );

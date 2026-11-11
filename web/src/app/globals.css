@@ -87,6 +87,12 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
   border-radius: var(--r-control); background: var(--sheet); color: var(--ink); font-size: var(--t-meta);
   box-shadow: 0 12px 28px -18px rgb(28 38 49 / 0.45);
 }
+/* Below 427 px the button wraps to a second row of the bar, under the fixed top above, so the note goes below
+   whichever is lower, the bar's first row or the button. */
+@supports (anchor-name: --a) {
+  button.service { anchor-name: --service; }
+  .service-note { position-anchor: --service; top: calc(max(var(--topbar), anchor(bottom)) + var(--s1)); }
+}
 
 .button {
   border: 0; border-radius: var(--r-control); background: var(--carbon); color: var(--sheet);

@@ -119,7 +119,7 @@ function ComparisonView({ c, docs, active, only: inUrl, onOpen, onOnly, onNew }:
         </p>
         {c.droppedCells > 0 && <p className="quiet">{droppedCells(c.droppedCells)}</p>}
         {c.documents.filter((d) => d.pagesRead < d.pageCount).map((d) => <p key={d.id} className="quiet">{partlyRead(d, unit(d))}</p>)}
-        {deleted.length > 0 && <p className="quiet">{deletedColumns(deleted)}</p>}
+        {deleted.length > 0 && c.rows.length > 0 && <p className="quiet">{deletedColumns(deleted)}</p>}
         <p className="written-by">Compared by {c.model} with prompt {c.promptVersion}.</p>
       </header>
       {c.rows.length > 0 && (
