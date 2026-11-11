@@ -115,3 +115,20 @@ test("only the latest turn's suggestions are offered, and only while nothing is 
   assert.deepEqual(offered(run([lost, { type: "history", result: { ok: true, value: [deductible, exclusions] } }], asking)), []);
   assert.deepEqual(offered(started), []);
 });
+
+test("a broken stream keeps checking history until its turn lands, and offers a retry only on the final read", () => {
+  const checking = run([
+    { type: "answered", turn: deductible },
+    { type: "sent", question: perOccurrence.question },
+    ...progress({ kind: "stage", stage: "answering" }, { kind: "text", text: "Property" }),
+    lost,
+  ]);
+  const early = (value: readonly Turn[]): ThreadEvent => ({ type: "history-early", result: { ok: true, value } });
+  const notYet = run([early([deductible]), { type: "history-early", result: { ok: false, error: { kind: "offline" } } }], checking);
+  assert.deepEqual([notYet.ask.phase, canAsk(notYet)], ["checking", false]);
+  assert.deepEqual(seen(step(notYet, early([deductible, perOccurrence]))), {
+    ask: "idle",
+    turns: ["What is the property damage deductible?", "Does it apply per occurrence?"],
+  });
+  assert.equal(step(notYet, { type: "history", result: { ok: true, value: [deductible] } }).ask.phase, "failed");
+});

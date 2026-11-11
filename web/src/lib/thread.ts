@@ -31,6 +31,11 @@ export type Thread = { history: History; ask: Ask };
 
 export type ThreadEvent =
   | { type: "history"; result: Result<readonly Turn[]> }
+  /**
+   * History read while a stream that broke mid-answer may still be landing its turn on the server. It
+   * adopts the turn when it is there, and otherwise keeps checking: only a "history" event offers a retry.
+   */
+  | { type: "history-early"; result: Result<readonly Turn[]> }
   | { type: "sent"; question: string }
   | { type: "progress"; progress: AskProgress }
   /** No text has arrived for a while. hooks/useThread.ts times it. */
@@ -58,7 +63,9 @@ export function offered(t: Thread): readonly string[] {
 export function step(t: Thread, e: ThreadEvent): Thread {
   switch (e.type) {
     case "history":
-      return afterHistory(t, e.result);
+      return afterHistory(t, e.result, true);
+    case "history-early":
+      return afterHistory(t, e.result, false);
     case "sent":
       return canAsk(t) ? { ...t, ask: { phase: "asking", question: e.question } } : t;
     case "progress":
@@ -100,16 +107,17 @@ function afterProgress(ask: Ask, p: AskProgress): Ask {
   }
 }
 
-function afterHistory(t: Thread, result: Result<readonly Turn[]>): Thread {
+function afterHistory(t: Thread, result: Result<readonly Turn[]>, final: boolean): Thread {
   const ask = t.ask;
   if (ask.phase !== "checking") {
     if (result.ok) return { ...t, history: { kind: "loaded", turns: result.value } };
     return t.history.kind === "loaded" ? t : { ...t, history: { kind: "failed", error: result.error } };
   }
-  if (!result.ok) return { ...t, ask: { ...ask, phase: "unconfirmed" } };
+  if (!result.ok) return final ? { ...t, ask: { ...ask, phase: "unconfirmed" } } : t;
   const known = new Set(turnsOf(t).map((turn) => turn.id));
   const recorded = result.value.some((turn) => !known.has(turn.id) && turn.question === ask.question);
-  return { history: { kind: "loaded", turns: result.value }, ask: recorded ? IDLE : { ...ask, phase: "failed" } };
+  if (recorded) return { history: { kind: "loaded", turns: result.value }, ask: IDLE };
+  return final ? { history: { kind: "loaded", turns: result.value }, ask: { ...ask, phase: "failed" } } : t;
 }
 
 function turnsOf(t: Thread): readonly Turn[] {

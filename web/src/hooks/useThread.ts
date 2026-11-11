@@ -8,6 +8,12 @@ import { canAsk, opening, started, step, type Thread, type ThreadEvent } from "@
 const MAX_QUESTION = 2000;
 /** Text that stops arriving for this long means the answer is written and its citations are being checked. */
 const QUIET_MS = 300;
+/**
+ * When a stream breaks after it started, the server still finishes the answer and stores the turn, which
+ * can take a model's whole answer time. History is read after each of these waits (30 s in all) before a
+ * retry is offered, so a retry does not record the question twice.
+ */
+const LANDING_WAITS_MS = [0, 1000, 2000, 4000, 8000, 15000];
 
 /**
  * Asks live here, outside React, keyed by chat id: the first question is sent from the screen that
@@ -46,7 +52,9 @@ class Threads {
     const thread = this.threads.get(id);
     if (question === "" || !thread || !canAsk(thread)) return;
     this.dispatch(id, { type: "sent", question });
+    let started = false;
     const result = await api.askStream(id, question, (progress) => {
+      started = true;
       this.dispatch(id, { type: "progress", progress });
       if (progress.kind === "text") this.quietAfter(id, QUIET_MS);
     });
@@ -56,6 +64,7 @@ class Threads {
       return;
     }
     this.dispatch(id, { type: "ask-failed", error: result.error });
+    if (started && result.error.kind === "offline") await this.awaitLanding(id);
     await this.loadHistory(id);
   }
 
@@ -66,6 +75,14 @@ class Threads {
 
   dismiss(id: ChatId): void {
     this.dispatch(id, { type: "dismissed" });
+  }
+
+  private async awaitLanding(id: ChatId): Promise<void> {
+    for (const wait of LANDING_WAITS_MS) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      this.dispatch(id, { type: "history-early", result: await api.history(id) });
+      if (this.threads.get(id)?.ask.phase !== "checking") return;
+    }
   }
 
   private quietAfter(id: ChatId, ms: number): void {

@@ -68,7 +68,9 @@ The metrics screen has two halves, documents and processing. Each half loads and
 
 Questions go to `POST /chats/{id}/messages/stream`. While the answer streams, the turn shows its provisional text, without citations, under a status line: "Searching N documents", "Writing the answer", and "Checking citations" once no text has arrived for 300 ms. A `reset` event clears the text. The `turn` event replaces it with the grounded answer. The latest turn's suggestions show as buttons only while no question is in flight, and a click asks one at once.
 
-When an ask fails, the chat reads its history again before it offers Try again. If the question was recorded after all, the turn is shown and nothing is asked twice. An `error` event and a stream that ends without its `turn` take this path too. The second case is a connection dropped mid-answer, and the backend still stores the turn.
+When an ask fails, the chat reads its history again before it offers Try again. If the question was recorded after all, the turn is shown and nothing is asked twice. An `error` event and a stream that ends without its `turn` take this path too. The second case is a connection dropped mid-answer, and the backend still stores the turn, possibly seconds later. So after a stream that had started breaks, the chat reads history again after 0, 1, 2, 4, 8 and 15 seconds and adopts the turn as soon as it appears. It offers Try again only when the turn is still missing after that. In a browser check, a stream cut after its first delta was adopted from the 1-second read, with no Try again.
+
+While an answer streams, the column follows its text so the sticky question box never covers it, until the reader scrolls up.
 
 ## Tests and fixtures
 
