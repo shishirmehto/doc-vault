@@ -82,6 +82,7 @@ class DocumentOut(BaseModel):
     page_basis: PageBasis | None
     empty_pages: list[int] = []
     insights_status: InsightsStatus
+    document_type: str | None          # the insights' document type, once insights are ready
     error: ErrorBody | None            # only when status == "failed"
     failed_stage: Literal["parse", "embed"] | None   # only when status == "failed": the step that failed
     processing_ms: int | None
@@ -334,7 +335,9 @@ def document_out(doc: Document) -> DocumentOut:
         id=doc.id, filename=doc.filename, kind=doc.kind, size_bytes=doc.size_bytes, status=status, progress=progress,
         pages=parsed and parsed.page_count, page_basis=parsed and parsed.basis,
         empty_pages=list(parsed.empty_pages) if parsed else [],
-        insights_status=insights_status, error=error, failed_stage=failed_stage, processing_ms=doc.processing_ms,
+        insights_status=insights_status,
+        document_type=doc.insights.body.document_type if isinstance(doc.insights, InsightsReady) else None,
+        error=error, failed_stage=failed_stage, processing_ms=doc.processing_ms,
         created_at=doc.created_at,
         links={"self": f"/documents/{doc.id}", "insights": f"/documents/{doc.id}/insights",
                "pages": f"/documents/{doc.id}/pages/{{n}}"})

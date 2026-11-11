@@ -69,7 +69,10 @@ def test_indexing_enqueues_analysis_and_the_policy_gets_verified_insights(client
     assert [fact for fact in body["key_facts"] if fact["quote"] == limit["text"]] == [{
         "label": "Each Occurrence Limit", "value": "$1,000,000", "page": limit["page"], "page_label": "p. 2",
         "quote": limit["text"], "page_url": f"/documents/{doc_id}/pages/2"}]
-    assert client.get(f"/documents/{doc_id}").json()["insights_status"] == "ready"
+    read = client.get(f"/documents/{doc_id}").json()
+    assert (read["insights_status"], read["document_type"]) == ("ready", "policy")
+    listed = client.get("/documents").json()["items"]
+    assert [(d["id"], d["document_type"]) for d in listed] == [(str(doc_id), "policy")]
     with ctx.db.connection() as conn:
         ledger = conn.execute("SELECT document_id, prompt_name, prompt_version, model, ok FROM llm_calls"
                               " WHERE purpose = 'insights'").fetchall()

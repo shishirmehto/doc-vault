@@ -33,9 +33,10 @@ def test_upload_poll_reupload_and_open_a_page(client, ctx):
     documents.run_index(ctx, DocumentId(UUID(doc_id)))
 
     ready = client.get(f"/documents/{doc_id}").json()
-    assert {k: ready[k] for k in ("status", "pages", "page_basis", "empty_pages", "insights_status", "error")} == {
+    assert {k: ready[k] for k in ("status", "pages", "page_basis", "empty_pages", "insights_status", "document_type",
+                                  "error")} == {
         "status": "ready", "pages": 7, "page_basis": "physical", "empty_pages": [], "insights_status": "pending",
-        "error": None}
+        "document_type": None, "error": None}
     assert ready["links"]["pages"] == f"/documents/{doc_id}/pages/{{n}}"
 
     again = post(client, POLICY)
