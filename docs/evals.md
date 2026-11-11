@@ -1,6 +1,6 @@
 # Evals
 
-`docvault/evals.py` asks a fixed set of broker questions about the three sample documents and scores retrieval, answers, refusals and insights separately, so a miss shows the step where it happened. It also compares the policy with its renewal quote and scores the comparison. The case set is `evals/cases.yaml`, and the expected values come from `samples/facts.yaml`.
+`docvault/evals.py` asks a fixed set of broker questions about the three sample documents and scores retrieval, answers, refusals and insights separately, so a miss shows the step where it happened. It also compares the policy with its renewal quote and scores the comparison, and summarises each sample at each length and scores the summaries' sources. The case set is `evals/cases.yaml`, and the expected values come from `samples/facts.yaml`.
 
 ## Run the evals
 
@@ -42,6 +42,7 @@ Each answerable turn names one or more expected facts. A comparison names one fa
 | Cell grounding | Comparison cells kept, over kept plus dropped. `compare.ground` keeps a filled cell only when its quote is on the page it cites, so every kept cell is grounded by construction. Like key-fact grounding, this says how often the model cited the wrong page or misquoted. |
 | Difference recall | The comparison case is built in code from `samples/facts.yaml`, not from `cases.yaml`, whose hash is frozen. It compares the policy with the renewal quote, with no focus. Each entry under `changes` (general aggregate limit, medical expense limit, property damage deductible, premium) counts when one row has `differs` true, its policy cell is on the planted page with the planted text inside its quote and its value inside the planted text, and its quote cell likewise. The value check stops a row whose long quote runs on into a neighbouring fact from matching that fact. A change found only as two rows, or with a cell on the wrong page, is a miss. |
 | Equal fields kept equal | The same match for each entry under `unchanged` (each occurrence limit), which must come back with `differs` false. It catches a comparison that marks every row as different. |
+| Summary source grounding | Each of the three samples is summarised once at each length (brief, standard, detailed), with no focus and the plain tone. For each length, sources kept over kept plus dropped, summed over the samples. `summaries.ground` keeps a source only when its quote is on the page it cites, so this says how often the model cited the wrong page or misquoted. The fake quotes its own passages, so on the fake it shows that every passage it picks is found on its page, DOCX sections included. |
 | Gate rows | A turn passes the gate when one chunk holds every query term or its best vector similarity reaches `min_similarity`. "Refused" here means refused by the gate. An out-of-scope turn that passes can still come back `not_found` from the answer step. |
 | Cost and latency | `metrics.processing_stats`, the reader behind `GET /metrics/processing`: `llm_calls` grouped by purpose and model (calls, failed calls, tokens, cost, p95 `latency_ms`), and p95 turn latency over `chat_turns.finished_at - started_at`. Every row in the eval database belongs to the run. Under the fake, latency measures Postgres and Python, not a model. |
 
@@ -95,7 +96,7 @@ Read that margin as a warning, not a result. The fake embedder hashes words, so 
 **Reading the retrieval number.** Every retrieval miss in the results below is a gate refusal: the case table marks each one `gate`. When a question passes the gate, the expected fact is among the answer step's sources every time (21 of 21 on this run). So under the fake provider the weak step is the gate, which hashes words and cannot match a broker's wording to the document's, not retrieval or ranking. Citation misses are a separate step: the fake answer quotes the sentence that shares the most words with the question, which is often not the planted fact.
 
 <!-- results:start -->
-Run 2026-11-11 at commit bb6c159: `uv run python -m docvault.evals --out docs/evals.md`
+Run 2026-11-11 at commit a3da53e: `uv run python -m docvault.evals --out docs/evals.md`
 
 Provider: chat fake (main fake-chat, small fake-chat); embeddings fake fake-hash-1536; gate min_similarity 0.184.
 
@@ -112,18 +113,20 @@ Provider: chat fake (main fake-chat, small fake-chat); embeddings fake fake-hash
 | Cell grounding (comparison cells kept / kept + dropped) | 24/24 (100%) |
 | Difference recall (planted changes found as a differing row, both cells quoting the fact) | 3/4 (75%) |
 | Equal fields kept equal (planted unchanged fields found as a row that does not differ) | 1/1 (100%) |
+| Summary source grounding (sources kept / kept + dropped, three samples, by length) | brief 6/6 (100%), standard 12/12 (100%), detailed 18/18 (100%) |
 | Gate at 0.184: answerable passed, out-of-scope refused | 18/28 (64%) passed, 15/16 (94%) refused |
 | Best gate threshold on this set | 0.184, 33/44 turns on the right side; nearest similarity passed 0.187 (+0.003), nearest refused 0.181 (-0.003) |
-| p95 turn latency | 21 ms |
+| p95 turn latency | 17 ms |
 
 | Purpose | Model | Calls | Errors | Input tokens | Output tokens | Cost (USD) | p95 latency |
 |---|---|---|---|---|---|---|---|
 | answer | fake-chat | 127 | 0 | 246532 | 3457 | 0.000000 | 5 ms |
 | compare | fake-chat | 1 | 0 | 2292 | 169 | 0.000000 | 1 ms |
 | condense | fake-chat | 116 | 0 | 15151 | 670 | 0.000000 | 0 ms |
-| embed_chunks | fake-hash | 3 | 0 | 2731 | 0 | 0.000000 | 2 ms |
+| embed_chunks | fake-hash | 3 | 0 | 2731 | 0 | 0.000000 | 1 ms |
 | embed_query | fake-hash | 152 | 0 | 993 | 0 | 0.000000 | 0 ms |
 | insights | fake-chat | 3 | 0 | 3096 | 296 | 0.000000 | 1 ms |
+| summary | fake-chat | 9 | 0 | 9207 | 334 | 0.000000 | 2 ms |
 
 Comparison of sample-cgl-policy.pdf with sample-renewal-quote.pdf, no focus:
 
