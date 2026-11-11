@@ -82,7 +82,7 @@ Read that margin as a warning, not a result. The fake embedder hashes words, so 
 ## Results
 
 <!-- results:start -->
-Run 2026-11-11 at commit 848d4ea-dirty: `uv run python -m docvault.evals --out docs/evals.md`
+Run 2026-11-11 at commit ec87246: `uv run python -m docvault.evals --out docs/evals.md`
 
 Provider: chat fake (main fake-chat, small fake-chat); embeddings fake fake-hash-1536; gate min_similarity 0.184.
 
@@ -97,15 +97,15 @@ Provider: chat fake (main fake-chat, small fake-chat); embeddings fake fake-hash
 | Key-fact recall (planted facts in a kept key fact) | 12/28 (43%) |
 | Gate at 0.184: answerable passed, out-of-scope refused | 18/28 (64%) passed, 15/16 (94%) refused |
 | Best gate threshold on this set | 0.184, 33/44 turns on the right side; nearest similarity passed 0.187 (+0.003), nearest refused 0.181 (-0.003) |
-| p95 turn latency | 7 ms |
+| p95 turn latency | 5 ms |
 
-| Purpose | Calls | Errors | Input tokens | Output tokens | Cost (USD) | p95 latency |
-|---|---|---|---|---|---|---|
-| embed_chunks | 3 | 0 | 2731 | 0 | 0.000000 | 1 ms |
-| embed_query | 44 | 0 | 428 | 0 | 0.000000 | 0 ms |
-| insights | 3 | 0 | 3096 | 296 | 0.000000 | 1 ms |
-| condense | 8 | 0 | 965 | 105 | 0.000000 | 0 ms |
-| answer | 19 | 0 | 36099 | 646 | 0.000000 | 1 ms |
+| Purpose | Model | Calls | Errors | Input tokens | Output tokens | Cost (USD) | p95 latency |
+|---|---|---|---|---|---|---|---|
+| answer | fake-chat | 19 | 0 | 36099 | 646 | 0.000000 | 2 ms |
+| condense | fake-chat | 8 | 0 | 965 | 105 | 0.000000 | 0 ms |
+| embed_chunks | fake-hash | 3 | 0 | 2731 | 0 | 0.000000 | 1 ms |
+| embed_query | fake-hash | 44 | 0 | 428 | 0 | 0.000000 | 0 ms |
+| insights | fake-chat | 3 | 0 | 3096 | 296 | 0.000000 | 1 ms |
 
 | Case | Question | Interpreted as | Outcome | Retrieval | Citation |
 |---|---|---|---|---|---|
