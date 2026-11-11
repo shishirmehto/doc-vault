@@ -5,7 +5,7 @@ The Next.js app on the `web` service shows the vault in a browser. A user upload
 ## Sub-features
 
 - `ui-upload` uploads picked or dropped files, at most three at a time. A duplicate shows "Already in the vault" and an unsupported file shows the API's message.
-- `ui-status` shows each document with a three-part stage bar, polled until it settles. A failed document shows its reason and "Retry anyway".
+- `ui-status` shows each document with a three-part stage bar, kept current by the live event stream (see `live-status.md`). A failed document shows its reason and "Retry anyway".
 - `ui-insights` shows the summary, tags and key facts, each with its page. A long document shows its coverage ("Based on the first N of M sections").
 - `ui-chat` starts a chat from ticked ready documents, or from "Ask about this document", and shows cited answers with numbered sources, "Read as" for follow-ups, and a not-found state.
 - `ui-chat-stream` shows the answer as it is written, under a status line ("Searching 2 documents", "Writing the answer", "Checking citations"), then swaps in the cited answer.

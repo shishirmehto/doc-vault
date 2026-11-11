@@ -62,4 +62,5 @@ A clean result does not prove that text does not wrap where it should not, or th
 | [insights.md](insights.md) | `insights-ready`, `insights-grounded`, `insights-coverage`, `insights-fail-isolated` |
 | [chat-with-citations.md](chat-with-citations.md) | `chat-start`, `chat-not-ready`, `chat-cited-answer`, `chat-follow-up`, `chat-multi-doc`, `chat-not-found`, `chat-history` |
 | [metrics.md](metrics.md) | `metrics-documents`, `metrics-processing` |
+| [live-status.md](live-status.md) | `live-stream`, `live-cap`, `live-resync`, `live-ui`, `live-paused` |
 | [web-ui.md](web-ui.md) | `ui-upload`, `ui-status`, `ui-insights`, `ui-chat`, `ui-chat-stream`, `ui-suggestions`, `ui-citation-open`, `ui-metrics`, `ui-delete`, `ui-find`, `ui-missing`, `ui-layout` |

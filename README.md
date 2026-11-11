@@ -97,6 +97,18 @@ curl -s -X POST $API/documents/$DOC/retry
 curl -s -X DELETE $API/documents/$DOC
 ```
 
+`GET /events/documents` streams live document status as server-sent events, so a client sees every upload, stage change, retry and delete without polling. Each event is about one document whose `GET /documents/{id}` body may have changed:
+
+- `document`, data: that body, read after the change committed.
+- `deleted`, data `{"id": "..."}`: the document is gone.
+- `resync`, data `{}`: events may have been missed, so read the list again. The server sends it after its database listener reconnects, after a failed read, and to a client more than 1000 events behind.
+
+The stream opens with the comment `: connected` and sends `: keepalive` after 15 s with nothing else to send. Past 100 open streams on one API process it answers 503 `too_many_streams` with `Retry-After: 5`.
+
+```bash
+curl -N $API/events/documents
+```
+
 ### Chat
 
 `POST /chats` starts a chat over one or more ready documents. The set is fixed for the chat's life.
@@ -222,6 +234,7 @@ Built:
 - Insights: title, type, summary, tags and key facts. A key fact is kept only when its quote is on the page it cites, and `coverage` reports how much of a long document was read.
 - Chat: multi-document, follow-ups rewritten into standalone queries, hybrid retrieval (vector and full text fused by reciprocal rank, with a per-document quota), a relevance gate, and citations verified against the source text with their exact page.
 - Streamed answers over server-sent events (`POST /chats/{id}/messages/stream`), through the same `chat.ask` as the plain route. The web UI shows the answer as it is written.
+- Live document status over server-sent events (`GET /events/documents`). Postgres triggers send a NOTIFY on every commit that changes what `GET /documents/{id}` returns. One listener per API process reads each changed document once per 100 ms burst and sends it to every open stream. The web UI updates its document list from the stream and polls only while the stream is down.
 - Up to three follow-up suggestions per turn, which the UI offers as one-click questions. On the evals, 108 of 108 suggestions asked come back answered.
 - Metrics: `GET /metrics/documents` and `GET /metrics/processing`, each figure read at request time from the one table that records it.
 - Per-client rate limits on upload and ask.
@@ -242,6 +255,10 @@ Known limits:
 - After an embedding-model change, chats answer only from documents already re-embedded until reconcile finishes.
 - Rate limits are per API process and per client address. Behind a proxy, such as the web UI's, every user shares the proxy's address.
 - Gateway retries have no jitter, and Celery's retry countdown (2 to 32 seconds) ignores the provider's Retry-After header.
+- Live status runs one database listener per API process. Each process reads a changed document once, whatever the number of streams it serves. A deployment with several API processes holds one listener per process and fans out the same way. Each process takes at most 100 streams.
+- Postgres drops notifications while the listener is disconnected. After it reconnects, every stream gets `resync` and the web UI reads the list again.
+- An open event stream never ends by itself, so stopping the API gives requests 5 s (`--timeout-graceful-shutdown 5` in compose) and then cancels them. Uvicorn logs that cancellation as an error.
+- In the web UI, a document older than the newest 100, opened by its link, does not update live. While the stream is down and nothing in the list is processing, changes from elsewhere show when the stream reconnects, at most 30 s later.
 - Chats cannot be deleted.
 - A delete racing an upload of the same bytes can delete the blob that the new row needs.
 - An upload sent without Content-Length is read in full into a temporary file before its size is checked, so the limit bounds what is stored, not what a client can send.
