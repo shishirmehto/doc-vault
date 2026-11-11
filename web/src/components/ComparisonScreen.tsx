@@ -9,7 +9,7 @@ import { useFetched } from "@/hooks/useFetched";
 import { cellAt, columnVersion, visibleRows } from "@/lib/compare";
 import { cellView } from "@/lib/comparisonPane";
 import {
-  NONE_DIFFER, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, partlyRead,
+  NONE_DIFFER, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, partlyRead, withVersion,
 } from "@/copy";
 import { InAppLink } from "./InAppLink";
 import { MissingComparison } from "./Missing";
@@ -102,7 +102,9 @@ function ComparisonView({ c, docs, active, only: inUrl, onOpen, onOnly, onNew }:
   return (
     <section className="comparison" aria-labelledby="comparison-title">
       <header className="comparison-header">
-        <h1 id="comparison-title">{comparing(c.documents)}</h1>
+        <h1 id="comparison-title">
+          {comparing(c.documents.map((d) => ({ ...d, filename: withVersion(d.filename, columnVersion(c.documents, d)) })))}
+        </h1>
         <p className="quiet">
           {focusLine(c.focus)}. {fieldCount(c.rows)}.{" "}
           <InAppLink className="text-button" to={{ kind: "compare", with: null }} onFollow={onNew}>New comparison</InAppLink>

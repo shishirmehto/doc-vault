@@ -364,5 +364,10 @@ export function versionCompareBlocked(doc: Doc, other: Doc, running: boolean): s
   return null;
 }
 
+/** "terms.txt (version 2)", or the bare filename when no version is named. */
+export function withVersion(filename: string, version: number | null): string {
+  return version === null ? filename : `${filename} (version ${version})`;
+}
+
 /** The delete dialog's word on the family, for a document that has other versions. */
 export const OTHER_VERSIONS_STAY = "Its other versions stay in the vault, with their numbers.";

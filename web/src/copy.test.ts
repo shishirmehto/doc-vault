@@ -6,7 +6,7 @@ import type { ApiError, DocumentId } from "./api/domain.ts";
 import {
   cannotOpen, clockTime, compareBlocked, compareFailed, comparing, deletedColumns, differCount, docMeta, droppedCells,
   fieldCount, focusLine, newerVersion, notReadyNames, otherVersions, partlyRead, rewriteOptions, rewriting, rewrittenBy,
-  sourceLabel, sourcesNote, versionCompareBlocked, versionLine, versionMeta, wordTarget,
+  sourceLabel, sourcesNote, versionCompareBlocked, versionLine, versionMeta, withVersion, wordTarget,
 } from "./copy.ts";
 
 const page = JSON.parse(readFileSync(new URL("./api/fixtures/documents-page.json", import.meta.url), "utf8"));
@@ -193,6 +193,7 @@ test("the version line, its links' label, an earlier version's note, the Version
     "A newer version of this document, version 2, is in the vault.",
   ]);
   assert.equal(versionMeta(v1), "phase-e-fixture-terms.txt. Uploaded 12 Nov, 10:41. Ready.");
+  assert.deepEqual([withVersion("terms.txt", 2), withVersion("terms.txt", null)], ["terms.txt (version 2)", "terms.txt"]);
   assert.deepEqual(
     [versionCompareBlocked(v2, v1, false), versionCompareBlocked(v1, parsing, false), versionCompareBlocked(v2, failed, false),
       versionCompareBlocked(parsing, v1, false), versionCompareBlocked(v2, v1, true)],

@@ -12,7 +12,7 @@ import { useVersions } from "@/hooks/useVersions";
 import type { CompareRequest } from "@/lib/compare";
 import { familyOf, hasVersions } from "@/lib/versions";
 import { citedFact, citedSource, summarySourceView } from "@/lib/summaryPane";
-import { docMeta, explain, formatMs, statusLine, unitName, versionCompareBlocked } from "@/copy";
+import { docMeta, explain, formatMs, statusLine, unitName, versionCompareBlocked, withVersion } from "@/copy";
 import { DeleteDocument } from "./DeleteDocument";
 import { MissingDocument } from "./Missing";
 import { FailureNote } from "./Rail";
@@ -74,7 +74,7 @@ export function DocumentScreen({
   const compareVersions = () => {
     if (!other || compareWhy) return;
     const columns = [doc, other].sort((a, b) => a.version.number - b.version.number);
-    onCompareVersions({ documents: columns.map((d) => ({ id: d.id, filename: `${d.filename} (version ${d.version.number})` })), focus: null });
+    onCompareVersions({ documents: columns.map((d) => ({ id: d.id, filename: withVersion(d.filename, d.version.number) })), focus: null });
   };
 
   return (
