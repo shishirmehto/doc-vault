@@ -22,6 +22,9 @@ export const api = {
    */
   deleteDocument: (id: DocumentId): Promise<Result<null>> => call("DELETE", `/documents/${id}`, () => null),
 
+  /** One document, for a link to one older than the newest 100 the list holds. */
+  document: (id: DocumentId): Promise<Result<Doc>> => call("GET", `/documents/${id}`, P.parseDoc),
+
   /** Re-runs whichever stage failed: indexing for a failed document, analysis for failed insights. */
   retry: (id: DocumentId): Promise<Result<Doc>> => call("POST", `/documents/${id}/retry`, P.parseDoc),
 

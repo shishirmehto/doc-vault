@@ -33,6 +33,12 @@ export function Rail({ docs, complete, connection, uploads, selected, onFiles, o
   const drop = useFileDrop(onFiles);
   const [query, setQuery] = useState("");
   const [choice, setChoice] = useState<boolean | null>(null);
+  // A new upload hands the fold back to the default, which is open while uploads are listed.
+  const [uploadCount, setUploadCount] = useState(uploads.length);
+  if (uploads.length !== uploadCount) {
+    setUploadCount(uploads.length);
+    if (uploads.length > uploadCount) setChoice(null);
+  }
   const open = choice ?? (docs !== null && (docs.length === 0 || uploads.length > 0));
   const finding = docs !== null && docs.length > FIND_AFTER;
   const shown = docs && finding ? findDocs(docs, query) : docs;
@@ -46,11 +52,12 @@ export function Rail({ docs, complete, connection, uploads, selected, onFiles, o
       <button type="button" className="rail-toggle" aria-expanded={open} aria-controls="rail-body" onClick={() => setChoice(!open)}>
         Documents{docs ? ` (${docs.length})` : ""}
       </button>
+      {/* Outside the fold, so a phone shows it with the list folded away. */}
+      {connection && <p className="rail-note rail-alert" data-tone="failed" role="alert">{explain(connection)} Retrying.</p>}
       <div className="rail-body" id="rail-body">
         <DropZone dragging={drop.dragging} onFiles={onFiles} />
-        {connection && <p className="rail-note" data-tone="failed">{explain(connection)} Retrying.</p>}
         {docs === null && !connection && <RailSkeleton />}
-        {finding && <FindField value={query} onChange={setQuery} />}
+        {finding && <FindField label="Find a document" value={query} onChange={setQuery} />}
         <ul className="rows">
           {uploads.map((u) => (
             <UploadRow key={u.key} upload={u} onDismiss={() => onDismiss(u.key)} onOpen={openDoc} />

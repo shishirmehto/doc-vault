@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { startTransition, useCallback, useState } from "react";
 import { api } from "@/api/client";
-import type { ApiError, Doc, DocumentId } from "@/api/domain";
+import type { ApiError, Doc, DocumentId, Result } from "@/api/domain";
 import { useSelection } from "@/hooks/useSelection";
 import { usePolled } from "@/hooks/usePolled";
 import { useUploads } from "@/hooks/useUploads";
+import { useFetched } from "@/hooks/useFetched";
 import { useHealth } from "@/hooks/useHealth";
 import { isSettled } from "@/lib/lifecycle";
 import { threads } from "@/hooks/useThread";
@@ -76,24 +77,33 @@ export function Workspace() {
     async (doc: Doc): Promise<ApiError | null> => {
       const result = await api.deleteDocument(doc.id);
       if (!result.ok && !(result.error.kind === "refused" && result.error.status === 404)) return result.error;
-      patch((list) => ({ ...list, docs: list.docs.filter((d) => d.id !== doc.id) }));
-      setDeleted(doc.filename);
-      push({ kind: "none" });
+      // Replace, so Back does not land on the deleted document. Next applies the URL in a transition, so the
+      // list changes in one too; otherwise one frame shows the document page with its document gone.
+      replace({ kind: "none" });
+      startTransition(() => {
+        patch((list) => ({ ...list, docs: list.docs.filter((d) => d.id !== doc.id) }));
+        setDeleted(doc.filename);
+      });
       return null;
     },
-    [patch, push],
+    [patch, replace],
   );
 
   const docs = documents.data?.docs ?? null;
+  const complete = documents.data?.complete ?? true;
   const selectedDoc = selection.kind === "doc" ? selection.doc : null;
-  const current = selectedDoc && docs ? (docs.find((d) => d.id === selectedDoc) ?? null) : null;
+  const listed = selectedDoc && docs ? (docs.find((d) => d.id === selectedDoc) ?? null) : null;
+  // The list holds the newest 100. A link to an older document reads that one document instead.
+  const lookUp = selectedDoc !== null && docs !== null && !complete && listed === null ? selectedDoc : null;
+  const older = useFetched(`older:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
+  const current = listed ?? (older.result?.ok ? older.result.value : null);
   const paneOpen = selection.kind === "chat" ? selection.pane !== null : current !== null && selection.kind === "doc" && selection.pane !== null;
 
   return (
     <div className="workspace" data-pane={paneOpen ? "open" : "closed"}>
       <Rail
         docs={docs}
-        complete={documents.data?.complete ?? true}
+        complete={complete}
         connection={documents.error}
         uploads={uploads.uploads}
         selected={selectedDoc}
@@ -120,7 +130,7 @@ export function Workspace() {
           key={selection.doc}
           id={selection.doc}
           doc={current}
-          loading={docs === null}
+          loading={docs === null || (lookUp !== null && older.result === null)}
           pane={selection.pane}
           push={push}
           replace={replace}

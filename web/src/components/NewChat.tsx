@@ -7,7 +7,7 @@ import { selectionQuery } from "@/api/parse";
 import { useFetched } from "@/hooks/useFetched";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { threads } from "@/hooks/useThread";
-import { CHAT_MAX_DOCUMENTS, FIND_AFTER, chooseAll, findDocs } from "@/lib/find";
+import { CHAT_MAX_DOCUMENTS, FIND_AFTER, allChosen, chooseAll, findDocs } from "@/lib/find";
 import { docMeta, explain, listNames, statusLine } from "@/copy";
 import { Composer } from "./Composer";
 import { DropZone } from "./DropZone";
@@ -37,7 +37,7 @@ export function NewChat({ docs, deleted, onDismiss, onOpen, onFiles }: {
   const finding = docs !== null && docs.length > FIND_AFTER;
   const shown = docs && finding ? findDocs(docs, query) : (docs ?? []);
   const shownReady = shown.filter((d) => d.lifecycle.status === "ready").map((d) => d.id);
-  const allShownChosen = shownReady.length > 0 && shownReady.every((id) => chosen.has(id));
+  const allShownChosen = allChosen(chosen, shownReady, CHAT_MAX_DOCUMENTS);
   const hiddenChosen = (scope ?? []).filter((id) => !shown.some((d) => d.id === id)).length;
   const selectAll = () => {
     const next = chooseAll(chosen, shownReady, CHAT_MAX_DOCUMENTS);
@@ -80,7 +80,7 @@ export function NewChat({ docs, deleted, onDismiss, onOpen, onFiles }: {
             <fieldset className="picker">
               <legend>Documents</legend>
               <div className="picker-tools">
-                {finding && <FindField value={query} onChange={setQuery} />}
+                {finding && <FindField label="Find a document to ask about" value={query} onChange={setQuery} />}
                 <p className="pick-count" aria-live="polite">
                   {scope === null ? "None chosen" : `${scope.length} chosen`}
                   {hiddenChosen > 0 && `, ${hiddenChosen} not shown by the search`}
