@@ -1,6 +1,6 @@
 # Doc Vault
 
-Upload documents, get cited insights, chat with them, and compare them side by side. Every answer and every compared value points at a page you can open and check.
+Upload documents, get cited insights, chat with them, compare them side by side, and rewrite a summary at the length, focus and tone a reader needs. Every answer, every compared value and every summary source points at a page you can open and check.
 
 The service is a FastAPI app with Celery workers. Postgres 16 with pgvector is the only datastore, and Redis is the Celery broker. `docs/design.md` explains the data model, the request flows, retrieval, the prompts, the assumptions and how it scales. `docs/lifecycle.md` covers the indexing state machine, and `docs/evals.md` covers answer quality.
 
@@ -211,6 +211,33 @@ curl -s $API/comparisons/$CMP
 curl -s "$API/comparisons?limit=10"
 ```
 
+### Summaries
+
+`POST /documents/{id}/summaries` writes the document's summary again for another reader and returns it. `length` is `brief`, `standard` (the default) or `detailed`, a target of about 60, 150 or 300 words. `focus`, at most 200 characters, is the reader's interest ("deductibles"). `tone` is `plain` (the default), `formal`, or `client`, which writes for the insured client and avoids broker jargon. A summary spends from the same per-client budget as asks.
+
+```bash
+curl -s $API/documents/$POLICY/summaries -H 'content-type: application/json' \
+  -d '{"length": "brief", "focus": "deductibles", "tone": "client"}'
+```
+
+The model reads the same page prefix that insights read. `text` is plain text, and `sources` holds up to 6 passages that support it, each with its `page`, `page_label` and a `quote` found on that page. A quote that is not on the page it cites is dropped and counted in `dropped_sources`. When none survives, the summary is still returned with `sources` empty, because a summary is not a fact claim. `focus` comes back normalised: trimmed, lowercased and with spaces collapsed.
+
+```json
+{"id": "...", "document_id": "...", "length": "brief", "focus": "deductibles", "tone": "client",
+ "text": "...", "sources": [{"page": 2, "page_label": "p. 2", "quote": "Property Damage Deductible $2,500 per occurrence"}],
+ "dropped_sources": 0, "model": "fake-chat", "prompt_version": "summary-v1", "cached": false, "created_at": "..."}
+```
+
+A new summary returns 201. Documents never change once stored, so each summary is kept, keyed by the document, the length, the normalised focus, the tone, the model and the prompt version. The same request again returns 200 with the stored summary and `cached: true`, and makes no model call. `cached: true` always means the response made no model call.
+
+A document that is not ready is 409 `documents_not_ready`, with the same `details.not_ready` as chats. An unknown id is 404 `document_not_found`. A length or tone outside its values, or a focus over 200 characters, is 422 `invalid_request`. The model call is one attempt of at most 90 s with no repair turn, so a provider failure is 503 `ai_unavailable` and invalid output or an empty summary is 502 `ai_bad_output`, both with `retryable: true`. Nothing is stored for either.
+
+`GET /documents/{id}/summaries` lists a document's summaries newest first, each with `cached: true`, with the same `next_cursor` paging as `GET /chats`. A summary is deleted with its document.
+
+```bash
+curl -s "$API/documents/$POLICY/summaries?limit=20"
+```
+
 ### Metrics and health
 
 `GET /metrics/documents` counts documents by status and kind, insights by status, and totals pages, chunks, bytes and failures by error code.
@@ -260,16 +287,17 @@ Built:
 - Compose stack: `api` on port 8000, `worker`, `beat`, `db` (pgvector 0.8.0 on Postgres 16), and `redis`.
 - Upload with content-hash dedupe, format detection from the file's bytes, and a 413 from the headers when Content-Length is over the limit.
 - Indexing in Celery: parse, chunk and embed, crash-safe under a per-document lock. A rerun after a crash embeds only the chunks still pending. `documents.reconcile` runs every 60 seconds. It re-enqueues stalled documents (at most 50 a tick, oldest re-enqueue first), re-embeds ready documents after the embedding model changes, and enqueues missing insights.
-- The AI gateway (`docvault/ai.py`): OpenAI and a deterministic fake, retries with backoff for chat calls, strict JSON-schema output with one repair turn (none for a comparison), and one priced `llm_calls` row per provider attempt.
+- The AI gateway (`docvault/ai.py`): OpenAI and a deterministic fake, retries with backoff for chat calls, strict JSON-schema output with one repair turn (none for a comparison or a summary), and one priced `llm_calls` row per provider attempt.
 - Insights: title, type, summary, tags and key facts. A key fact is kept only when its quote is on the page it cites, and `coverage` reports how much of a long document was read.
 - Chat: multi-document, follow-ups rewritten into standalone queries, hybrid retrieval (vector and full text fused by reciprocal rank, with a per-document quota), a relevance gate, and citations verified against the source text with their exact page.
 - Streamed answers over server-sent events (`POST /chats/{id}/messages/stream`), through the same `chat.ask` as the plain route. The web UI shows the answer as it is written.
 - Live document status over server-sent events (`GET /events/documents`). Postgres triggers send a NOTIFY on every commit that changes what `GET /documents/{id}` returns. One listener per API process reads each changed document once per 100 ms burst and sends it to every open stream. The web UI updates its document list from the stream and polls only while the stream is down.
 - Up to three follow-up suggestions per turn, which the UI offers as one-click questions. On the evals, 108 of 108 suggestions asked come back answered.
 - Side-by-side comparison (`POST /comparisons`): 2 to 5 ready documents aligned field by field in one model call. Each cell's quote is checked on the page it cites, and `differs` is computed in code. In the web UI, the Compare section, the new-chat screen and each document page start one, and every value opens its page with the quote marked. On the samples, the fake marks 3 of the 4 planted changes between the policy and its renewal quote.
+- Summary options (`POST /documents/{id}/summaries`): the document's summary written again at a length (about 60, 150 or 300 words), about a focus, and in a plain, formal or client tone, from the page prefix insights read. Up to 6 sources are each checked on the page they cite. A summary is stored by document, normalised options, model and prompt version, so asking again returns it with no model call. In the web UI, "Rewrite the summary" sits under each ready document's summary, with its earlier rewrites, and each source opens its page with the quote marked. On the fake, every source of the three samples grounds at every length (`docs/evals.md`).
 - Metrics: `GET /metrics/documents` and `GET /metrics/processing`, each figure read at request time from the one table that records it.
 - Per-client rate limits on upload and ask.
-- Evals: `python -m docvault.evals` scores retrieval, citations, refusals, insights and comparisons separately on a fixed broker case set, and calibrates the relevance gate. Results are in `docs/evals.md`.
+- Evals: `python -m docvault.evals` scores retrieval, citations, refusals, insights, comparisons and summary sources separately on a fixed broker case set, and calibrates the relevance gate. Results are in `docs/evals.md`.
 - A TLA+ model of the indexing lifecycle, checked by `formal/check.py` (`docs/lifecycle.md`).
 - `scripts/demo.sh` and `scripts/scale_probe.py`.
 
@@ -277,7 +305,7 @@ Known limits:
 
 - On the fake provider, the answer step often quotes a neighbouring passage: citation accuracy is 7 of 34 facts while retrieval finds 21 of 34. Broker-worded questions that share few words with the text are refused by the gate (`docs/evals.md` lists each).
 - The fake gate threshold (0.184) has a margin of 0.003 on each side on the eval set. The OpenAI threshold (0.25) is uncalibrated; `docs/evals.md` gives the command that calibrates it once a key is set.
-- The OpenAI backends are tested against canned HTTP responses only. They have not run against the live API. Streaming is tested against canned server-sent chunks only, and the comparison call against one canned response.
+- The OpenAI backends are tested against canned HTTP responses only. They have not run against the live API. Streaming is tested against canned server-sent chunks only, and the comparison and summary calls against canned responses.
 - The fake provider simulates a model's pacing when it streams: it sends its finished answer a word at a time, 25 ms apart in compose (`FAKE_STREAM_DELAY_MS`). The plain route has no delay.
 - Insights read a page prefix that fits 240,000 characters. Longer documents report partial coverage; map-reduce over the rest is not built.
 - A key fact is checked only for its quote being on the cited page, not for its value appearing in the quote.
@@ -295,6 +323,11 @@ Known limits:
 - Each compared document gets an even share of the 240,000-character insights budget, so five long documents are read for at most 48,000 characters each. `pages_read` says how far, and the UI says when a document was read only in part.
 - A comparison cell is checked for its quote being on the cited page, not for its value appearing in the quote. `differs` compares the values, so it trusts the model's copy of each one.
 - The fake provider aligns fields only when two or more documents give them the same label. It misses the premium change in the samples ("Total Advance Premium" and "Total Annual Premium") and leaves out fields only one document has.
-- Chats and comparisons cannot be deleted.
+- A summary runs synchronously, like a comparison: one model call of at most 90 s (`SUMMARY_TIMEOUT_S`), with no gateway retry and no repair turn, so the API answers before the web proxy's 120 s timeout. The OpenAI client applies the 90 s to each phase of the HTTP call (connect, write, read), so it bounds a normal call rather than being one wall-clock deadline. This is read from the client's request options, not measured, and it holds for comparisons too.
+- A stored summary is keyed by the document, the normalised options, the model and the prompt version. A change to the insights budget (`INSIGHTS_MAX_CHARS`) or the reasoning effort still serves summaries made under the old setting. Bump `SUMMARY_VERSION` with such a change.
+- A cache hit still spends one of the client's per-minute asks, because the rate limit runs before the route.
+- The fake's summaries are passages of the page text: 2, 4 or 8 of them after a tone's fixed opening, so they run far under the word targets (12 to 39 words on the samples). They show that each option changes the output, not how well a model writes.
+- In the web UI, a summary request belongs to its document page. A reader who leaves while it runs and asks again on return starts a second model call, which returns the summary the first one stored.
+- Chats and comparisons cannot be deleted, and a summary is deleted only with its document.
 - A delete racing an upload of the same bytes can delete the blob that the new row needs.
 - An upload sent without Content-Length is read in full into a temporary file before its size is checked, so the limit bounds what is stored, not what a client can send.
