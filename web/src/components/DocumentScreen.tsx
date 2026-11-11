@@ -6,15 +6,20 @@ import type {
   ApiError, Doc, DocumentId, Insights, KeyFact, PaneRequest, Result, Selection, SummaryId, SummaryList,
 } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
+import { useCompareRun } from "@/hooks/useCompareRun";
 import { useRewrites } from "@/hooks/useRewrites";
+import { useVersions } from "@/hooks/useVersions";
+import type { CompareRequest } from "@/lib/compare";
+import { familyOf, hasVersions } from "@/lib/versions";
 import { citedFact, citedSource, summarySourceView } from "@/lib/summaryPane";
-import { docMeta, explain, formatMs, statusLine, unitName } from "@/copy";
+import { docMeta, explain, formatMs, statusLine, unitName, versionCompareBlocked } from "@/copy";
 import { DeleteDocument } from "./DeleteDocument";
 import { MissingDocument } from "./Missing";
 import { FailureNote } from "./Rail";
 import { SourcePane, type SourceView } from "./SourcePane";
 import { StageBar } from "./StageBar";
 import { SummaryRewrite } from "./SummaryRewrite";
+import { NewerVersionNote, UploadVersion, VersionLine, VersionList } from "./Versions";
 
 type Props = {
   id: DocumentId;
@@ -28,10 +33,16 @@ type Props = {
   onAsk(id: DocumentId): Promise<ApiError | null>;
   /** Deletes it and leaves for the home screen. Resolves to the refusal, if any. */
   onDelete(doc: Doc): Promise<ApiError | null>;
+  /** Compares two versions of this document and lands on the comparison. */
+  onCompareVersions(request: CompareRequest): void;
+  /** Uploads files as the next version of this document. */
+  onUploadVersion(files: File[]): void;
 };
 
 /** The centre column for one document, and the source pane beside it. */
-export function DocumentScreen({ id, doc: current, loading, pane, push, replace, onRetry, onAsk, onDelete }: Props) {
+export function DocumentScreen({
+  id, doc: current, loading, pane, push, replace, onRetry, onAsk, onDelete, onCompareVersions, onUploadVersion,
+}: Props) {
   // A document that leaves the list, because a newer version arrived or because it was deleted, is read again on its
   // own. Until that read lands the page keeps what it showed, rather than a skeleton.
   const [last, setLast] = useState(current);
@@ -41,6 +52,9 @@ export function DocumentScreen({ id, doc: current, loading, pane, push, replace,
   const insights = useFetched(`${id}:${doc?.lifecycle.status}:${doc?.insights}`, () => api.insights(id));
   const cite = citedSource(pane);
   const rewrites = useRewrites(id, cite, () => replace({ kind: "doc", doc: id, pane: null }));
+  const versions = useVersions(doc);
+  const [listOpen, setListOpen] = useState(false);
+  const running = useCompareRun().phase === "running";
 
   if (!doc) {
     return (
@@ -53,6 +67,15 @@ export function DocumentScreen({ id, doc: current, loading, pane, push, replace,
   const openFact = (index: number) => push({ kind: "doc", doc: id, pane: { kind: "cite", cite: { kind: "fact", index }, page: null } });
   const openSource = (summary: SummaryId, index: number) =>
     push({ kind: "doc", doc: id, pane: { kind: "cite", cite: { kind: "summary", summary, index }, page: null } });
+  const openVersion = (version: DocumentId) => push({ kind: "doc", doc: version, pane: null });
+  const family = versions.kind === "loaded" ? familyOf(doc, versions.docs) : null;
+  const other = family?.compareWith ?? null;
+  const compareWhy = other && versionCompareBlocked(doc, other, running);
+  const compareVersions = () => {
+    if (!other || compareWhy) return;
+    const columns = [doc, other].sort((a, b) => a.version.number - b.version.number);
+    onCompareVersions({ documents: columns.map((d) => ({ id: d.id, filename: `${d.filename} (version ${d.version.number})` })), focus: null });
+  };
 
   return (
     <>
@@ -64,6 +87,10 @@ export function DocumentScreen({ id, doc: current, loading, pane, push, replace,
               {docMeta(doc)}
               {doc.processingMs !== null && `, processed in ${formatMs(doc.processingMs)}`}
             </p>
+            {hasVersions(doc) && <VersionLine doc={doc} versions={versions} family={family} onOpen={openVersion} />}
+            {doc.version.number < doc.version.latest && (
+              <NewerVersionNote doc={doc} newest={family?.newest ?? null} onOpen={openVersion} />
+            )}
             {doc.lifecycle.status !== "ready" && (
               <div className="doc-status">
                 <span className="row-status" data-tone={statusLine(doc).tone}>{statusLine(doc).text}</span>
@@ -82,13 +109,30 @@ export function DocumentScreen({ id, doc: current, loading, pane, push, replace,
                   </button>
                 </>
               )}
+              {other && (
+                <button type="button" className="button secondary" aria-disabled={compareWhy ? true : undefined}
+                  aria-describedby={compareWhy ? "compare-version-why" : undefined} onClick={compareVersions}>
+                  Compare with version {other.version.number}
+                </button>
+              )}
               {doc.layout && doc.lifecycle.status !== "failed" && (
                 <button type="button" className="text-button" onClick={() => push({ kind: "doc", doc: id, pane: { kind: "page", page: 1 } })}>
                   Read the {unitName(doc.layout.unit, 2)}
                 </button>
               )}
-              <DeleteDocument doc={doc} onDelete={() => onDelete(doc)} />
+              {family && family.others.length > 0 && (
+                <button type="button" className="text-button" aria-expanded={listOpen} aria-controls="version-list"
+                  onClick={() => setListOpen(!listOpen)}>
+                  Versions ({family.others.length + 1})
+                </button>
+              )}
+              <UploadVersion onFiles={onUploadVersion} />
+              <DeleteDocument doc={doc} otherVersions={(family?.others.length ?? 0) > 0} onDelete={() => onDelete(doc)} />
             </div>
+            {compareWhy && <p className="quiet" id="compare-version-why">{compareWhy}</p>}
+            {listOpen && family && family.others.length > 0 && (
+              <VersionList id="version-list" doc={doc} family={family} onOpen={openVersion} />
+            )}
           </header>
           <InsightsPanel doc={doc} result={insights.result} reload={insights.reload} activeFact={citedFact(pane)}
             onOpenFact={openFact} onRetry={() => onRetry(id)}

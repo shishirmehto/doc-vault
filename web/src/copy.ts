@@ -324,3 +324,45 @@ export function rewriteNotListed(complete: boolean): string {
 }
 
 export const NO_SUCH_SOURCE = "This rewritten summary has no source with that number, so there is no passage to open.";
+
+// ------------------------------------------------------------------ versions
+
+/** "Version 2 of 3": its number, and the family's highest number now. */
+export function versionLine(doc: Doc): string {
+  return `Version ${doc.version.number} of ${doc.version.latest}`;
+}
+
+/** What the version line says before its links to the `count` other versions, or instead of them when none is left. */
+export function otherVersions(doc: Doc, count: number): string {
+  if (count === 0) return doc.version.number > 1 ? "The earlier versions were deleted." : "";
+  const latest = doc.version.number === doc.version.latest;
+  return `${latest ? "Earlier" : "Other"} version${count === 1 ? "" : "s"}:`;
+}
+
+/** The note an earlier version opens with. `newest` is null until the family is read. */
+export function newerVersion(doc: Doc, newest: Doc | null): string {
+  return newest === null
+    ? `A newer version of this document, version ${doc.version.latest}, is in the vault.`
+    : `A newer version of this document, version ${newest.version.number}, was uploaded ${formatWhen(newest.createdAt)}.`;
+}
+
+/** When the family could not be read, in place of the links to the other versions. */
+export const VERSIONS_FAILED = "The other versions could not be listed.";
+
+/** One line of the Versions list under its number: the file it was uploaded as, when, and where it stands. */
+export function versionMeta(doc: Doc): string {
+  return `${doc.filename}. Uploaded ${formatWhen(doc.createdAt)}. ${statusLine(doc).text}.`;
+}
+
+/** Why "Compare with version N" cannot run now, or null when it can. Both versions must be ready. */
+export function versionCompareBlocked(doc: Doc, other: Doc, running: boolean): string | null {
+  if (running) return COMPARE_BUSY;
+  for (const [d, name] of [[doc, "This version"], [other, `Version ${other.version.number}`]] as const) {
+    if (d.lifecycle.status === "failed") return `${name} failed, so it cannot be compared. Retry it from its page.`;
+    if (d.lifecycle.status !== "ready") return `${name} is still being indexed. Compare opens when it is ready.`;
+  }
+  return null;
+}
+
+/** The delete dialog's word on the family, for a document that has other versions. */
+export const OTHER_VERSIONS_STAY = "Its other versions stay in the vault, with their numbers.";

@@ -2,7 +2,7 @@
 
 import { useRef, type ReactNode } from "react";
 
-const ACCEPT = ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain";
+export const ACCEPT = ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain";
 
 /** The upload target: what to drop, and a button that opens the file picker. The caller handles the drop. */
 export function DropZone({ dragging, onFiles, large = false, children }: {

@@ -2,10 +2,14 @@
 
 import { useRef, useState } from "react";
 import type { ApiError, Doc } from "@/api/domain";
-import { explain } from "@/copy";
+import { explain, OTHER_VERSIONS_STAY } from "@/copy";
 
-/** "Delete", then a modal that names the file and what happens to the chats that used it. */
-export function DeleteDocument({ doc, onDelete }: { doc: Doc; onDelete(): Promise<ApiError | null> }) {
+/** "Delete", then a modal that names the file and what happens to the chats that used it and to its other versions. */
+export function DeleteDocument({ doc, otherVersions, onDelete }: {
+  doc: Doc;
+  otherVersions: boolean;
+  onDelete(): Promise<ApiError | null>;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
@@ -34,7 +38,7 @@ export function DeleteDocument({ doc, onDelete }: { doc: Doc; onDelete(): Promis
         <h2 id={`delete-${doc.id}`}>Delete {doc.filename}?</h2>
         <p id={`delete-what-${doc.id}`}>
           The file, its pages and its summary leave the vault. Chats that used it keep their answers and citations, but
-          take no more questions.
+          take no more questions.{otherVersions && ` ${OTHER_VERSIONS_STAY}`}
         </p>
         {error && <p className="notice" data-tone="failed" role="alert">{explain(error)}</p>}
         <p className="actions">

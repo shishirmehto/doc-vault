@@ -158,6 +158,11 @@ export function Workspace() {
             onRetry={retry}
             onAsk={askAbout}
             onDelete={remove}
+            onCompareVersions={(request) => {
+              compare(request);
+              push({ kind: "compare", with: null });
+            }}
+            onUploadVersion={(files) => uploads.add(files, uploadLimit, selection.doc)}
           />
         );
       default: {

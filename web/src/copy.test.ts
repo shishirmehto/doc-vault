@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseComparison, parseComparisonPage, parseDocumentPage, parseSummary } from "./api/parse.ts";
+import { parseComparison, parseComparisonPage, parseDocumentPage, parseSummary, parseVersionList } from "./api/parse.ts";
 import type { ApiError, DocumentId } from "./api/domain.ts";
 import {
   cannotOpen, clockTime, compareBlocked, compareFailed, comparing, deletedColumns, differCount, docMeta, droppedCells,
-  fieldCount, focusLine, notReadyNames, partlyRead, rewriteOptions, rewriting, rewrittenBy, sourceLabel,
-  sourcesNote, wordTarget,
+  fieldCount, focusLine, newerVersion, notReadyNames, otherVersions, partlyRead, rewriteOptions, rewriting, rewrittenBy,
+  sourceLabel, sourcesNote, versionCompareBlocked, versionLine, versionMeta, wordTarget,
 } from "./copy.ts";
 
 const page = JSON.parse(readFileSync(new URL("./api/fixtures/documents-page.json", import.meta.url), "utf8"));
@@ -174,4 +174,34 @@ test("a rewritten summary's notes: no sources, quotes left out, each source's ta
   const now = new Date(2026, 10, 12, 18, 30);
   assert.deepEqual([clockTime(new Date(2026, 10, 12, 14, 3), now), clockTime(new Date(2026, 10, 11, 9, 5), now)], ["14:03", "09:05 on 11 Nov"]);
   assert.equal(rewrittenBy({ ...summary, createdAt: new Date(2026, 10, 12, 14, 3) }, now), "Written by fake-chat with prompt summary-v1 at 14:03.");
+});
+
+test("the version line, its links' label, an earlier version's note, the Versions list and why Compare waits", () => {
+  const body = JSON.parse(readFileSync(new URL("./api/fixtures/versions-two.json", import.meta.url), "utf8")).body;
+  const [v1, v2] = parseVersionList(body).map((d, i) => ({ ...d, createdAt: new Date(2026, 10, 12, 10, 41 + i) }));
+  assert.ok(v1 && v2);
+  const parsing = { ...v2, lifecycle: { status: "parsing" } } as const;
+  const failed = { ...v1, lifecycle: { status: "failed", stage: "parse", failure: { code: "x", message: "x", retryable: true } } } as const;
+  const alone = { ...v2, version: { ...v2.version, latest: 2 } };
+
+  assert.deepEqual([versionLine(v1), versionLine(v2)], ["Version 1 of 2", "Version 2 of 2"]);
+  assert.deepEqual([otherVersions(v2, 1), otherVersions(v2, 3), otherVersions(v1, 1), otherVersions(alone, 0)], [
+    "Earlier version:", "Earlier versions:", "Other version:", "The earlier versions were deleted.",
+  ]);
+  assert.deepEqual([newerVersion(v1, v2), newerVersion(v1, null)], [
+    "A newer version of this document, version 2, was uploaded 12 Nov, 10:42.",
+    "A newer version of this document, version 2, is in the vault.",
+  ]);
+  assert.equal(versionMeta(v1), "phase-e-fixture-terms.txt. Uploaded 12 Nov, 10:41. Ready.");
+  assert.deepEqual(
+    [versionCompareBlocked(v2, v1, false), versionCompareBlocked(v1, parsing, false), versionCompareBlocked(v2, failed, false),
+      versionCompareBlocked(parsing, v1, false), versionCompareBlocked(v2, v1, true)],
+    [
+      null,
+      "Version 2 is still being indexed. Compare opens when it is ready.",
+      "Version 1 failed, so it cannot be compared. Retry it from its page.",
+      "This version is still being indexed. Compare opens when it is ready.",
+      "A comparison is already running. Compare opens up again when it finishes.",
+    ],
+  );
 });
