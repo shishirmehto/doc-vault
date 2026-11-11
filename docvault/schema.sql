@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS chat_turns (
   CONSTRAINT answered_iff_cited CHECK ((outcome = 'answered') = (jsonb_array_length(citations) > 0))
 );
 CREATE INDEX IF NOT EXISTS chat_turns_history ON chat_turns (chat_id, started_at, id);
+CREATE INDEX IF NOT EXISTS chat_turns_window  ON chat_turns (started_at);
 
 -- Every provider call, successful or not, one row. The only place tokens and
 -- cost exist. No FKs: cost history outlives document and chat deletes.

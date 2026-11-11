@@ -7,6 +7,7 @@ OpenAPI schema honest about which fields exist in which state.
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime
 from typing import Annotated, Literal, assert_never
 from uuid import UUID
@@ -26,14 +27,19 @@ from .domain import (
     InsightsFailed,
     InsightsPending,
     InsightsReady,
+    InsightsStatus,
     InsightsUnavailable,
     Page,
     PageBasis,
     Parsing,
+    Purpose,
     Queued,
     Ready,
+    Step,
     Turn,
+    TurnOutcome,
 )
+from .metrics import DocumentStats, ProcessingStats
 
 # ------------------------------------------------------------------ shared
 
@@ -67,7 +73,7 @@ class DocumentOut(BaseModel):
     pages: int | None                  # None until parsed
     page_basis: PageBasis | None
     empty_pages: list[int] = []
-    insights_status: Literal["pending", "ready", "failed", "unavailable"]
+    insights_status: InsightsStatus
     error: ErrorBody | None            # only when status == "failed"
     processing_ms: int | None
     created_at: datetime
@@ -188,6 +194,75 @@ class HistoryOut(BaseModel):
     turns: list[TurnOut]
 
 
+# ------------------------------------------------------------------ metrics
+
+
+class PercentilesOut(BaseModel):
+    p50: int | None                    # null when the window holds no sample
+    p95: int | None
+
+
+class DocumentMetricsOut(BaseModel):
+    total: int
+    by_status: dict[DocStatus, int]
+    by_kind: dict[DocKind, int]
+    insights: dict[InsightsStatus, int]
+    pages: int
+    chunks: int
+    bytes: int
+    failures_by_code: dict[str, int]   # documents failed now, by error code
+
+
+class StepMetricsOut(BaseModel):
+    runs: int
+    ok: int
+    failed: int
+    abandoned: int                     # crashed runs, closed by the next worker
+    retries: int                       # runs with attempt > 1
+    duration_ms: PercentilesOut        # ok runs only
+    failures_by_code: dict[str, int]
+
+
+class AIUsageOut(BaseModel):
+    purpose: Purpose
+    model: str
+    calls: int
+    errors: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float                    # priced calls only
+    unpriced_calls: int
+    latency_ms: PercentilesOut
+
+
+class AIMetricsOut(BaseModel):
+    calls: int
+    errors: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    unpriced_calls: int
+    by_purpose_and_model: list[AIUsageOut]
+
+
+class ChatMetricsOut(BaseModel):
+    turns: int
+    outcomes: dict[TurnOutcome, int]
+    latency_ms: PercentilesOut
+
+
+class ProcessingMetricsOut(BaseModel):
+    window: str
+    since: datetime
+    uploaded: int                      # documents created in the window that still exist
+    indexed: int                       # documents with a successful embed in the window
+    time_to_ready_ms: PercentilesOut   # upload to first successful embed
+    queue_wait_ms: PercentilesOut      # upload to first parse start
+    steps: dict[Step, StepMetricsOut]
+    ai: AIMetricsOut
+    chat: ChatMetricsOut
+
+
 # ------------------------------------------------------------------ mapping
 
 
@@ -214,13 +289,13 @@ def document_out(doc: Document) -> DocumentOut:
             assert_never(doc.lifecycle)
     match doc.insights:
         case InsightsPending():
-            insights_status = "pending"
+            insights_status = InsightsStatus.PENDING
         case InsightsReady():
-            insights_status = "ready"
+            insights_status = InsightsStatus.READY
         case InsightsFailed():
-            insights_status = "failed"
+            insights_status = InsightsStatus.FAILED
         case InsightsUnavailable():
-            insights_status = "unavailable"
+            insights_status = InsightsStatus.UNAVAILABLE
         case _:
             assert_never(doc.insights)
     return DocumentOut(
@@ -282,3 +357,11 @@ def turn_out(turn: Turn) -> TurnOut:
 def _page_url(doc_id: UUID, page: int) -> str:
     """The GET /documents/{id}/pages/{n} route a citation links to."""
     return f"/documents/{doc_id}/pages/{page}"
+
+
+def document_metrics_out(stats: DocumentStats) -> DocumentMetricsOut:
+    return DocumentMetricsOut.model_validate(dataclasses.asdict(stats))
+
+
+def processing_metrics_out(window: str, stats: ProcessingStats) -> ProcessingMetricsOut:
+    return ProcessingMetricsOut.model_validate({"window": window, **dataclasses.asdict(stats)})

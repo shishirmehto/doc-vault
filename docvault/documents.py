@@ -48,6 +48,7 @@ from .domain import (
     InsightsFailed,
     InsightsPending,
     InsightsState,
+    InsightsStatus,
     InsightsUnavailable,
     Lifecycle,
     Page,
@@ -296,10 +297,17 @@ def reconcile(ctx: Ctx) -> int:
 
 # ------------------------------------------------------------------ reads
 
-_DOCUMENT_SQL = """
+# The insights status of documents d LEFT JOIN document_insights i. An absent row reads as pending, or as
+# unavailable when the document failed before its pages existed: parsed is the one test, as in run_analyze and
+# reconcile. metrics.py counts with the same expression.
+INSIGHTS_STATUS_SQL = """CASE WHEN i.status IS NOT NULL THEN i.status
+            WHEN d.page_count IS NULL AND d.status = 'failed' THEN 'unavailable'
+            ELSE 'pending' END"""
+
+_DOCUMENT_SQL = f"""
 SELECT d.id, d.filename, d.kind, d.size_bytes, d.status, d.page_basis, d.page_count, d.chunk_count, d.empty_pages,
        d.error_code, d.error_message, d.error_retryable, d.created_at,
-       to_jsonb(i) AS insights,
+       to_jsonb(i) AS insights, {INSIGHTS_STATUS_SQL} AS insights_status,
        CASE WHEN d.status = 'embedding' THEN
          (SELECT count(*) FROM chunks c WHERE c.document_id = d.id AND c.embedding IS NOT NULL) END AS embedded_chunks,
        CASE WHEN d.status = 'ready' THEN
@@ -386,13 +394,15 @@ def _row_to_document(row: Mapping[str, object]) -> Document:
             lifecycle = Failed(failure, parsed)
     return Document(
         id=DocumentId(row["id"]), filename=row["filename"], kind=DocKind(row["kind"]), size_bytes=row["size_bytes"],
-        lifecycle=lifecycle, insights=_insights_state(row, lifecycle), created_at=row["created_at"],
+        lifecycle=lifecycle, insights=_insights_state(row), created_at=row["created_at"],
         processing_ms=row["processing_ms"])
 
 
-def _insights_state(row: Mapping[str, object], lifecycle: Lifecycle) -> InsightsState:
-    """An absent document_insights row reads as pending, or as unavailable when the document failed before
-    its pages existed. Parsed is the one test: run_analyze and reconcile use it too."""
-    if row["insights"] is None:
-        return InsightsUnavailable() if row["page_count"] is None and isinstance(lifecycle, Failed) else InsightsPending()
-    return insights.from_row(row["insights"], row["page_count"], PageBasis(row["page_basis"]))
+def _insights_state(row: Mapping[str, object]) -> InsightsState:
+    match InsightsStatus(row["insights_status"]):
+        case InsightsStatus.PENDING:
+            return InsightsPending()
+        case InsightsStatus.UNAVAILABLE:
+            return InsightsUnavailable()
+        case InsightsStatus.READY | InsightsStatus.FAILED:
+            return insights.from_row(row["insights"], row["page_count"], PageBasis(row["page_basis"]))

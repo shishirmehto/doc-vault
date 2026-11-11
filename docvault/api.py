@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -16,7 +17,7 @@ import redis
 from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 
-from . import chat, documents, wire
+from . import chat, documents, metrics, wire
 from .config import load_settings
 from .context import Ctx, build_ctx
 from .domain import ChatId, Created, DocStatus, DocumentId, ErrorCode, Existing, VaultError
@@ -144,15 +145,20 @@ def history(chat_id: UUID, ctx: Deps, limit: Annotated[int, Query(ge=1, le=200)]
                            turns=[wire.turn_out(turn) for turn in chat.history(ctx.db, ChatId(chat_id), limit=limit)])
 
 
-@router.get("/metrics/documents")
-def document_metrics(ctx: Deps) -> dict[str, object]:
-    raise NotImplementedError
+@router.get("/metrics/documents", response_model=wire.DocumentMetricsOut)
+def document_metrics(ctx: Deps) -> wire.DocumentMetricsOut:
+    return wire.document_metrics_out(metrics.document_stats(ctx.db))
 
 
-@router.get("/metrics/processing")
-def processing_metrics(ctx: Deps, window: Annotated[str, Query(pattern=r"^\d+[hd]$")] = "24h") -> dict[str, object]:
-    """window like 1h, 24h, 7d; parsed here into a timedelta for metrics.processing_stats."""
-    raise NotImplementedError
+# At most four digits, so the timedelta never overflows; a leading zero would allow an empty window.
+Window = Annotated[str, Query(pattern=r"^[1-9]\d{0,3}[hd]$", description="Hours or days back from now: 1h, 24h, 7d.")]
+WINDOW_UNITS = {"h": "hours", "d": "days"}
+
+
+@router.get("/metrics/processing", response_model=wire.ProcessingMetricsOut)
+def processing_metrics(ctx: Deps, window: Window = "24h") -> wire.ProcessingMetricsOut:
+    span = timedelta(**{WINDOW_UNITS[window[-1]]: int(window[:-1])})
+    return wire.processing_metrics_out(window, metrics.processing_stats(ctx.db, span))
 
 
 @router.get("/health")

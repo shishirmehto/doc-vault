@@ -73,6 +73,15 @@ class Purpose(StrEnum):
     ANSWER = "answer"
 
 
+class InsightsStatus(StrEnum):
+    """What GET /documents/{id}/insights reads as. Each value names one InsightsState variant."""
+
+    PENDING = "pending"
+    READY = "ready"
+    FAILED = "failed"
+    UNAVAILABLE = "unavailable"
+
+
 class TurnOutcome(StrEnum):
     ANSWERED = "answered"
     NO_EVIDENCE = "no_evidence"        # retrieval gate refused before any LLM call
