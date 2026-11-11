@@ -57,8 +57,7 @@ class BlobStore:
                 while block := stream.read(_COPY_BLOCK):
                     size += len(block)
                     if size > max_bytes:
-                        raise VaultError(ErrorCode.FILE_TOO_LARGE,
-                                         f"The file is larger than the {max_bytes // (1024 * 1024)} MB limit.")
+                        raise too_large(max_bytes)
                     digest.update(block)
                     out.write(block)
             if size == 0:
@@ -72,6 +71,10 @@ class BlobStore:
 
     def delete(self, sha: Sha256) -> None:
         self.path(sha).unlink(missing_ok=True)
+
+
+def too_large(max_bytes: int) -> VaultError:
+    return VaultError(ErrorCode.FILE_TOO_LARGE, f"The file is larger than the {max_bytes // (1024 * 1024)} MB limit.")
 
 
 @dataclass(frozen=True, slots=True)

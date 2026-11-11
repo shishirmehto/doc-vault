@@ -110,6 +110,7 @@ class ErrorCode(StrEnum):
     DOCUMENTS_DELETED = "documents_deleted"
     NOTHING_TO_RETRY = "nothing_to_retry"
     INVALID_CURSOR = "invalid_cursor"
+    INVALID_REQUEST = "invalid_request"           # a parameter or body failed validation
 
 
 @dataclass(frozen=True, slots=True)

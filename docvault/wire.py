@@ -55,6 +55,14 @@ class ErrorOut(BaseModel):
     error: ErrorBody
 
 
+class HealthOut(BaseModel):
+    db: Literal["ok", "unreachable"]
+    redis: Literal["ok", "unreachable"]
+    ai_mode: Literal["live", "fake", "mixed"]
+    embed_model: str
+    max_upload_bytes: int              # POST /documents refuses larger files with 413 file_too_large
+
+
 # ------------------------------------------------------------------ documents
 
 
