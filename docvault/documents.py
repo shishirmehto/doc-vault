@@ -78,6 +78,7 @@ TRANSITIONS: Mapping[DocStatus, frozenset[DocStatus]] = {
 }
 
 STALE_AFTER = timedelta(minutes=2)
+INDEX_BATCH = 50
 ANALYZE_BATCH = 50
 MAX_RETRIES = 5   # Celery retries after the first attempt (tasks.py); backoff 2, 4, 8, 16, 32 s
 
@@ -260,8 +261,14 @@ def reconcile(ctx: Ctx) -> int:
     """Celery beat every 60 s. Returns how many jobs it enqueued.
 
     Converges the system after lost messages, crashes and config changes:
-      1. QUEUED, PARSING or EMBEDDING and untouched for STALE_AFTER -> jobs.index.
-         A document still being worked on costs one failed lock attempt.
+      1. QUEUED, PARSING or EMBEDDING, untouched for STALE_AFTER and not
+         re-enqueued within STALE_AFTER -> jobs.index, at most INDEX_BATCH per
+         tick, never re-enqueued first, then longest ago. A document still being
+         worked on, or still waiting in a long queue, gets one duplicate message
+         that returns at once on the lease. The batch caps those duplicates at
+         INDEX_BATCH a tick however long the backlog, and the order reaches every
+         stale document within backlog / INDEX_BATCH ticks. A crash between the
+         stamp and the enqueue delays that batch by STALE_AFTER.
       2. READY documents with chunks from another embedding model (a reviewer
          adds a provider key after a fake run) -> EMBEDDING, jobs.index.
       3. Parsed documents untouched for STALE_AFTER, with no insights row and
@@ -274,8 +281,11 @@ def reconcile(ctx: Ctx) -> int:
     in_flight = [DocStatus.QUEUED, DocStatus.PARSING, DocStatus.EMBEDDING]
     with ctx.db.connection() as conn:
         stale = [row["id"] for row in conn.execute(
-            "SELECT id FROM documents WHERE status = ANY(%s) AND updated_at < now() - %s",
-            (in_flight, STALE_AFTER))]
+            "UPDATE documents SET requeued_at = now() WHERE id IN ("
+            " SELECT id FROM documents WHERE status = ANY(%(in_flight)s) AND updated_at < now() - %(stale)s"
+            "   AND (requeued_at IS NULL OR requeued_at < now() - %(stale)s)"
+            " ORDER BY requeued_at NULLS FIRST, updated_at LIMIT %(batch)s FOR UPDATE SKIP LOCKED)"
+            " RETURNING id", {"in_flight": in_flight, "stale": STALE_AFTER, "batch": INDEX_BATCH})]
         outdated = [row["id"] for row in conn.execute(
             "SELECT id FROM documents d WHERE status = %s AND EXISTS"
             f" (SELECT 1 FROM chunks c WHERE c.document_id = d.id AND c.{_PENDING})",

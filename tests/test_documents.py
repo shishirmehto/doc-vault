@@ -184,6 +184,28 @@ def test_reconcile_requeues_stalled_documents_only(ctx):
     assert documents.get(ctx.db, fresh).lifecycle == Queued(None)
 
 
+def test_reconcile_re_enqueues_a_stale_backlog_a_batch_at_a_time_and_reaches_every_document(ctx, monkeypatch):
+    monkeypatch.setattr(documents, "INDEX_BATCH", 2)
+    oldest, older, old = (upload(ctx, path).document.id for path in (POLICY, QUOTE, SAMPLES / conftest.ENDORSEMENT))
+    with ctx.db.connection() as conn:
+        for doc_id, minutes in ((oldest, 9), (older, 8), (old, 7)):
+            conn.execute("UPDATE documents SET updated_at = now() - %s * interval '1 minute' WHERE id = %s",
+                         (minutes, doc_id))
+    ctx.jobs.indexed.clear()
+
+    ticks = []
+    for _ in range(3):
+        documents.reconcile(ctx)
+        ticks.append(set(ctx.jobs.indexed))
+        ctx.jobs.indexed.clear()
+    assert ticks == [{oldest, older}, {old}, set()]
+
+    with ctx.db.connection() as conn:   # two more minutes pass
+        conn.execute("UPDATE documents SET requeued_at = requeued_at - interval '3 minutes'")
+    assert documents.reconcile(ctx) == 2
+    assert set(ctx.jobs.indexed) == {oldest, older}
+
+
 def test_reconcile_re_embeds_a_ready_document_after_the_embedding_model_changes(ctx):
     doc_id = upload(ctx, QUOTE).document.id
     documents.run_index(ctx, doc_id)
