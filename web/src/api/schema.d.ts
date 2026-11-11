@@ -604,7 +604,7 @@ export interface components {
         StartChatIn: {
             /**
              * Document Ids
-             * @description The documents the chat answers from, fixed for its life.
+             * @description The documents the chat answers from, fixed for its life. At most 50.
              */
             document_ids: string[];
             /** Title */
