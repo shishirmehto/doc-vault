@@ -219,6 +219,22 @@ def test_a_provider_failure_stores_nothing_and_its_call_stays_billed(ctx):
     assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 0
 
 
+class BlankChat(FakeChat):
+    handlers = {"summary": lambda prompt: SummaryDraft(summary=" \n\t ", sources=[
+        SummarySourceDraft(page=2, quote="Property Damage Deductible $2,500 per occurrence")])}
+
+
+def test_a_blank_summary_is_refused_as_bad_output_stores_nothing_and_its_call_stays_billed(ctx):
+    policy = indexed(ctx, SAMPLES / POLICY)
+
+    with pytest.raises(VaultError) as raised:
+        summaries.create(with_chat(ctx, BlankChat()), policy, options())
+
+    assert raised.value.failure == Failure(ErrorCode.AI_BAD_OUTPUT, "The model returned an empty summary.", True)
+    assert [(purpose, ok) for purpose, *_, ok in ledger(ctx)] == [("summary", True)]
+    assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 0
+
+
 # ------------------------------------------------------------------ deletes
 
 
@@ -334,6 +350,19 @@ def test_a_summary_whose_sources_are_not_on_their_pages_is_kept_without_them(cli
 
     assert (created.status_code, created.json()["text"], created.json()["sources"],
             created.json()["dropped_sources"]) == (201, "The policy insures a roofer.", [], 3)
+
+
+def test_a_blank_summary_answers_502_retryable_and_the_same_options_call_the_model_again(client, ctx):
+    policy = indexed(ctx, SAMPLES / POLICY)
+    app.state.ctx = with_chat(ctx, BlankChat())
+
+    blank = [summarise(client, policy), summarise(client, policy)]
+
+    assert [(response.status_code, response.json()) for response in blank] == [(502, {"error": {
+        "code": "ai_bad_output", "message": "The model returned an empty summary.", "retryable": True,
+        "details": {}}})] * 2
+    assert [ok for ok, in ledger(ctx, "ok")] == [True, True]
+    assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 0
 
 
 def test_a_summary_spends_from_the_same_rate_limit_budget_as_an_ask(client, ctx):

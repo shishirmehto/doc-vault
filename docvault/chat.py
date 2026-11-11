@@ -110,14 +110,19 @@ def ready_documents(conn: Connection, document_ids: Sequence[DocumentId]) -> lis
     found = {row["id"]: row for row in conn.execute(
         "SELECT id, filename, status, page_basis FROM documents WHERE id = ANY(%s) FOR SHARE", (list(document_ids),))}
     if missing := [doc_id for doc_id in document_ids if doc_id not in found]:
-        raise VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"{len(missing)} of {len(document_ids)} documents do not exist.",
-                         details={"missing": [str(doc_id) for doc_id in missing]})
+        raise documents_not_found(missing, len(document_ids))
     if not_ready := [{"id": str(doc_id), "filename": found[doc_id]["filename"], "status": found[doc_id]["status"]}
                      for doc_id in document_ids if found[doc_id]["status"] != DocStatus.READY]:
         raise VaultError(ErrorCode.DOCUMENTS_NOT_READY,
                          f"{len(not_ready)} of {len(document_ids)} documents are not ready.",
                          details={"not_ready": not_ready})
     return [DocRef(doc_id, found[doc_id]["filename"], PageBasis(found[doc_id]["page_basis"])) for doc_id in document_ids]
+
+
+def documents_not_found(missing: Sequence[DocumentId], total: int) -> VaultError:
+    """DOCUMENT_NOT_FOUND (404) for the ids of `total` that do not exist, listing them."""
+    return VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"{len(missing)} of {total} documents do not exist.",
+                      details={"missing": [str(doc_id) for doc_id in missing]})
 
 
 def get(db: Db, chat_id: ChatId) -> Chat:

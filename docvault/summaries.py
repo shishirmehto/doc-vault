@@ -49,10 +49,11 @@ def create(ctx: Ctx, document_id: DocumentId, options: SummaryOptions) -> Summar
     DOCUMENTS_NOT_READY (409), as chat.start refuses them. A stored summary for
     the same key comes back with cached=True and no model call. Otherwise the
     model call is billed to the new summary's id, which exists before it, and no
-    connection or transaction is held across it. A provider failure raises
-    VaultError and stores nothing; its llm_calls rows stay. When an identical
-    request stored first, its row comes back with cached=False, because this
-    request did call the model. A document deleted during the call -> DOCUMENT_NOT_FOUND.
+    connection or transaction is held across it. A provider failure, or a blank
+    summary (a retryable AI_BAD_OUTPUT), raises VaultError and stores nothing;
+    its llm_calls rows stay. When an identical request stored first, its row
+    comes back with cached=False, because this request did call the model. A
+    document deleted during the call -> DOCUMENT_NOT_FOUND.
     """
     key = {"document_id": document_id, "length": options.length, "focus_key": options.focus or "",
            "tone": options.tone, "model": ctx.ai.chat.models["main"], "prompt_version": SUMMARY_VERSION}
@@ -67,18 +68,21 @@ def create(ctx: Ctx, document_id: DocumentId, options: SummaryOptions) -> Summar
     summary_id = SummaryId(uuid4())
     prompt = prompts.summary(doc.filename, doc.page_basis, pages, options, budget_chars=ctx.settings.insights_max_chars)
     draft = ctx.ai.complete(prompt, SummaryDraft, owner=SummaryOwner(summary_id))
+    # Stored, a blank summary would be the answer to every later request with these options.
+    if not (text := collapse_whitespace(draft.summary)):
+        raise VaultError(ErrorCode.AI_BAD_OUTPUT, "The model returned an empty summary.", retryable=True)
     sources, dropped = ground(draft, pages)
 
     with ctx.db.connection() as conn, conn.transaction():
         try:
-            conn.execute(_INSERT, {**key, "id": summary_id, "text": collapse_whitespace(draft.summary),
+            conn.execute(_INSERT, {**key, "id": summary_id, "text": text,
                                    "sources": Jsonb([{"page": s.page, "quote": s.quote} for s in sources]),
                                    "dropped_sources": dropped})
         except ForeignKeyViolation:
-            raise _deleted(document_id) from None
+            raise chat.documents_not_found([document_id], 1) from None
         row = conn.execute(_SUMMARY_SQL + _BY_KEY, key).fetchone()
     if row is None:   # an identical request stored first, and the document went before this read
-        raise _deleted(document_id)
+        raise chat.documents_not_found([document_id], 1)
     return _row_to_summary(row, cached=False)
 
 
@@ -145,12 +149,6 @@ VALUES (%(id)s, %(document_id)s, %(length)s, %(focus_key)s, %(tone)s, %(text)s, 
         %(model)s, %(prompt_version)s)
 ON CONFLICT (document_id, length, focus_key, tone, model, prompt_version) DO NOTHING
 """
-
-
-def _deleted(document_id: DocumentId) -> VaultError:
-    """The 404 chat.ready_documents gives for a missing id."""
-    return VaultError(ErrorCode.DOCUMENT_NOT_FOUND, "1 of 1 documents do not exist.",
-                      details={"missing": [str(document_id)]})
 
 
 def _row_to_summary(row: Mapping[str, Any], *, cached: bool) -> Summary:
