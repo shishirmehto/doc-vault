@@ -11,14 +11,21 @@ The Next.js app on the `web` service shows the vault in a browser. A user upload
 - `ui-chat-stream` shows the answer as it is written, under a status line ("Searching 2 documents", "Writing the answer", "Checking citations"), then swaps in the cited answer.
 - `ui-suggestions` offers the latest turn's follow-up questions as buttons. A click asks one at once.
 - `ui-citation-open` opens a key fact or a source on its page with the quote marked and focused. Back closes it, and a pasted link reopens it.
-- `ui-metrics` shows the two metrics endpoints.
+- `ui-metrics` shows the two metrics endpoints. Figures never wrap, and a table wider than its column scrolls inside its own box.
+- `ui-delete` deletes a document from its page, after a dialog that names the file, then opens the home screen with a note.
+- `ui-find` filters the rail and the new-chat picker over six documents. "Select all ready" ticks the ready documents shown.
+- `ui-missing` shows a plain sentence and "Ask your documents" for an unknown path, and for a `?doc=` or `?chat=` the vault does not have.
+- `ui-layout` keeps the question box on screen as a footer row at every height down to 500 px, folds the rail into "Documents (n)" below 760 px, and shows numbered first steps for an empty vault.
 
 ## How to get to it (user POV)
 
-- Open `http://localhost:13000` (verify stack) in a browser at 1,440 px wide or more. Narrow layouts are out of scope.
-- Rail: the drop zone, the "Choose files" button, and one link per document.
-- The document view: the "Read the pages" and "Ask about this document" buttons, and one button per key fact, named "<label>: show the passage on p. N".
-- The chat: the document checkboxes, a "Question" textbox and an "Ask" button. Each source is a button named "Source N: <file>, p. N". Suggestions are buttons named "Ask: <question>" in a group named "Suggested questions".
+- Open `http://localhost:13000` (verify stack) in a browser. Prove a UI change at 1440x785, 1024x768 and 375x812, and run `scripts/visible.js` on every screen at each size (see `README.md`).
+- Top bar: the "Doc Vault" link, the "Ask" and "Metrics" links (the current one has `aria-current`), and the service note. Under the fake provider, the note is a "Fake AI provider" button that opens its explanation.
+- Rail: the drop zone, the "Choose files" button, one link per document, and over six documents a "Find a document" searchbox. Below 760 px the rail sits behind a "Documents (n)" button with `aria-expanded`.
+- The empty home screen: three numbered steps, with a second "Choose files" button in step 1.
+- The document view: the "Read the pages" and "Ask about this document" buttons, a "Delete" button, and one button per key fact, named "<label>: show the passage on p. N".
+- The new-chat screen: the document checkboxes, "Find a document" and "Select all ready" over six documents, a "Question" textbox and an "Ask" button in the footer row.
+- The chat: a "Question" textbox and an "Ask" button in the footer row. Each source is a button named "Source N: <file>, p. N". Suggestions are buttons named "Ask: <question>" in a group named "Suggested questions".
 - The page pane: "Previous", "Next" and "Close".
 
 ## Driving it with Playwright
@@ -26,7 +33,7 @@ The Next.js app on the `web` service shows the vault in a browser. A user upload
 Preconditions:
 
 - A baseline stack launched with `web` (the default for `launch.sh`), with the three samples uploaded and ready (see `upload-and-indexing.md`).
-- The browser is at 1,440 x 900.
+- The browser is at 1440x785 for the steps below, then at 1024x768 and 375x812 for the layout checks.
 
 - **Upload.** Choose "Choose files" and pick `samples/sample-renewal-quote.pdf`. If it is new, its row moves from "Waiting to start" through "Reading pages" to "Ready". If it is a duplicate, it reads "Already in the vault".
 - **Open insights.** Click the `sample-cgl-policy.pdf` link. The URL gains `?doc=<id>`, and the view lists key facts with page chips.
@@ -38,6 +45,12 @@ Preconditions:
 - **Open a source.** Click "Source 2: sample-renewal-quote.pdf, p. 2". The URL gains `&cite=turn.<turn id>.2`, the pane shows "Page 2 of 3", and the `mark` text is `Property Damage Deductible $5,000 per occurrence`.
 - **Recent chats.** Open `/`. The new-chat screen lists the newest chats from `GET /chats`, each named by its documents. Click one and the URL becomes `?chat=<id>`.
 - **Metrics.** Click the "Metrics" link in the header. The URL becomes `?view=metrics`. The document counts match `GET /metrics/documents`, the "Questions" table matches `chat.outcomes` from `GET /metrics/processing?window=24h`, and under the fake provider the cost reads "fake provider, no cost".
+- **Delete.** Upload a throwaway file (never a sample: other runs use their ids) and start a chat on it with `call.sh`. Open the file's page, click "Delete", and check the dialog names the file and that focus is on "Cancel". Press Escape: the dialog closes and the URL is unchanged. Click "Delete", then the dialog's "Delete". The URL becomes `/`, a status note "Deleted <file>. ..." has focus, the rail no longer lists it, `GET /documents/<id>` answers 404, and the chat's header reads "Asking <file> (deleted)".
+- **Find.** With more than six documents, type `policy` into "Find a document". The rail and the picker list only `sample-cgl-policy.pdf`. Type a word nothing matches and both say so, with a "Clear" button.
+- **Question box and suggestions.** In a three-turn chat at 1440x785, 1440x600 and 1440x500, the "Question" textbox and "Ask" button are inside the viewport. Inject a 72 px fixed element on the right, then an in-flow 72 px element as the first child of `body`; both stay inside. After an answer lands at 1024x768, the "Suggested questions" group's bottom is at or above the footer row's top.
+- **Status line.** Record the busy turn's `[role="status"]` with a `MutationObserver` while a suggested follow-up is asked. It starts with "Sending the question" and never goes back to an earlier step.
+- **Missing.** Open `/no-such-page`, `/?doc=<random uuid>` and `/?chat=<random uuid>`. Each shows a sentence and an "Ask your documents" link to `/`, and the missing chat has no "Question" textbox.
+- **Keyboard.** Tab through the top bar, rail, document page, chat and pane. Every stop shows the carbon focus ring and is on screen.
 - **Upload limit.** Pick a file larger than `max_upload_bytes` from `/health`. The rail refuses it before sending, and no `POST /api/documents` request is made.
 - **Proof.** Take a screenshot after each step into the run's evidence folder. Read the URL and the `mark` text with `browser_evaluate` and save them beside the screenshots.
 
@@ -46,5 +59,7 @@ Preconditions:
 - The Playwright MCP browser is headed and visible on the desktop. A stray click there changes the URL. Log input events with an init script (`pointerdown`, `click`, `keydown`, `popstate`) and redo any step with input you did not make.
 - A browser that once visited another app on the same port may hold a cached redirect (for example to `/sign-in`). Add a query string (`/?fresh=1`) to get past it.
 - The page pane slides in. Wait for the `mark` before you take the screenshot.
+- An empty vault exists only on a fresh stack. On a stack with documents, a Playwright route that answers `GET /api/documents?limit=100` with `{"items": [], "next_cursor": null}` shows the screen; label that screenshot MOCKED.
+- The fake provider sends its stages within a millisecond of each other, so React often renders two of them at once. A status log can skip a step; it must not go backwards.
 - Each document checkbox is named by its filename through `aria-labelledby`, so use `getByRole('checkbox', { name: 'sample-cgl-policy.pdf', exact: true })`. Some accessibility-tree tools do not resolve `aria-labelledby` and show the checkboxes as "on". Playwright's role queries do resolve it.
 - The chat header comes from `GET /chats/{id}`, so a chat link names its documents in any browser.

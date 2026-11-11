@@ -23,6 +23,34 @@ This folder is the maintained source for verifying what a doc-vault user sees an
 - Name the feature ID and the entry point next to every artifact.
 - If an entry point cannot be reached, report the command you tried and the precondition that was not met. Never report it as verified through another entry point.
 
+## Visibility check: `scripts/visible.js`
+
+Every UI proof also runs `scripts/visible.js` on each screen it shows, at 1440x785, 1024x768 and 375x812. The script is one JavaScript expression that runs in the page. It returns an array with one finding per problem, and `[]` when the screen is clean:
+
+- `clipped`: an element with text whose content is cut off by `overflow: hidden` or `clip`, `text-overflow: ellipsis` or `line-clamp` (`scrollWidth > clientWidth` or `scrollHeight > clientHeight`). It also reports the page itself when its content is taller than a viewport that does not scroll, which is how a pushed-off question box shows up.
+- `unreachable`: a button, link, field or `summary` outside the viewport that no scroll container can bring into view. The check walks out from the control. An `overflow: hidden` ancestor that it falls outside hides it for good. A scroll container can bring it into view, and then the container itself must be reachable.
+- `page-scroll`: the page is wider than the viewport.
+
+Run it with Playwright:
+
+```python
+findings = page.evaluate(Path(".claude/skills/verify-doc-vault/scripts/visible.js").read_text())
+assert findings == [], findings
+```
+
+With a browser tool that evaluates an expression, paste the file's contents. With the Playwright MCP `browser_evaluate`, pass `() => <contents>`.
+
+What it skips, and why:
+
+- Scroll containers (`overflow: auto` or `scroll`), in the clipped check: the reader can scroll them.
+- Elements that render no box (`display: none`, the `hidden` file input, a folded rail) and `visibility: hidden`: nothing is on screen to clip.
+- Elements with no text, such as the stage bars and the indeterminate progress line, which are `overflow: hidden` around a moving bar.
+- `input`, `textarea` and `select` in the clipped check: they scroll their own text.
+- Controls inside `[inert]`.
+- Overlap. A control covered by the source pane or by a dialog's backdrop is on screen, so the script does not report it.
+
+A clean result does not prove that text does not wrap where it should not, or that something sits above the question box. Check those with their own assertion, as `web-ui.md` describes.
+
 ## Features
 
 | File | Feature IDs |
@@ -31,4 +59,4 @@ This folder is the maintained source for verifying what a doc-vault user sees an
 | [insights.md](insights.md) | `insights-ready`, `insights-grounded`, `insights-coverage`, `insights-fail-isolated` |
 | [chat-with-citations.md](chat-with-citations.md) | `chat-start`, `chat-not-ready`, `chat-cited-answer`, `chat-follow-up`, `chat-multi-doc`, `chat-not-found`, `chat-history` |
 | [metrics.md](metrics.md) | `metrics-documents`, `metrics-processing` |
-| [web-ui.md](web-ui.md) | `ui-upload`, `ui-status`, `ui-insights`, `ui-chat`, `ui-citation-open`, `ui-metrics` |
+| [web-ui.md](web-ui.md) | `ui-upload`, `ui-status`, `ui-insights`, `ui-chat`, `ui-chat-stream`, `ui-suggestions`, `ui-citation-open`, `ui-metrics`, `ui-delete`, `ui-find`, `ui-missing`, `ui-layout` |

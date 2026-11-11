@@ -1,6 +1,16 @@
 # Doc Vault web UI
 
-A small Next.js app for the doc-vault API. You can upload documents and watch them process. Each document shows its summary, tags and key facts. You can also start a chat over one or more ready documents and ask questions. The answer appears as it is written, then the cited answer replaces it, with up to three follow-up questions to ask in one click. Click a key fact's page tab, or an answer's numbered citation, to open that page with the quoted passage marked and a flag on the page edge. In a chat, the flag carries the citation's number. The Metrics link in the header shows how documents, steps, AI calls and chats are doing.
+A small Next.js app for the doc-vault API. You can upload documents and watch them process. Each document shows its summary, tags and key facts, and can be deleted from its page. You can also start a chat over one or more ready documents and ask questions. The answer appears as it is written, then the cited answer replaces it, with up to three follow-up questions to ask in one click. Click a key fact's page tab, or an answer's numbered citation, to open that page with the quoted passage marked and a flag on the page edge. In a chat, the flag carries the citation's number. The top bar has two sections: Ask, the new-chat screen and its chats, and Metrics, which shows how documents, steps, AI calls and chats are doing.
+
+## Layout
+
+The page itself never scrolls. `html`, `body` and the `.app` wrapper are flex and grid boxes down to the three columns, so each column scrolls on its own. Anything a browser extension adds to the page, or a margin it sets, takes its own share of the height instead of pushing content off the window. On the chat and new-chat screens the content scrolls above a footer row that holds the question box, and nothing is `position: sticky`. The question box stays on screen at every window height down to 500 px.
+
+Below 1100 px the source pane covers the centre column. Below 760 px the rail folds into a "Documents (n)" button above the centre column. It is open while the vault is empty or uploads are listed, closes when a document is opened from it, and takes at most half the height, with its own scroll.
+
+An empty vault shows the steps from upload to first question, with a large drop target in step 1. Over six documents, the rail and the new-chat picker show a "Find a document" field that matches the filename and the document type. The picker's "Select all ready" ticks the ready documents the search shows, up to the 50 a chat allows. Each row's meta leads with the document type once insights know it ("Policy. PDF, 7 pages, 11 KB").
+
+`.claude/skills/verify-doc-vault/scripts/visible.js` checks a screen for clipped text, controls nothing can scroll into view, and sideways page scroll. The verify skill's `features/README.md` says how to run it.
 
 ## Run it
 
@@ -48,17 +58,21 @@ The rewrite also compresses responses, and a compressed `text/event-stream` arri
 | `src/api/client.ts` | One function per endpoint. Each returns `Result<T>` and never throws. Uploads use XHR for progress. `askStream` reads the streamed ask with `fetch`, because `EventSource` cannot POST |
 | `src/api/sse.ts` | Frames a `text/event-stream` body into messages, from text split anywhere |
 | `src/api/domain.ts` | Types the components read: branded ids, the lifecycle, insights and turn unions, `SourceRef` |
-| `src/lib/` | Pure functions: `locateQuote`, `isSettled`, `stageProgress`, the upload scheduler and the chat thread's state machine |
-| `src/hooks/` | `usePolled`, `useFetched`, `useSelection`, `useUploads`, `useHealth` (one shared `/health` poll) and `useThread`, which sends one question at a time per chat |
-| `src/components/` | The rail, the new-chat screen, the chat, the document view, the source pane and the metrics screen |
+| `src/lib/` | Pure functions: `locateQuote`, `isSettled`, `stageProgress`, the upload scheduler, the chat thread's state machine, and `findDocs` and `chooseAll` for long lists |
+| `src/hooks/` | `usePolled`, `useFetched`, `useSelection`, `useUploads`, `useHealth` (one shared `/health` poll), `useFileDrop`, and `useThread`, which sends one question at a time per chat |
+| `src/components/` | The top bar, the rail, the new-chat screen, the chat, the document view and its delete dialog, the source pane, the metrics screen, and the missing-page message |
 | `src/copy.ts` | Every sentence the UI writes about state |
 
 The URL holds the selection:
 
-- No parameters shows the new-chat screen. Only ready documents can be chosen. Below it are the five newest chats.
+- No parameters shows the new-chat screen. Only ready documents can be chosen. Below the picker are the five newest chats.
 - `?view=metrics` shows the metrics, for the last 24 hours. `&window=7d` shows the last 7 days.
 - `?doc=<id>` opens a document. `&cite=fact.<n>` or `&p=<n>` opens the source pane.
 - `?chat=<id>` opens a chat. `&cite=turn.<turn id>.<n>` opens citation `[n]` of that turn, and `&p=<n>` pages away from it.
+
+A `?doc=` or `?chat=` the vault does not have, or one that is not an id at all, shows a sentence saying so and an "Ask your documents" button. Any other path shows the app's own not-found page.
+
+Deleting a document asks first, in a dialog that names the file and says that chats which used it keep their answers and citations but take no more questions. Afterwards the home screen opens with a note naming the file, and the note takes focus.
 
 Starting a chat, opening a fact and opening a citation each add a history entry, so Back undoes them. A pasted link reopens the same chat or highlight in any browser, because the chat's header comes from `GET /chats/{id}`. If a chat's document was deleted after it started, the header marks it and the composer closes, since the API would refuse the question.
 
@@ -66,11 +80,11 @@ A file larger than `/health`'s `max_upload_bytes` is refused in the browser and 
 
 The metrics screen has two halves, documents and processing. Each half loads and fails on its own, so one failing route leaves the other on screen with its numbers. Under the fake provider, the cost reads "fake provider, no cost".
 
-Questions go to `POST /chats/{id}/messages/stream`. While the answer streams, the turn shows its provisional text, without citations, under a status line: "Searching N documents", "Writing the answer", and "Checking citations" once no text has arrived for 300 ms. A `reset` event clears the text. The `turn` event replaces it with the grounded answer. The latest turn's suggestions show as buttons only while no question is in flight, and a click asks one at once.
+Questions go to `POST /chats/{id}/messages/stream`. While the answer streams, the turn shows its provisional text, without citations, under a status line. It reads "Sending the question" until the server names its first step, then follows the steps in the order the server sends them: "Reading the follow-up against the conversation" (follow-ups only), "Searching N documents", "Writing the answer", and "Checking citations" once no text has arrived for 300 ms. A `reset` event clears the text. The `turn` event replaces it with the grounded answer. The latest turn's suggestions show as buttons only while no question is in flight, and a click asks one at once.
 
 When an ask fails, the chat reads its history again before it offers Try again. If the question was recorded after all, the turn is shown and nothing is asked twice. An `error` event and a stream that ends without its `turn` take this path too. The second case is a connection dropped mid-answer, and the backend still stores the turn, possibly seconds later. So after a stream that had started breaks, the chat reads history again after 0, 1, 2, 4, 8 and 15 seconds and adopts the turn as soon as it appears. It offers Try again only when the turn is still missing after that. In a browser check, a stream cut after its first delta was adopted from the 1-second read, with no Try again.
 
-While an answer streams, the column follows its text so the sticky question box never covers it, until the reader scrolls up.
+While an answer streams, the column follows its text until the reader scrolls up. When the answer lands, the column scrolls to the end, so the suggestions under it sit fully above the question box.
 
 ## Tests and fixtures
 
