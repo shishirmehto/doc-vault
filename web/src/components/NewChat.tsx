@@ -47,7 +47,7 @@ export function NewChat({ docs, onOpen }: { docs: readonly Doc[] | null; onOpen(
         {docs === null ? (
           <div aria-busy="true">{[70, 55, 62].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}</div>
         ) : docs.length === 0 ? (
-          <p className="notice">Upload a document to start. Questions open up once it is ready.</p>
+          <p className="notice">Upload a document on the left to start. You can ask about it once it shows Ready.</p>
         ) : (
           <fieldset className="picker">
             <legend>Documents</legend>
@@ -70,18 +70,20 @@ export function NewChat({ docs, onOpen }: { docs: readonly Doc[] | null; onOpen(
           </fieldset>
         )}
         {refusal && <StartRefusal error={refusal} docs={docs ?? []} />}
-        <Composer
-          value={question}
-          onChange={setQuestion}
-          onSend={() => void start()}
-          ready={scope !== null && !busy}
-          label={busy ? "Starting" : "Ask"}
-          placeholder={
-            scope === null
-              ? "Choose documents above, then ask"
-              : `Ask about ${scope.length === 1 ? ready.find((d) => d.id === scope[0])?.filename : `these ${scope.length} documents`}`
-          }
-        />
+        {ready.length > 0 && (
+          <Composer
+            value={question}
+            onChange={setQuestion}
+            onSend={() => void start()}
+            ready={scope !== null && !busy}
+            label={busy ? "Starting" : "Ask"}
+            placeholder={
+              scope === null
+                ? "Choose documents above, then ask"
+                : `Ask about ${scope.length === 1 ? ready.find((d) => d.id === scope[0])?.filename : `these ${scope.length} documents`}`
+            }
+          />
+        )}
       </section>
       <RecentChats onOpen={onOpen} />
     </main>
