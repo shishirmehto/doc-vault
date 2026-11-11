@@ -123,6 +123,17 @@ def test_invalid_json_after_the_repair_turn_is_bad_output(db):
     assert rows(db, "ok, error_code") == [(True, None), (True, None)]
 
 
+@pytest.mark.parametrize(("purpose", "stored"), [(Purpose.COMPARE, "compare"), (Purpose.INSIGHTS, "insights")])
+def test_a_one_attempt_purpose_gets_no_repair_turn_and_its_invalid_json_is_retryable_bad_output(db, purpose, stored):
+    chat = ScriptedChat([reply(BAD, 120, 0, 15), reply(GOOD, 160, 0, 15)])
+    prompt = dataclasses.replace(PROMPT, purpose=purpose)
+
+    assert failure_of(lambda: gateway(db, chat).complete(prompt, Limit, owner=OWNER)) == Failure(
+        ErrorCode.AI_BAD_OUTPUT, "The model returned invalid output.", True)
+    assert rows(db, "purpose, ok, error_code, input_tokens") == [(stored, True, None, 120)]
+    assert len(chat.prompts) == 1
+
+
 def test_a_refusal_is_bad_output_without_a_repair_turn(db):
     chat = ScriptedChat([reply("", 90, 0, 12, refusal="I can't help with that.")])
 

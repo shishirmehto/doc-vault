@@ -109,23 +109,30 @@ def list_comparisons(db: Db, *, limit: int, cursor: str | None) -> tuple[list[Co
 def ground(draft: ComparisonDraft, documents: Sequence[CompareDoc]) -> tuple[tuple[Row, ...], int]:
     """Keep each cell only when pages.find_on_page finds its quote on the page it cites. Pure.
 
-    Cells are placed by document label, one column per document. The first cell
-    draft naming a document claims its column; a later one naming it again, and
-    one naming no document, is ignored. A blank or null value is an empty cell.
-    A value with no page or quote, or whose quote is not on that page of that
-    document, becomes an empty cell. A kept cell quotes the source span, not
-    the model's copy. Rows left with every cell empty are removed, then at most
-    MAX_ROWS are kept. Returns the rows and the number of cells that carried a
-    value and were not kept.
+    Cells are placed by document label ("D2", matched ignoring case and
+    surrounding spaces), one column per document. The first cell draft naming a
+    document claims its column; a later one naming it again, and one naming no
+    document, is ignored. A blank or null value is an empty cell. A value with
+    no page or quote, or whose quote is not on that page of that document,
+    becomes an empty cell. A kept cell quotes the source span, not the model's
+    copy. A row left with every cell empty is removed. The row drafts are read
+    in order until MAX_ROWS rows are kept, and the rest are not read.
+
+    Returns the rows and the dropped count: the cell drafts with a non-blank
+    value, in the row drafts read (removed rows included), that did not become
+    a cell, because they name no document or one an earlier cell draft in the
+    row named, lack a page or quote, or quote what is not on the page they cite.
     """
-    column = {doc.label: at for at, doc in enumerate(documents)}
+    column = {doc.label.casefold(): at for at, doc in enumerate(documents)}
     rows: list[Row] = []
     dropped = 0
     for row in draft.rows:
+        if len(rows) == MAX_ROWS:
+            break
         cells: list[Cell | None] = [None] * len(documents)
         claimed: set[int] = set()
         for cell in row.cells:
-            at = column.get(cell.document)
+            at = column.get(cell.document.strip().casefold())
             if at is not None and at not in claimed:
                 claimed.add(at)
                 cells[at] = _grounded(cell, documents[at].pages)
@@ -135,7 +142,7 @@ def ground(draft: ComparisonDraft, documents: Sequence[CompareDoc]) -> tuple[tup
                 dropped += 1
         if any(cell is not None for cell in cells):
             rows.append(Row(collapse_whitespace(row.field), tuple(cells)))
-    return tuple(rows[:MAX_ROWS]), dropped
+    return tuple(rows), dropped
 
 
 def _grounded(cell: CellDraft, pages: Sequence[Page]) -> Cell | None:

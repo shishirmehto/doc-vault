@@ -104,7 +104,7 @@ class ErrorCode(StrEnum):
     NO_EXTRACTABLE_TEXT = "no_extractable_text"   # scanned PDF; OCR is out of scope
     TOO_MANY_PAGES = "too_many_pages"
     AI_UNAVAILABLE = "ai_unavailable"             # timeout, 429, 5xx after retries
-    AI_BAD_OUTPUT = "ai_bad_output"               # JSON failed schema after one repair attempt
+    AI_BAD_OUTPUT = "ai_bad_output"               # JSON failed schema, after one repair turn where the purpose gets one
     INTERNAL = "internal_error"                   # an unexpected exception in a task (a bug); retryable
     # Request errors.
     DOCUMENT_NOT_FOUND = "document_not_found"
@@ -432,14 +432,18 @@ class Cell:
 
 
 _CURRENCY = re.compile(r"[$€£]|(?<![a-z])(?:usd|eur|gbp)(?![a-z])")
+_CURRENCY_CODE = {"$": "usd", "€": "eur", "£": "gbp"}
 _COMMA_IN_NUMBER = re.compile(r"(?<=\d),(?=\d)")
 _ZERO_CENTS = re.compile(r"(?<=\d)\.00(?!\d)")
 
 
-def _comparable(value: str) -> str:
-    """'USD 1,000,000.00' -> '1000000', so one value written two ways is not a difference."""
-    text = _ZERO_CENTS.sub("", _COMMA_IN_NUMBER.sub("", _CURRENCY.sub("", value.casefold())))
-    return " ".join(text.split()).strip(string.punctuation + " ")
+def _comparable(value: str) -> tuple[frozenset[str], str]:
+    """'USD 1,000,000.00' -> ({'usd'}, '1000000'): one value written two ways compares equal, and its currencies
+    apart. Only trailing punctuation goes, so '-$500' and '($500)' keep what makes them negative."""
+    text = value.casefold()
+    currencies = frozenset(_CURRENCY_CODE.get(mark, mark) for mark in _CURRENCY.findall(text))
+    text = _ZERO_CENTS.sub("", _COMMA_IN_NUMBER.sub("", _CURRENCY.sub("", text)))
+    return currencies, " ".join(text.split()).rstrip(string.punctuation + " ")
 
 
 @dataclass(frozen=True, slots=True)
@@ -449,9 +453,12 @@ class Row:
 
     @property
     def differs(self) -> bool:
-        """Two or more distinct values, or an empty cell beside a filled one. Decided here, never by the model."""
-        values = {_comparable(cell.value) for cell in self.cells if cell is not None}
-        return len(values) > 1 or (bool(values) and None in self.cells)
+        """Two or more distinct values, values in different currencies (a value naming none fits any), or an empty
+        cell beside a filled one. Decided here, never by the model."""
+        values = [_comparable(cell.value) for cell in self.cells if cell is not None]
+        texts = {text for _, text in values}
+        currencies = {marks for marks, _ in values if marks}
+        return len(texts) > 1 or len(currencies) > 1 or (bool(values) and None in self.cells)
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,7 +467,7 @@ class Comparison:
     documents: tuple[ComparedDocument, ...]     # the columns, in request order
     focus: str | None
     rows: tuple[Row, ...]
-    dropped_cells: int          # filled cells compare.ground could not keep, such as a quote not on the cited page
+    dropped_cells: int          # values compare.ground could not keep in the rows it read, such as a quote not on its page
     model: str
     prompt_version: str
     usage: Usage                # aggregated from llm_calls WHERE comparison_id = id

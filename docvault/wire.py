@@ -265,7 +265,7 @@ class CellOut(BaseModel):
 class RowOut(BaseModel):
     field: str
     cells: list[CellOut]               # one per document, in the order of documents
-    differs: bool                      # two or more distinct values, or an empty cell beside a filled one
+    differs: bool                      # distinct values, different currencies, or an empty cell beside a filled one
 
 
 class ComparisonOut(BaseModel):

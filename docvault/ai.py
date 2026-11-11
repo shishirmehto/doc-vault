@@ -2,10 +2,10 @@
 
 Callers get one object, AI, with two methods: embed() and complete(). Behind
 them sit provider choice, batching, timeouts, retries with backoff,
-JSON-schema output, validation with one repair attempt, cost pricing, and one
-llm_calls row per provider attempt (failed attempts included). No module can
-reach a provider without going through here, so token and cost accounting
-cannot be skipped.
+JSON-schema output, validation with one repair turn (none for ONE_ATTEMPT
+purposes), cost pricing, and one llm_calls row per provider attempt (failed
+attempts included). No module can reach a provider without going through
+here, so token and cost accounting cannot be skipped.
 """
 
 from __future__ import annotations
@@ -66,8 +66,9 @@ MAX_RETRY_WAIT_S = 10.0
 # tries. Retrying them here too would multiply the attempts and hold both while sleeping.
 BACKGROUND = frozenset({Purpose.EMBED_CHUNKS, Purpose.INSIGHTS})
 
-# A comparison is synchronous and the web proxy gives up at 120 s, so one attempt of at most compare_timeout_s
-# lets the API answer first, and the UI offers Try again.
+# One provider call per request: no gateway retry and no repair turn. Invalid output fails as retryable, and the caller
+# sends the request again: Celery for BACKGROUND, the UI's Try again for a comparison. A comparison is synchronous and
+# the web proxy gives up at 120 s, so one call of at most compare_timeout_s lets the API answer first.
 ONE_ATTEMPT = BACKGROUND | {Purpose.COMPARE}
 
 
@@ -233,7 +234,8 @@ class AI:
 
         Output that fails validation gets one repair turn, which shows the model
         its JSON and the errors. A refusal or a second failure raises
-        VaultError(AI_BAD_OUTPUT). A provider failure raises
+        VaultError(AI_BAD_OUTPUT). A ONE_ATTEMPT purpose gets no repair turn: its
+        invalid output raises a retryable AI_BAD_OUTPUT. A provider failure raises
         VaultError(AI_UNAVAILABLE), after the gateway's retries for interactive purposes.
         With a stream, every attempt streams its raw output into it, each one announced by
         stream.attempt(). The LLM is never called inside a database transaction: callers commit first.
@@ -242,6 +244,8 @@ class AI:
         try:
             return _validated(output, raw)
         except ValidationError as exc:
+            if prompt.purpose in ONE_ATTEMPT:
+                raise VaultError(ErrorCode.AI_BAD_OUTPUT, "The model returned invalid output.", retryable=True) from exc
             repair = prompts.repair(prompt, raw.text, _describe(exc))
         try:
             return _validated(output, self._complete_once(repair, output, owner, stream))

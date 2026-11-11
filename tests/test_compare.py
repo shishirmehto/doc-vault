@@ -49,6 +49,12 @@ def row(*values: str | None) -> Row:
     (("EUR 500", "€500.00", "500 eur"), False),
     (("Europe", "ope"), True),
     (("$5.005", "$5"), True),
+    (("$1,000,000", "€1,000,000"), True),
+    (("1,000,000", "€1,000,000", "EUR 1,000,000"), False),
+    (("$500 or €450", "USD 500 or 450 EUR"), False),
+    (("-$500", "$500"), True),
+    (("($500)", "$500"), True),
+    (("$500.", "$500"), False),
 ])
 def test_a_row_differs_on_distinct_values_or_an_empty_cell_beside_a_filled_one(values, differs):
     assert row(*values).differs is differs
@@ -209,13 +215,24 @@ def test_ground_gives_a_column_to_the_first_cell_that_names_its_document():
         Cell("$2,500 per occurrence", 2, "$2,500 per occurrence"), None)),), 1)
 
 
-def test_ground_removes_empty_rows_before_it_keeps_the_first_30():
+def test_ground_places_a_cell_by_its_document_label_in_any_case_and_spacing():
+    rows, dropped = compare.ground(drafted(("Property Damage Deductible", [
+        cell(" d2 ", "$5,000 per occurrence", 2, "$5,000 per occurrence"),
+        cell("D2 ", "$2,500 per occurrence", 2, "$2,500 per occurrence")])), [DECLARATIONS, RENEWAL])
+
+    assert (rows, dropped) == ((Row("Property Damage Deductible", (
+        None, Cell("$5,000 per occurrence", 2, "$5,000 per occurrence"))),), 1)
+
+
+def test_ground_reads_rows_until_it_keeps_30_and_counts_dropped_cells_only_in_the_rows_it_read():
     named = cell("D1", "Example Contractors LLC", 1, "Example Contractors LLC")
-    draft = drafted(("Empty", [cell("D1")]), *((f"Row {n}", [named]) for n in range(1, 32)))
+    off_page = cell("D2", "$5,000 per occurrence", 1, "$5,000 per occurrence")
+    draft = drafted(("Empty", [cell("D1"), off_page]), *((f"Row {n}", [named]) for n in range(1, 31)),
+                    ("Row 31", [named, off_page]), ("Empty after", [off_page]))
 
     rows, dropped = compare.ground(draft, [DECLARATIONS, RENEWAL])
 
-    assert ([row.field for row in rows], dropped) == ([f"Row {n}" for n in range(1, 31)], 0)
+    assert ([row.field for row in rows], dropped) == ([f"Row {n}" for n in range(1, 31)], 1)
 
 
 # ------------------------------------------------------------------ the pipeline

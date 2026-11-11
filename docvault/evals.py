@@ -16,7 +16,7 @@ number is scored apart, so it shows where a miss happens:
                        answered (a click on a suggestion should never end in a refusal)
   cell grounding       comparison cells kept / (kept + dropped)
   difference recall    the changes planted between the policy and the quote (samples/facts.yaml) come back as a
-                       differing row whose two cells sit on the fact's page and quote it
+                       differing row whose two cells sit on the fact's page, quote it, and hold a value from it
   equal fields         the fields planted unchanged come back the same way as a row that does not differ
   cost and latency     metrics.processing_stats over the run: llm_calls by purpose and model, chat_turns p95
 
@@ -92,7 +92,7 @@ class ExpectedField:
     """A field planted in both documents of the comparison case, as a change or unchanged."""
 
     field: str
-    policy: Fact            # the first column's cell: on this page, its quote holding this text
+    policy: Fact            # the first column's cell: on this page, its quote holding this text, its value in it
     quote: Fact             # the second column's cell, likewise
     differs: bool           # True for a planted change
 
@@ -139,12 +139,17 @@ def load_cases(path: Path = CASES) -> CaseSet:
                  if not any(topic in ask for ask in out_of_scope)]
     if len({case.id for case in cases}) < len(cases):
         problems.append("case ids repeat")
+    fields: list[ExpectedField] = []
+    for key, differs in (("changes", True), ("unchanged", False)):
+        for item in truth[key]:
+            unknown = [fact_id for fact_id in (item["policy"], item["quote"]) if fact_id not in facts]
+            problems += [f"facts.yaml {key} {item['field']!r}: unknown fact {fact_id!r}" for fact_id in unknown]
+            if not unknown:
+                fields.append(ExpectedField(item["field"], facts[item["policy"]], facts[item["quote"]], differs))
     if problems:
         raise ValueError(f"{path}: " + "; ".join(problems))
     planted = tuple(facts[f["id"]] for f in truth["facts"] if "repeated_on" not in f)
-    fields = tuple(ExpectedField(item["field"], facts[item["policy"]], facts[item["quote"]], differs)
-                   for key, differs in (("changes", True), ("unchanged", False)) for item in truth[key])
-    comparison = ComparisonCase((fields[0].policy.document, fields[0].quote.document), fields)
+    comparison = ComparisonCase((fields[0].policy.document, fields[0].quote.document), tuple(fields))
     return CaseSet(tuple(aliases.values()), planted, tuple(cases), comparison)
 
 
@@ -234,7 +239,9 @@ def match_field(expected: ExpectedField, rows: Sequence[Row]) -> FieldResult:
 
 
 def _holds(cell: Cell | None, fact: Fact) -> bool:
-    return cell is not None and cell.page == fact.page and collapse_whitespace(fact.text) in cell.quote
+    text = collapse_whitespace(fact.text)
+    return (cell is not None and cell.page == fact.page and text in cell.quote
+            and collapse_whitespace(cell.value).casefold() in text.casefold())
 
 
 @dataclass(frozen=True, slots=True)
