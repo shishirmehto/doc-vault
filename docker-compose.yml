@@ -30,7 +30,7 @@ services:
     depends_on: {redis: {condition: service_healthy}}
   web:
     build: {context: ./web, args: {API_ORIGIN: "http://api:8000"}}
-    ports: ["3000:3000"]
+    ports: ["${WEB_PORT:-3000}:3000"]
     depends_on: [api]
 volumes:
   pgdata:
