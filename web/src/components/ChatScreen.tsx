@@ -35,6 +35,16 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   useEffect(() => {
     column.current?.scrollTo({ top: column.current.scrollHeight, behavior: "smooth" });
   }, [turnCount, phase]);
+  // The sticky composer would cover a streaming answer as it grows, so the column follows the text from the
+  // moment a question is sent until the reader scrolls up.
+  const following = useRef(false);
+  const streamed = thread?.ask.phase === "streaming" ? thread.ask.text.length : 0;
+  useEffect(() => {
+    if (phase === "asking") following.current = true;
+  }, [phase]);
+  useEffect(() => {
+    if (streamed > 0 && following.current) column.current?.scrollTo({ top: column.current.scrollHeight });
+  }, [streamed]);
 
   const send = () => {
     if (!thread || !canAsk(thread) || !accepting || draft.trim() === "") return;
@@ -44,7 +54,8 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
 
   return (
     <>
-      <main className="centre" ref={column}>
+      <main className="centre" ref={column} onWheel={(e) => { if (e.deltaY < 0) following.current = false; }}
+        onTouchMove={() => { following.current = false; }}>
         <section className="chat" aria-label="Chat">
           <header className="chat-header">
             <h1>{documents ? `Asking ${listNames(documents.map((d) => (d.deleted ? `${d.filename} (deleted)` : d.filename)))}` : "Chat"}</h1>
