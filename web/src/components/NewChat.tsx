@@ -37,40 +37,45 @@ export function NewChat({ docs, onOpen }: { docs: readonly Doc[] | null; onOpen(
   };
 
   return (
-    <main className="centre">
-      <section className="new-chat" aria-labelledby="new-chat-title">
-        <h1 id="new-chat-title">Ask your documents</h1>
-        <p className="lead">
-          Choose the documents to ask about. Every answer cites the page it came from, with the passage marked, so you
-          can check it against the source.
-        </p>
-        {docs === null ? (
-          <div aria-busy="true">{[70, 55, 62].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}</div>
-        ) : docs.length === 0 ? (
-          <p className="notice">Upload a document on the left to start. You can ask about it once it shows Ready.</p>
-        ) : (
-          <fieldset className="picker">
-            <legend>Documents</legend>
-            {ready.length === 0 && <p className="quiet">Questions open up once a document is ready.</p>}
-            <ul>
-              {docs.map((d) => {
-                const isReady = d.lifecycle.status === "ready";
-                return (
-                  <li key={d.id}>
-                    <label className="pick" data-disabled={!isReady || undefined}>
-                      <input type="checkbox" checked={isReady && chosen.has(d.id)} disabled={!isReady || busy}
-                        aria-labelledby={`pick-${d.id}`} aria-describedby={`pick-meta-${d.id}`} onChange={() => toggle(d.id)} />
-                      <span className="pick-name" id={`pick-${d.id}`}>{d.filename}</span>
-                      <span className="pick-meta" id={`pick-meta-${d.id}`}>{isReady ? docMeta(d) : statusLine(d).text}</span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          </fieldset>
-        )}
-        {refusal && <StartRefusal error={refusal} docs={docs ?? []} />}
-        {ready.length > 0 && (
+    <main className="centre with-composer">
+      <div className="centre-scroll">
+        <section className="new-chat" aria-labelledby="new-chat-title">
+          <h1 id="new-chat-title">Ask your documents</h1>
+          <p className="lead">
+            Choose the documents to ask about. Every answer cites the page it came from, with the passage marked, so you
+            can check it against the source.
+          </p>
+          {docs === null ? (
+            <div aria-busy="true">{[70, 55, 62].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}</div>
+          ) : docs.length === 0 ? (
+            <p className="notice">Upload a document on the left to start. You can ask about it once it shows Ready.</p>
+          ) : (
+            <fieldset className="picker">
+              <legend>Documents</legend>
+              {ready.length === 0 && <p className="quiet">Questions open up once a document is ready.</p>}
+              <ul>
+                {docs.map((d) => {
+                  const isReady = d.lifecycle.status === "ready";
+                  return (
+                    <li key={d.id}>
+                      <label className="pick" data-disabled={!isReady || undefined}>
+                        <input type="checkbox" checked={isReady && chosen.has(d.id)} disabled={!isReady || busy}
+                          aria-labelledby={`pick-${d.id}`} aria-describedby={`pick-meta-${d.id}`} onChange={() => toggle(d.id)} />
+                        <span className="pick-name" id={`pick-${d.id}`}>{d.filename}</span>
+                        <span className="pick-meta" id={`pick-meta-${d.id}`}>{isReady ? docMeta(d) : statusLine(d).text}</span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </fieldset>
+          )}
+        </section>
+        <RecentChats onOpen={onOpen} />
+      </div>
+      {ready.length > 0 && (
+        <div className="centre-footer">
+          {refusal && <StartRefusal error={refusal} docs={docs ?? []} />}
           <Composer
             value={question}
             onChange={setQuestion}
@@ -83,9 +88,8 @@ export function NewChat({ docs, onOpen }: { docs: readonly Doc[] | null; onOpen(
                 : `Ask about ${scope.length === 1 ? ready.find((d) => d.id === scope[0])?.filename : `these ${scope.length} documents`}`
             }
           />
-        )}
-      </section>
-      <RecentChats onOpen={onOpen} />
+        </div>
+      )}
     </main>
   );
 }

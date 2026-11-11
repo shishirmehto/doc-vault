@@ -16,8 +16,10 @@ export default function RootLayout({ children }: { children: ReactNode }): React
   return (
     <html lang="en" className={`${sans.variable} ${serif.variable}`}>
       <body>
-        <TopBar />
-        {children}
+        <div className="app">
+          <TopBar />
+          {children}
+        </div>
       </body>
     </html>
   );

@@ -29,14 +29,14 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   const turns = thread?.history.kind === "loaded" ? thread.history.turns : null;
   const open = (cite: TurnCite) => push({ kind: "chat", chat: id, pane: { cite, page: null } });
 
-  const column = useRef<HTMLElement>(null);
+  const column = useRef<HTMLDivElement>(null);
   const turnCount = turns?.length ?? 0;
   const phase = thread?.ask.phase;
   useEffect(() => {
     column.current?.scrollTo({ top: column.current.scrollHeight, behavior: "smooth" });
   }, [turnCount, phase]);
-  // The sticky composer would cover a streaming answer as it grows, so the column follows the text from the
-  // moment a question is sent until the reader scrolls up.
+  // A streaming answer grows below the fold, so the column follows the text from the moment a question is sent
+  // until the reader scrolls up.
   const following = useRef(false);
   const streamed = thread?.ask.phase === "streaming" ? thread.ask.text.length : 0;
   useEffect(() => {
@@ -54,34 +54,38 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
 
   return (
     <>
-      <main className="centre" ref={column} onWheel={(e) => { if (e.deltaY < 0) following.current = false; }}
-        onTouchMove={() => { following.current = false; }}>
-        <section className="chat" aria-label="Chat">
-          <header className="chat-header">
-            <h1>{documents ? `Asking ${listNames(documents.map((d) => (d.deleted ? `${d.filename} (deleted)` : d.filename)))}` : "Chat"}</h1>
-            <p className="quiet">
-              {!documents
-                ? null
-                : accepting
-                  ? "Answers come only from these documents, and each one cites the page it used. "
-                  : `${listNames(deleted)} ${deleted.length === 1 ? "was" : "were"} deleted, so this chat takes no more questions. Its answers still cite their pages. `}
-              <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
-            </p>
-          </header>
-          <Turns thread={thread} pane={pane} onOpen={open} accepting={accepting}
-            onSuggest={(question) => void threads.ask(id, question)} />
-          {thread && (
-            <PendingTurn
-              ask={thread.ask}
-              scope={documents}
-              onRetry={(question) => void threads.ask(id, question)}
-              onEdit={(question) => {
-                threads.dismiss(id);
-                setDraft(question);
-              }}
-              onRecheck={() => void threads.recheck(id)}
-            />
-          )}
+      <main className="centre with-composer">
+        <div className="centre-scroll" ref={column} onWheel={(e) => { if (e.deltaY < 0) following.current = false; }}
+          onTouchMove={() => { following.current = false; }}>
+          <section className="chat" aria-label="Chat">
+            <header className="chat-header">
+              <h1>{documents ? `Asking ${listNames(documents.map((d) => (d.deleted ? `${d.filename} (deleted)` : d.filename)))}` : "Chat"}</h1>
+              <p className="quiet">
+                {!documents
+                  ? null
+                  : accepting
+                    ? "Answers come only from these documents, and each one cites the page it used. "
+                    : `${listNames(deleted)} ${deleted.length === 1 ? "was" : "were"} deleted, so this chat takes no more questions. Its answers still cite their pages. `}
+                <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
+              </p>
+            </header>
+            <Turns thread={thread} pane={pane} onOpen={open} accepting={accepting}
+              onSuggest={(question) => void threads.ask(id, question)} />
+            {thread && (
+              <PendingTurn
+                ask={thread.ask}
+                scope={documents}
+                onRetry={(question) => void threads.ask(id, question)}
+                onEdit={(question) => {
+                  threads.dismiss(id);
+                  setDraft(question);
+                }}
+                onRecheck={() => void threads.recheck(id)}
+              />
+            )}
+          </section>
+        </div>
+        <div className="centre-footer">
           <Composer
             value={draft}
             onChange={setDraft}
@@ -96,7 +100,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
                   : "Ask a question"
             }
           />
-        </section>
+        </div>
       </main>
       {pane && (
         <SourcePane

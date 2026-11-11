@@ -55,19 +55,21 @@ export function SourcePane({ view, onPage, onClose }: Props) {
         )}
         <button type="button" className="text-button" onClick={onClose}>Close</button>
       </header>
-      {view.kind === "resolving" && <SheetSkeleton />}
-      {view.kind === "unknown" && <p className="notice">{view.message}</p>}
-      {view.kind === "page" && (
-        <>
-          {view.mark === null && view.citedPage !== undefined && (
-            <p className="pane-note">
-              The passage is on {unit.toLowerCase()} {view.citedPage}.{" "}
-              <button type="button" className="text-button" onClick={() => onPage(view.citedPage!)}>Go back to it</button>
-            </p>
-          )}
-          <PageSheet key={`${view.doc.id}:${view.page}`} doc={view.doc} page={view.page} mark={view.mark} />
-        </>
-      )}
+      <div className="pane-body">
+        {view.kind === "resolving" && <SheetSkeleton />}
+        {view.kind === "unknown" && <p className="notice">{view.message}</p>}
+        {view.kind === "page" && (
+          <>
+            {view.mark === null && view.citedPage !== undefined && (
+              <p className="pane-note">
+                The passage is on {unit.toLowerCase()} {view.citedPage}.{" "}
+                <button type="button" className="text-button" onClick={() => onPage(view.citedPage!)}>Go back to it</button>
+              </p>
+            )}
+            <PageSheet key={`${view.doc.id}:${view.page}`} doc={view.doc} page={view.page} mark={view.mark} />
+          </>
+        )}
+      </div>
     </aside>
   );
 }

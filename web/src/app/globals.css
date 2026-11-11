@@ -44,11 +44,15 @@
 }
 
 * { box-sizing: border-box; }
-html { background: var(--desk); color: var(--ink); font: 400 var(--t-ui)/1.5 var(--font-ui); -webkit-font-smoothing: antialiased; }
-body { margin: 0; background: var(--desk); }
-/* On wide screens each column scrolls on its own and the page itself never does, so the question box stays
-   on screen. Below 760px the columns stack and the page scrolls as usual. */
-@media (min-width: 761px) { html, body { height: 100%; overflow: hidden; } }
+/* The page never scrolls; only the columns inside do. html, body and .app are flex and grid boxes all the way
+   down, so anything a browser extension adds to the page, or a margin it sets, takes its own share of the height
+   instead of pushing the question box off the bottom of the window. */
+html {
+  height: 100%; height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--desk); color: var(--ink); font: 400 var(--t-ui)/1.5 var(--font-ui); -webkit-font-smoothing: antialiased;
+}
+body { flex: 1 1 0; min-height: 0; margin: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--desk); }
+.app { flex: 1 1 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 h1, h2, h3, p, dl, dd, ul, ol, blockquote, fieldset { margin: 0; }
 ul, ol { padding: 0; list-style: none; }
 a { color: inherit; }
@@ -58,7 +62,7 @@ button { font: inherit; }
 /* ------------------------------------------------------------- chrome */
 
 .topbar {
-  height: var(--topbar); display: flex; align-items: center; justify-content: space-between;
+  min-height: var(--topbar); display: flex; align-items: center; justify-content: space-between;
   padding: 0 var(--s6); border-bottom: 1px solid var(--rule); background: var(--desk);
 }
 .wordmark { font-weight: 600; font-size: var(--t-body); text-decoration: none; letter-spacing: -0.01em; }
@@ -91,12 +95,9 @@ button { font: inherit; }
 
 /* ------------------------------------------------------------- the workspace */
 
-.workspace {
-  display: grid; grid-template-columns: var(--rail) minmax(0, 1fr) 0;
-  height: calc(100dvh - var(--topbar));
-}
+.workspace { position: relative; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr) 0; grid-template-rows: minmax(0, 1fr); min-height: 0; }
 .workspace[data-pane="open"] { grid-template-columns: var(--rail) minmax(0, 1fr) var(--pane); }
-.rail, .centre, .pane { overflow-y: auto; min-height: 0; }
+.rail, .centre { overflow-y: auto; min-height: 0; }
 
 /* ------------------------------------------------------------- rail */
 
@@ -152,6 +153,11 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 .centre { padding: var(--s8) var(--s12) 0; }
 .document, .new-chat { padding-bottom: var(--s8); }
+
+/* The chat and new-chat screens: the content scrolls, and the question box is the row under it. */
+.centre.with-composer { display: grid; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; padding: 0; }
+.centre-scroll { overflow-y: auto; min-height: 0; padding: var(--s8) var(--s12) var(--s6); }
+.centre-footer { display: grid; gap: var(--s3); padding: var(--s3) var(--s12) var(--s4); border-top: 1px solid var(--rule); }
 
 .new-chat h1, .chat-header h1, .doc-header h1, .metrics h1 {
   font-size: var(--t-h1); font-weight: 600; line-height: 1.2; letter-spacing: -0.015em; overflow-wrap: anywhere;
@@ -270,13 +276,10 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .progress.indeterminate { overflow: hidden; max-width: 240px; }
 .progress.indeterminate > span { width: 30%; animation: travel 1.4s ease-in-out infinite; }
 
-.composer {
-  position: sticky; bottom: 0; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s2);
-  align-items: end; padding: var(--s4) 0 var(--s6); background: linear-gradient(to bottom, transparent, var(--desk) var(--s4));
-}
+.composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s2); align-items: end; max-width: 68ch; }
 .composer textarea {
   font: 400 var(--t-body)/1.5 var(--font-ui); color: var(--ink); background: var(--sheet); resize: vertical;
-  border: 1px solid var(--rule); border-radius: var(--r-control); padding: var(--s3) var(--s3); min-height: 68px;
+  border: 1px solid var(--rule); border-radius: var(--r-control); padding: var(--s3) var(--s3); min-height: 68px; max-height: 12em;
 }
 .composer textarea::placeholder { color: var(--graphite); }
 .composer textarea:focus-visible { outline: 2px solid var(--carbon); outline-offset: 0; border-color: var(--carbon); }
@@ -322,12 +325,16 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ------------------------------------------------------------- source pane */
 
-/* isolation keeps the flag, which sits behind the sheet, in front of the pane's own background. */
-.pane { border-left: 1px solid var(--rule); padding: 0 var(--s8) var(--s12) var(--s6); background: var(--desk); isolation: isolate; }
-.pane-header {
-  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: var(--s4);
-  padding: var(--s3) 0; background: var(--desk); border-bottom: 1px solid var(--rule); margin-bottom: var(--s6);
+.pane {
+  display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; overflow: hidden;
+  border-left: 1px solid var(--rule); background: var(--desk);
 }
+.pane-header {
+  display: flex; align-items: center; gap: var(--s4);
+  margin: 0 var(--s8) 0 var(--s6); padding: var(--s3) 0; border-bottom: 1px solid var(--rule);
+}
+/* isolation keeps the flag, which sits behind the sheet, in front of the pane's own background. */
+.pane-body { overflow-y: auto; min-height: 0; padding: var(--s6) var(--s8) var(--s12) var(--s6); isolation: isolate; }
 .pane-file { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pager { display: flex; align-items: center; gap: var(--s3); font-size: var(--t-meta); }
 .pager-at { font-variant-numeric: tabular-nums; color: var(--graphite); }
@@ -368,21 +375,24 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .progress > span, .stage > span { transition: none; }
 }
 
-/* Narrow screens: the pane covers the centre column; below 760px the columns stack. */
+/* Narrow screens: the pane covers the centre column; below 760px the rail sits above the centre column. */
 @media (max-width: 1100px) {
   .workspace[data-pane="open"] { grid-template-columns: var(--rail) minmax(0, 1fr) 0; }
-  /* z-index keeps the covering pane above the centre column's sticky composer. */
-  .pane { position: fixed; z-index: 3; top: var(--topbar); right: 0; bottom: 0; width: min(100vw - var(--rail), 640px); box-shadow: -12px 0 32px -24px rgb(28 38 49 / 0.5); }
-  .centre { padding: var(--s6); }
+  .pane { position: absolute; z-index: 3; top: 0; right: 0; bottom: 0; width: min(100% - var(--rail), 640px); box-shadow: -12px 0 32px -24px rgb(28 38 49 / 0.5); }
+  .centre, .centre-scroll { padding: var(--s6); }
+  .centre-footer { padding: var(--s3) var(--s6) var(--s4); }
 }
 @media (max-width: 760px) {
   .topbar { padding: 0 var(--s4); }
   .topbar-end { gap: var(--s4); }
   .wordmark, .topbar-end a { white-space: nowrap; }
   .service { display: none; }
-  .workspace, .workspace[data-pane="open"] { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .workspace, .workspace[data-pane="open"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: fit-content(50%) minmax(0, 1fr); }
   .rail { border-right: 0; border-bottom: 1px solid var(--rule); }
-  .pane { width: 100vw; padding: 0 var(--s8) var(--s8) var(--s4); }
-  .centre { padding: var(--s6) var(--s4); }
+  .pane { width: 100%; }
+  .pane-header { margin: 0 var(--s4); }
+  .pane-body { padding: var(--s4) var(--s8) var(--s8) var(--s4); }
+  .centre, .centre-scroll { padding: var(--s6) var(--s4); }
+  .centre-footer { padding: var(--s3) var(--s4); }
   .sheet { padding: var(--s6) var(--s4) var(--s8); }
 }
