@@ -7,8 +7,10 @@ export type Update = (list: DocList) => DocList;
 
 /**
  * A list read is a snapshot taken at some moment while the request is in flight, so an update applied after the
- * request started may or may not be in it. Replaying all of them, in order, onto the snapshot is right either way:
- * each update carries the server's state at its moment, and the later ones follow it.
+ * request started may or may not be in it. Replaying all of them, in order, onto the snapshot converges either way
+ * for stream events: each carries the server's state at its moment, and every later commit sends a later event.
+ * An upload or retry response can be older than an event that arrived before it; the next event for that
+ * document corrects it.
  */
 export class ListSync {
   private list: DocList | null = null;

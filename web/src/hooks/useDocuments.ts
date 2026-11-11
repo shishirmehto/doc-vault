@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import type { ApiError } from "@/api/domain";
-import { applyDocEvent, type DocList } from "@/lib/docList";
+import { applyDocEvent, LIST_LIMIT, type DocList } from "@/lib/docList";
 import { isSettled } from "@/lib/lifecycle";
 import { ListSync, type Update } from "@/lib/listSync";
 import { liveFeed } from "./useLiveFeed";
@@ -59,6 +59,8 @@ export function useDocuments(): Documents {
       sync.apply(update);
       const data = sync.shown;
       setState((s) => ({ ...s, data }));
+      // A delete from a list capped at LIST_LIMIT leaves room for an older document no event will ever name.
+      if (data !== null && !data.complete && data.docs.length < LIST_LIMIT) void read();
     }
 
     const leave = liveFeed.subscribe((event) => {

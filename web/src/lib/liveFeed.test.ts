@@ -149,3 +149,29 @@ test("status reads live for 3 s while connecting, then paused, and live again on
   assert.deepEqual(statuses, ["live", "paused", "live", "paused", "live", "off"]);
   assert.deepEqual(heard, ["open", "down", "open", "down", "open"]);
 });
+
+test("a hidden page closes its stream and does not reopen it until it is shown again", (t) => {
+  const { feed, sources, latest, tick } = harness(t);
+  const heard: string[] = [];
+  feed.subscribe((e) => heard.push(describe(e)));
+  latest().open();
+  feed.setHidden(true);
+  tick(60_000);
+  const whileHidden = { sources: sources.length, closed: sources[0]?.closed, open: feed.open, status: feed.status() };
+  feed.setHidden(false);
+  latest().open();
+
+  assert.deepEqual(whileHidden, { sources: 1, closed: true, open: false, status: "live" });
+  assert.equal(sources.length, 2);
+  assert.deepEqual(heard, ["open", "down", "open"]);
+});
+
+test("a page hidden before anything subscribes opens its stream only once it is shown", (t) => {
+  const { feed, sources } = harness(t);
+  feed.setHidden(true);
+  feed.subscribe(() => {});
+  const beforeShown = sources.length;
+  feed.setHidden(false);
+
+  assert.deepEqual([beforeShown, sources.length], [0, 1]);
+});

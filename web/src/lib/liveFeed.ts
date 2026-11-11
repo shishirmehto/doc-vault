@@ -22,7 +22,7 @@ const CLOSED = 2;
 const FIRST_RETRY_MS = 2000;
 const LAST_RETRY_MS = 30_000;
 const PAUSED_AFTER_MS = 3000;
-// "message" is an event with no name, which the contract never sends.
+// "message" is an event with no name. The contract has none, so one reads as resync, like data that fails to parse.
 const MESSAGES = ["document", "deleted", "resync", "message"] as const;
 
 function parsed(event: string, data: string): DocEvent {
@@ -43,6 +43,7 @@ export class LiveFeed {
   private retry: ReturnType<typeof setTimeout> | null = null;
   private pausing: ReturnType<typeof setTimeout> | null = null;
   private current: LiveStatus = "off";
+  private hidden = false;
 
   constructor(connect: () => FeedSource) {
     this.connect = connect;
@@ -57,22 +58,30 @@ export class LiveFeed {
 
   subscribe = (listener: (event: FeedEvent) => void): (() => void) => {
     this.listeners.add(listener);
-    if (this.listeners.size === 1) {
-      this.setStatus("live");
-      this.startPausing();
-      this.start();
-    }
+    if (this.listeners.size === 1 && !this.hidden) this.connectNow();
     return () => {
       if (!this.listeners.delete(listener) || this.listeners.size > 0) return;
-      this.source?.close();
-      this.source = null;
-      this.isOpen = false;
-      this.retryMs = FIRST_RETRY_MS;
-      if (this.retry !== null) clearTimeout(this.retry);
-      if (this.pausing !== null) clearTimeout(this.pausing);
-      this.retry = this.pausing = null;
+      this.stop();
       this.setStatus("off");
     };
+  };
+
+  /**
+   * A hidden page gives its stream back, and showing it opens a new one, which reads the list again. Over HTTP/1.1
+   * a browser allows six connections to one host across all its tabs, so streams held by background tabs would
+   * leave the visible one none for its requests.
+   */
+  setHidden = (hidden: boolean): void => {
+    if (hidden === this.hidden) return;
+    this.hidden = hidden;
+    if (this.listeners.size === 0) return;
+    if (!hidden) {
+      this.connectNow();
+      return;
+    }
+    const wasOpen = this.isOpen;
+    this.stop();
+    if (wasOpen) this.emit({ kind: "down" });
   };
 
   /** Hears status changes without opening the stream, so the top bar can read it on any page. */
@@ -82,6 +91,22 @@ export class LiveFeed {
       this.watchers.delete(watcher);
     };
   };
+
+  private connectNow(): void {
+    this.setStatus("live");
+    this.startPausing();
+    this.start();
+  }
+
+  private stop(): void {
+    this.source?.close();
+    this.source = null;
+    this.isOpen = false;
+    this.retryMs = FIRST_RETRY_MS;
+    if (this.retry !== null) clearTimeout(this.retry);
+    if (this.pausing !== null) clearTimeout(this.pausing);
+    this.retry = this.pausing = null;
+  }
 
   private start(): void {
     const source = this.connect();

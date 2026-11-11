@@ -1,10 +1,11 @@
 "use client";
 
-import { startTransition, useCallback, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import { api } from "@/api/client";
 import type { ApiError, Doc, DocumentId, Result } from "@/api/domain";
 import { useSelection } from "@/hooks/useSelection";
 import { useDocuments } from "@/hooks/useDocuments";
+import { liveFeed } from "@/hooks/useLiveFeed";
 import { useUploads } from "@/hooks/useUploads";
 import { useFetched } from "@/hooks/useFetched";
 import { useHealth } from "@/hooks/useHealth";
@@ -84,6 +85,17 @@ export function Workspace() {
   // The list holds the newest 100. A link to an older document reads that one document instead.
   const lookUp = selectedDoc !== null && docs !== null && !complete && listed === null ? selectedDoc : null;
   const older = useFetched(`older:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
+  const reloadOlder = older.reload;
+  useEffect(() => {
+    if (lookUp === null) return;
+    // The list never holds this document, so its own read follows the events that name it or that may have missed it.
+    return liveFeed.subscribe((event) => {
+      if (event.kind === "down") return;
+      if (event.kind === "document" && event.doc.id !== lookUp) return;
+      if (event.kind === "deleted" && event.id !== lookUp) return;
+      reloadOlder();
+    });
+  }, [lookUp, reloadOlder]);
   const current = listed ?? (older.result?.ok ? older.result.value : null);
   const paneOpen = selection.kind === "chat" ? selection.pane !== null : current !== null && selection.kind === "doc" && selection.pane !== null;
 
