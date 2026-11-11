@@ -10,7 +10,6 @@ cannot be skipped.
 
 from __future__ import annotations
 
-import dataclasses
 import functools
 import hashlib
 import itertools
@@ -27,6 +26,7 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError, Internal
 from openai.lib import type_to_response_format_param
 from pydantic import BaseModel, ValidationError
 
+from . import prompts
 from .config import ReasoningEffort, Settings
 from .db import Db
 from .domain import DocumentId, ErrorCode, Page, Purpose, Source, Turn, TurnId, VaultError
@@ -38,7 +38,6 @@ from .prompts import (
     EvidenceDraft,
     InsightsDraft,
     KeyFactDraft,
-    Msg,
     Prompt,
     Tier,
 )
@@ -204,9 +203,7 @@ class AI:
         try:
             return _validated(output, raw)
         except ValidationError as exc:
-            repair = dataclasses.replace(prompt, messages=(
-                *prompt.messages, Msg("assistant", raw.text),
-                Msg("user", f"That JSON failed validation: {_describe(exc)}. Return the corrected JSON only.")))
+            repair = prompts.repair(prompt, raw.text, _describe(exc))
         try:
             return _validated(output, self._complete_once(repair, output, owner))
         except ValidationError as exc:
