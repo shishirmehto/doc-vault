@@ -98,6 +98,20 @@ CHAT=$(curl -s $API/chats -H 'content-type: application/json' \
   -d "{\"document_ids\": [\"$POLICY\", \"$QUOTE\"]}" | jq -r .id)
 ```
 
+A document that is not ready returns 409 `documents_not_ready`, and `details.not_ready` lists each one's `id`, `filename` and `status`.
+
+`GET /chats` lists chats, newest first, 20 per page by default, with the same `next_cursor` paging as `GET /documents`.
+
+```bash
+curl -s "$API/chats?limit=10"
+```
+
+`GET /chats/{id}` returns one chat and its documents. A document deleted since the chat started has `deleted: true`, and the chat then refuses new questions with 409 `documents_deleted`.
+
+```bash
+curl -s $API/chats/$CHAT
+```
+
 `POST /chats/{id}/messages` asks a question of at most 2,000 characters. The answer cites each claim (`[1]` matches `citations[0]`), `interpreted_as` shows how a follow-up was read, and `usage` lists the model calls, tokens and cost of the turn. A question the documents do not answer returns `status: not_found` with a `reason`.
 
 ```bash

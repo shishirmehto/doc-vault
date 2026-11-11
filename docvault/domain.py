@@ -317,10 +317,17 @@ class DocRef:
 
 
 @dataclass(frozen=True, slots=True)
+class ChatDocument:
+    id: DocumentId
+    filename: str       # snapshot taken when the chat started
+    deleted: bool       # deleted since then; the chat refuses new questions
+
+
+@dataclass(frozen=True, slots=True)
 class Chat:
     id: ChatId
     title: str | None
-    documents: tuple[DocRef, *tuple[DocRef, ...]]   # non-empty, fixed at start
+    documents: tuple[ChatDocument, *tuple[ChatDocument, ...]]   # non-empty, fixed at start
     created_at: datetime
 
 

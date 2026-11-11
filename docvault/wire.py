@@ -156,11 +156,22 @@ class StartChatIn(BaseModel):
     title: str | None = None
 
 
+class ChatDocumentOut(BaseModel):
+    id: UUID
+    filename: str                      # as it was when the chat started
+    deleted: bool                      # true: the chat answers no new questions (409 documents_deleted)
+
+
 class ChatOut(BaseModel):
     id: UUID
     title: str | None
-    documents: list[dict[str, str]]    # [{"id", "filename"}]
+    documents: list[ChatDocumentOut]
     created_at: datetime
+
+
+class ChatPage(BaseModel):
+    items: list[ChatOut]
+    next_cursor: str | None
 
 
 class AskIn(BaseModel):
@@ -345,7 +356,8 @@ def insights_out(doc: Document) -> InsightsReadyOut | InsightsPendingOut | Insig
 
 def chat_out(chat: Chat) -> ChatOut:
     return ChatOut(id=chat.id, title=chat.title, created_at=chat.created_at,
-                   documents=[{"id": str(doc.id), "filename": doc.filename} for doc in chat.documents])
+                   documents=[ChatDocumentOut(id=doc.id, filename=doc.filename, deleted=doc.deleted)
+                              for doc in chat.documents])
 
 
 def turn_out(turn: Turn) -> TurnOut:

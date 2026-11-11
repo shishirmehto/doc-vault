@@ -193,6 +193,18 @@ def start_chat(body: wire.StartChatIn, ctx: Deps) -> wire.ChatOut:
     return wire.chat_out(chat.start(ctx.db, [DocumentId(doc_id) for doc_id in body.document_ids], title=body.title))
 
 
+@router.get("/chats", response_model=wire.ChatPage, responses=errors(ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
+def list_chats(ctx: Deps, limit: Annotated[int, Query(ge=1, le=100)] = 20, cursor: str | None = None) -> wire.ChatPage:
+    chats, next_cursor = chat.list_chats(ctx.db, limit=limit, cursor=cursor)
+    return wire.ChatPage(items=[wire.chat_out(c) for c in chats], next_cursor=next_cursor)
+
+
+@router.get("/chats/{chat_id}", response_model=wire.ChatOut,
+            responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.INVALID_REQUEST))
+def get_chat(chat_id: UUID, ctx: Deps) -> wire.ChatOut:
+    return wire.chat_out(chat.get(ctx.db, ChatId(chat_id)))
+
+
 @router.post("/chats/{chat_id}/messages", response_model=wire.TurnOut, dependencies=[rate_limited("ask")],
              responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED, ErrorCode.AI_UNAVAILABLE,
                               ErrorCode.AI_BAD_OUTPUT, ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED))

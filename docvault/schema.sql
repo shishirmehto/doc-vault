@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS chats (
   title      text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS chats_listing ON chats (created_at DESC, id DESC);
 
 -- The document scope is fixed when the chat starts. No FK to documents: a deleted
 -- document stays in the scope, so its chats refuse new questions instead of quietly

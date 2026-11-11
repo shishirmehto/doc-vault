@@ -17,14 +17,11 @@ Idempotency model:
 
 from __future__ import annotations
 
-import base64
-import binascii
 import logging
 from collections.abc import Mapping
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import PurePath
 from typing import BinaryIO
-from uuid import UUID
 
 from pgvector import Vector
 from psycopg import Connection
@@ -33,7 +30,7 @@ from psycopg.types.json import Jsonb
 from . import insights, pages
 from .ai import DocOwner
 from .context import Ctx
-from .db import Db, Lease, PipelineSteps, pipeline_steps
+from .db import Db, Lease, PipelineSteps, decode_cursor, encode_cursor, pipeline_steps
 from .domain import (
     Created,
     DocKind,
@@ -339,7 +336,7 @@ def get(db: Db, doc_id: DocumentId) -> Document:
 def list_documents(db: Db, *, status: DocStatus | None, limit: int,
                    cursor: str | None) -> tuple[list[Document], str | None]:
     """Keyset pagination on (created_at DESC, id DESC). The cursor encodes the last pair."""
-    after = _decode_cursor(cursor) if cursor else None
+    after = decode_cursor(cursor) if cursor else None
     with db.connection() as conn:
         rows = conn.execute(
             _DOCUMENT_SQL + "WHERE (%(status)s::text IS NULL OR d.status = %(status)s)"
@@ -348,7 +345,7 @@ def list_documents(db: Db, *, status: DocStatus | None, limit: int,
             {"status": status, "created_at": after and after[0], "id": after and after[1],
              "limit": limit + 1}).fetchall()
     last = rows[limit - 1] if len(rows) > limit else None
-    return [_row_to_document(row) for row in rows[:limit]], last and _encode_cursor(last["created_at"], last["id"])
+    return [_row_to_document(row) for row in rows[:limit]], last and encode_cursor(last["created_at"], last["id"])
 
 
 def page(db: Db, doc_id: DocumentId, number: int) -> tuple[PageBasis, Page]:
@@ -367,18 +364,6 @@ def page(db: Db, doc_id: DocumentId, number: int) -> tuple[PageBasis, Page]:
 
 def _not_found(doc_id: DocumentId) -> VaultError:
     return VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"No document has the id {doc_id}.")
-
-
-def _encode_cursor(created_at: datetime, doc_id: UUID) -> str:
-    return base64.urlsafe_b64encode(f"{created_at.isoformat()}|{doc_id}".encode()).decode()
-
-
-def _decode_cursor(cursor: str) -> tuple[datetime, UUID]:
-    try:
-        created_at, doc_id = base64.urlsafe_b64decode(cursor.encode()).decode().split("|")
-        return datetime.fromisoformat(created_at), UUID(doc_id)
-    except (ValueError, binascii.Error) as exc:
-        raise VaultError(ErrorCode.INVALID_CURSOR, "The cursor is not one this API returned.") from exc
 
 
 def _row_to_document(row: Mapping[str, object]) -> Document:

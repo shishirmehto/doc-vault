@@ -61,7 +61,7 @@ def test_a_broker_asks_follows_up_is_refused_and_compares_two_documents(client, 
     assert started.status_code == 201
     chat_id = started.json()["id"]
     assert {k: started.json()[k] for k in ("title", "documents")} == {
-        "title": "CGL renewal", "documents": [{"id": str(policy), "filename": POLICY}]}
+        "title": "CGL renewal", "documents": [{"id": str(policy), "filename": POLICY, "deleted": False}]}
 
     limit = FACTS["policy-each-occurrence-limit"]
     first = ask(client, chat_id, "What is the each occurrence limit?")
@@ -103,7 +103,8 @@ def test_a_broker_asks_follows_up_is_refused_and_compares_two_documents(client, 
     assert client.get(f"/chats/{chat_id}/messages", params={"limit": 2}).json()["turns"] == [second, third]
 
     both = client.post("/chats", json={"document_ids": [str(quote), str(policy)]}).json()
-    assert both["documents"] == [{"id": str(policy), "filename": POLICY}, {"id": str(quote), "filename": QUOTE}]
+    assert both["documents"] == [{"id": str(policy), "filename": POLICY, "deleted": False},
+                                 {"id": str(quote), "filename": QUOTE, "deleted": False}]
     change = next(row for row in TRUTH["changes"] if row["field"] == "general aggregate limit")
     compared = ask(client, both["id"], "Compare the general aggregate limit in the two documents.")
     assert (compared["status"], compared["answer"]) == (
@@ -129,7 +130,7 @@ def test_starting_a_chat_needs_existing_ready_documents(client, ctx):
         "details": {"missing": [str(unknown)]}}})
     assert (not_ready.status_code, not_ready.json()) == (409, {"error": {
         "code": "documents_not_ready", "message": "1 of 2 documents are not ready.", "retryable": False,
-        "details": {"not_ready": [{"id": str(queued), "status": "queued"}]}}})
+        "details": {"not_ready": [{"id": str(queued), "filename": QUOTE, "status": "queued"}]}}})
     assert scalar(ctx.db, "SELECT count(*) FROM chats") == 0
     assert client.post(f"/chats/{unknown}/messages", json={"question": "Hello?"}).json()["error"]["code"] == (
         "chat_not_found")
@@ -148,9 +149,46 @@ def test_a_chat_that_lost_a_document_keeps_its_history_and_takes_no_questions(cl
     assert (refused.status_code, refused.json()) == (409, {"error": {
         "code": "documents_deleted", "retryable": False,
         "message": "1 of 2 documents in this chat were deleted. Start a new chat with the documents you want to ask about.",
-        "details": {"deleted": [{"id": str(quote), "filename": QUOTE}]}}})
+        "details": {"deleted": [{"id": str(quote), "filename": QUOTE, "status": "deleted"}]}}})
     assert scalar(ctx.db, "SELECT count(*) FROM llm_calls") == calls
     assert client.get(f"/chats/{chat_id}/messages").json()["turns"] == [answered]
+    assert client.get(f"/chats/{chat_id}").json()["documents"] == [
+        {"id": str(policy), "filename": POLICY, "deleted": False}, {"id": str(quote), "filename": QUOTE, "deleted": True}]
+
+
+def test_chats_read_back_one_at_a_time_and_newest_first_a_page_at_a_time(client, ctx):
+    policy, quote = ready(ctx, POLICY), ready(ctx, QUOTE)
+    first, second, third = (client.post("/chats", json=body).json() for body in (
+        {"document_ids": [str(policy)], "title": "Policy"}, {"document_ids": [str(quote)]},
+        {"document_ids": [str(quote), str(policy)], "title": "Renewal"}))
+    with ctx.db.connection() as conn:   # one chat a minute, so the order does not rest on clock resolution
+        for minutes, chat in ((3, first), (2, second), (1, third)):
+            conn.execute("UPDATE chats SET created_at = now() - %s * interval '1 minute' WHERE id = %s",
+                         (minutes, chat["id"]))
+
+    one = client.get(f"/chats/{third['id']}").json()
+    newest = client.get("/chats", params={"limit": 2}).json()
+    rest = client.get("/chats", params={"limit": 2, "cursor": newest["next_cursor"]}).json()
+
+    assert {k: one[k] for k in ("id", "title", "documents")} == {"id": third["id"], "title": "Renewal", "documents": [
+        {"id": str(policy), "filename": POLICY, "deleted": False}, {"id": str(quote), "filename": QUOTE, "deleted": False}]}
+    assert [(c["id"], c["title"]) for c in newest["items"]] == [(third["id"], "Renewal"), (second["id"], None)]
+    assert ([(c["id"], c["title"]) for c in rest["items"]], rest["next_cursor"]) == ([(first["id"], "Policy")], None)
+    missing = client.get(f"/chats/{uuid4()}")
+    bad_cursor = client.get("/chats", params={"cursor": "nope"})
+    assert [(r.status_code, r.json()["error"]["code"]) for r in (missing, bad_cursor)] == [
+        (404, "chat_not_found"), (400, "invalid_cursor")]
+
+
+def test_a_question_over_2000_characters_is_refused_and_the_limit_is_in_the_schema(client, ctx):
+    chat_id = client.post("/chats", json={"document_ids": [str(ready(ctx, POLICY))]}).json()["id"]
+    too_long = client.post(f"/chats/{chat_id}/messages", json={"question": "a" * 2001})
+    schema = client.get("/openapi.json").json()["components"]["schemas"]["AskIn"]["properties"]["question"]
+
+    assert (too_long.status_code, too_long.json()["error"]["details"]["errors"]) == (422, [
+        {"field": "body.question", "message": "String should have at most 2000 characters"}])
+    assert (schema["minLength"], schema["maxLength"]) == (1, 2000)
+    assert scalar(ctx.db, "SELECT count(*) FROM chat_turns") == 0
 
 
 def test_a_question_the_model_declines_is_kept_as_not_found_with_its_reason(client, ctx):
