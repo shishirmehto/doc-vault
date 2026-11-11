@@ -24,6 +24,12 @@ uv run pytest
 uv run ruff check
 ```
 
+## Sample documents
+
+`samples/` holds three fictitious documents for the same insured: a seven-page commercial general liability policy (PDF), a three-page renewal quote with changed figures (PDF), and a short endorsement (DOCX). `samples/facts.yaml` lists the facts planted in them, each with its document, page, and exact text. The tests and evals read that file as their expected values.
+
+To regenerate the samples, run `uv run python scripts/make_samples.py`. The output is byte-identical on every run.
+
 ## Status
 
 This section lists what works at the current commit.
@@ -34,6 +40,7 @@ Built:
 - `docvault/schema.sql`, applied by `db.migrate()` at every process start. The migration is idempotent and safe to run from several processes at once.
 - `db.pipeline_steps()`: the per-document advisory lease and the `step_runs` log.
 - `GET /health`.
+- The sample documents and `samples/facts.yaml`.
 
 Not built yet (the functions raise `NotImplementedError`):
 
