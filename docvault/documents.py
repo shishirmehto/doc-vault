@@ -42,7 +42,6 @@ from .domain import (
     Existing,
     Failed,
     Failure,
-    InsightsFailed,
     InsightsPending,
     InsightsState,
     InsightsStatus,
@@ -122,19 +121,21 @@ def retry(ctx: Ctx, doc_id: DocumentId) -> Document:
 
     A failed document goes back to QUEUED and is indexed again. This is allowed
     for non-retryable failures too; `retryable` only tells the user whether a
-    retry can help without a new file. Otherwise failed insights are reset and
-    analysed again. Otherwise NOTHING_TO_RETRY.
+    retry can help without a new file. Failed insights are reset and analysed
+    again in the same call, since run_analyze leaves a failed row alone. When
+    neither failed, NOTHING_TO_RETRY.
     """
     with ctx.db.connection() as conn:
         requeued = transition(conn, doc_id, DocStatus.QUEUED, reassert=False)
+    reset = insights.reset_failed(ctx.db, doc_id)
     if requeued:
         ctx.jobs.index(doc_id)
-    elif isinstance(get(ctx.db, doc_id).insights, InsightsFailed):
-        insights.reset_failed(ctx.db, doc_id)
+    if reset:
         ctx.jobs.analyze(doc_id)
-    else:
+    doc = get(ctx.db, doc_id)
+    if not (requeued or reset):
         raise VaultError(ErrorCode.NOTHING_TO_RETRY, "Nothing failed for this document, so there is nothing to retry.")
-    return get(ctx.db, doc_id)
+    return doc
 
 
 def delete(ctx: Ctx, doc_id: DocumentId) -> None:

@@ -9,7 +9,7 @@ import pytest
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen.canvas import Canvas
 
-from docvault import documents, tasks
+from docvault import documents, insights, tasks
 from docvault.ai import FakeEmbedder, ProviderError
 from docvault.db import Lease, pipeline_steps
 from docvault.domain import (
@@ -19,7 +19,9 @@ from docvault.domain import (
     ErrorCode,
     Existing,
     Failed,
+    Failure,
     InsightsPending,
+    InsightsReady,
     InsightsUnavailable,
     PageBasis,
     Parsed,
@@ -295,3 +297,19 @@ def test_a_nul_byte_past_the_sniffed_head_is_dropped_and_the_text_still_indexes(
     ready = documents.get(ctx.db, doc_id).lifecycle
     assert isinstance(ready, Ready)
     assert documents.page(ctx.db, doc_id, ready.parsed.page_count)[1].text.endswith("Each Occurrence Limit $500.")
+
+
+def test_one_retry_of_a_failed_document_also_reruns_its_failed_insights(ctx):
+    doc_id = upload(ctx, POLICY).document.id
+    documents.run_index(with_embedder(ctx, FailingEmbedder(0, ProviderError("timeout", retryable=True))), doc_id,
+                        attempt=documents.MAX_RETRIES + 1)
+    insights.fail(ctx, doc_id, Failure(ErrorCode.AI_UNAVAILABLE, "The provider timed out.", retryable=True))
+    ctx.jobs.analyzed.clear()
+
+    retried = documents.retry(ctx, doc_id)
+
+    assert (type(retried.lifecycle), retried.insights, ctx.jobs.analyzed) == (Queued, InsightsPending(), [doc_id])
+    documents.run_index(ctx, doc_id)
+    insights.run_analyze(ctx, doc_id)
+    assert (type(documents.get(ctx.db, doc_id).lifecycle), type(documents.get(ctx.db, doc_id).insights)) == (
+        Ready, InsightsReady)
