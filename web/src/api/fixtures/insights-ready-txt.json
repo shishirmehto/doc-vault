@@ -1,0 +1,22 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "status": "ready",
+    "title": "ui-renewal-memo-1.txt",
+    "document_type": "other",
+    "summary": "ui-renewal-memo-1: generated test document for the doc-vault web UI (seed 9101). Clause 1. The Premium endorsement occurrence exclusion broker damage limit premium aggregate endorsement premium schedule exclusion endorsement contractor premium damage liability liability premium insured policy schedule. Reference number UI-9101-001.",
+    "key_facts": [],
+    "tags": [
+      "renewal",
+      "memo"
+    ],
+    "coverage": {
+      "pages_read": 12,
+      "page_count": 12
+    },
+    "dropped_key_facts": 0,
+    "model": "fake-chat",
+    "prompt_version": "insights-v1"
+  }
+}

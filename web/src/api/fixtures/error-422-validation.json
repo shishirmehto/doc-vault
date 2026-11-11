@@ -1,0 +1,20 @@
+{
+  "status": 422,
+  "headers": {},
+  "body": {
+    "detail": [
+      {
+        "type": "uuid_parsing",
+        "loc": [
+          "path",
+          "doc_id"
+        ],
+        "msg": "Input should be a valid UUID, invalid character: found `n` at 0",
+        "input": "not-a-uuid",
+        "ctx": {
+          "error": "invalid character: found `n` at 0"
+        }
+      }
+    ]
+  }
+}

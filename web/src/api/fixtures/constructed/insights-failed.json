@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "status": "failed",
+    "error": {
+      "code": "ai_bad_output",
+      "message": "The model returned invalid output twice.",
+      "retryable": false,
+      "details": {}
+    }
+  }
+}
