@@ -220,10 +220,13 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .segments button { border: 0; background: var(--sheet); color: var(--ink); padding: 4px 10px; font: inherit; cursor: pointer; }
 .segments button + button { border-left: 1px solid var(--rule); }
 .segments button[aria-pressed="true"] { background: var(--carbon); color: var(--sheet); font-weight: 600; }
+/* A table wider than its column scrolls sideways inside this box; the padding keeps the table's outline in view. */
+.table-box { overflow-x: auto; max-width: 100%; padding: 1px; }
 .figures {
   border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; background: var(--sheet);
   box-shadow: 0 0 0 1px var(--rule); border-radius: var(--r-control);
 }
+.figures td, .figures thead th, .figures code { white-space: nowrap; }
 .figures caption { text-align: left; font-weight: 600; padding-bottom: var(--s2); }
 .figures th, .figures td { padding: 7px var(--s3); border-bottom: 1px solid var(--rule); text-align: right; }
 .figures tr:last-child > * { border-bottom: 0; }
@@ -265,10 +268,7 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   background: var(--carbon-tint); color: var(--carbon); font: 600 12px/1.55 var(--font-ui); font-variant-numeric: tabular-nums;
 }
 .source-where { font-size: var(--t-meta); font-weight: 600; color: var(--carbon); }
-.source-quote {
-  font: 400 15px/1.55 var(--font-doc); color: var(--ink);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
+.source-quote { font: 400 15px/1.55 var(--font-doc); color: var(--ink); overflow-wrap: anywhere; }
 
 /* Not found is a result, not an error: a dashed graphite rule, no red. */
 .not-found { border-left: 2px dashed var(--graphite); padding-left: var(--s3); display: grid; gap: var(--s1); max-width: 64ch; }
@@ -346,12 +346,13 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   border-left: 1px solid var(--rule); background: var(--desk);
 }
 .pane-header {
-  display: flex; align-items: center; gap: var(--s4);
+  display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--s4); row-gap: var(--s1);
   margin: 0 var(--s8) 0 var(--s6); padding: var(--s3) 0; border-bottom: 1px solid var(--rule);
 }
 /* isolation keeps the flag, which sits behind the sheet, in front of the pane's own background. */
 .pane-body { overflow-y: auto; min-height: 0; padding: var(--s6) var(--s8) var(--s12) var(--s6); isolation: isolate; }
-.pane-file { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-file { flex: 1 1 18ch; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.pane-header > .text-button:last-child { margin-left: auto; }
 .pager { display: flex; align-items: center; gap: var(--s3); font-size: var(--t-meta); }
 .pager-at { font-variant-numeric: tabular-nums; color: var(--graphite); }
 .pane-note { margin-bottom: var(--s4); color: var(--graphite); }

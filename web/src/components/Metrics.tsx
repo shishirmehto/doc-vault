@@ -96,15 +96,14 @@ function DocumentFigures({ m }: { m: DocumentMetrics }) {
         {n(m.total)} documents, {n(m.pages)} pages, {n(m.chunks)} indexed passages, {formatBytes(m.bytes)} stored.
       </p>
       <div className="metrics-pair">
-        <table className="figures">
-          <caption>Documents by status</caption>
+        <Figures caption="Documents by status">
           <thead><tr><th scope="col">Status</th><th scope="col">Documents</th></tr></thead>
           <tbody>
             {(Object.keys(STATUS) as (keyof typeof STATUS)[]).map((s) => (
               <tr key={s}><th scope="row">{STATUS[s]}</th><td>{n(m.byStatus[s])}</td></tr>
             ))}
           </tbody>
-        </table>
+        </Figures>
         <CodeTable caption="Failed documents by reason" unit="Documents" rows={m.failures} empty="No document has failed." />
       </div>
     </>
@@ -113,8 +112,7 @@ function DocumentFigures({ m }: { m: DocumentMetrics }) {
 
 function CodeTable({ caption, unit, rows, empty }: { caption: string; unit: string; rows: readonly CodeCount[]; empty: string }) {
   return (
-    <table className="figures">
-      <caption>{caption}</caption>
+    <Figures caption={caption}>
       <thead><tr><th scope="col">Reason</th><th scope="col">{unit}</th></tr></thead>
       <tbody>
         {rows.length === 0 ? (
@@ -123,7 +121,7 @@ function CodeTable({ caption, unit, rows, empty }: { caption: string; unit: stri
           rows.map((r) => <tr key={r.code}><th scope="row"><code>{r.code}</code></th><td>{n(r.count)}</td></tr>)
         )}
       </tbody>
-    </table>
+    </Figures>
   );
 }
 
@@ -133,18 +131,16 @@ function ProcessingFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean })
     <>
       <p className="metrics-lead">Since {SINCE.format(m.since)}: {n(m.uploaded)} uploaded, {n(m.indexed)} indexed.</p>
 
-      <table className="figures">
-        <caption>Timings</caption>
+      <Figures caption="Timings">
         <thead><tr><th scope="col">Measure</th><th scope="col">p50</th><th scope="col">p95</th></tr></thead>
         <tbody>
           <tr><th scope="row">Upload to ready</th><SpreadCells spread={m.timeToReady} /></tr>
           <tr><th scope="row">Queue wait, upload to first page read</th><SpreadCells spread={m.queueWait} /></tr>
           <tr><th scope="row">Answer a question</th><SpreadCells spread={m.chat.latency} /></tr>
         </tbody>
-      </table>
+      </Figures>
 
-      <table className="figures">
-        <caption>Steps, counted in runs: a retried document runs a step again</caption>
+      <Figures caption="Steps, counted in runs: a retried document runs a step again">
         <thead>
           <tr>
             <th scope="col">Step</th><th scope="col">Runs</th><th scope="col">Failed runs</th><th scope="col">Retries</th>
@@ -165,14 +161,13 @@ function ProcessingFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean })
             </tr>
           ))}
         </tbody>
-      </table>
+      </Figures>
 
       <p className="metrics-lead">
         {n(m.ai.calls)} AI calls, {n(m.ai.errors)} errors, {n(m.ai.inputTokens)} tokens in, {n(m.ai.outputTokens)} out. Cost:{" "}
         {noCost ? "fake provider, no cost" : costText(m.ai)}.
       </p>
-      <table className="figures">
-        <caption>AI calls by purpose and model</caption>
+      <Figures caption="AI calls by purpose and model">
         <thead>
           <tr>
             <th scope="col">Purpose</th><th scope="col" className="text">Model</th><th scope="col">Calls</th>
@@ -198,18 +193,29 @@ function ProcessingFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean })
             ))
           )}
         </tbody>
-      </table>
+      </Figures>
 
-      <table className="figures">
-        <caption>Questions: {n(m.chat.turns)} asked</caption>
+      <Figures caption={`Questions: ${n(m.chat.turns)} asked`}>
         <thead><tr><th scope="col">Outcome</th><th scope="col">Questions</th></tr></thead>
         <tbody>
           {(Object.keys(OUTCOME) as TurnOutcome[]).map((o) => (
             <tr key={o}><th scope="row">{OUTCOME[o]}</th><td>{n(m.chat.outcomes[o])}</td></tr>
           ))}
         </tbody>
-      </table>
+      </Figures>
     </>
+  );
+}
+
+/** A table that scrolls sideways inside its own box when it is wider than the column. */
+function Figures({ caption, children }: { caption: string; children: ReactNode }) {
+  return (
+    <div className="table-box" role="region" aria-label={caption} tabIndex={0}>
+      <table className="figures">
+        <caption>{caption}</caption>
+        {children}
+      </table>
+    </div>
   );
 }
 
