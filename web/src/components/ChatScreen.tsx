@@ -57,7 +57,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
               <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
             </p>
           </header>
-          <Turns thread={thread} pane={pane} onOpen={open} />
+          <Turns thread={thread} pane={pane} onOpen={open} accepting={accepting} />
           {thread && (
             <PendingTurn
               ask={thread.ask}
@@ -110,7 +110,12 @@ function sourceView(pane: ChatPane, turns: readonly Turn[] | null, docs: readonl
   return { kind: "page", doc, page, mark, citedPage: citation.source.page };
 }
 
-function Turns({ thread, pane, onOpen }: { thread: Thread | undefined; pane: ChatPane | null; onOpen(cite: TurnCite): void }) {
+function Turns({ thread, pane, onOpen, accepting }: {
+  thread: Thread | undefined;
+  pane: ChatPane | null;
+  onOpen(cite: TurnCite): void;
+  accepting: boolean;
+}) {
   if (!thread || thread.history.kind === "loading") {
     return (
       <div className="turn" aria-busy="true">
@@ -122,7 +127,7 @@ function Turns({ thread, pane, onOpen }: { thread: Thread | undefined; pane: Cha
     return <p className="notice" data-tone="failed">{explain(thread.history.error)}</p>;
   }
   if (thread.history.turns.length === 0 && thread.ask.phase === "idle") {
-    return <p className="quiet">Ask a question to start. Follow-ups can refer back to earlier answers.</p>;
+    return accepting ? <p className="quiet">Ask a question to start. Follow-ups can refer back to earlier answers.</p> : null;
   }
   return thread.history.turns.map((turn) => (
     <TurnView key={turn.id} turn={turn} active={pane?.cite.turn === turn.id ? pane.cite.ref : null} onOpen={onOpen} />
