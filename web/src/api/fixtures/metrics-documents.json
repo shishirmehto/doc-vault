@@ -1,0 +1,31 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "total": 11,
+    "by_status": {
+      "queued": 0,
+      "parsing": 0,
+      "embedding": 0,
+      "ready": 9,
+      "failed": 2
+    },
+    "by_kind": {
+      "pdf": 4,
+      "docx": 1,
+      "txt": 6
+    },
+    "insights": {
+      "pending": 0,
+      "ready": 9,
+      "failed": 0,
+      "unavailable": 2
+    },
+    "pages": 697,
+    "chunks": 1303,
+    "bytes": 2025683,
+    "failures_by_code": {
+      "no_extractable_text": 2
+    }
+  }
+}

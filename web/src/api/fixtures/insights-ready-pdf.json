@@ -1,0 +1,121 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "status": "ready",
+    "title": "COMMERCIAL GENERAL LIABILITY POLICY",
+    "document_type": "policy",
+    "summary": "SAMPLE - fictitious document. Not a real insurance contract. COMMERCIAL GENERAL LIABILITY POLICY",
+    "key_facts": [
+      {
+        "label": "Insurer",
+        "value": "Sample Mutual Insurance Company",
+        "page": 1,
+        "page_label": "p. 1",
+        "quote": "Insurer: Sample Mutual Insurance Company",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/1"
+      },
+      {
+        "label": "Policy Number",
+        "value": "SAMPLE-CGL-2026-0001",
+        "page": 1,
+        "page_label": "p. 1",
+        "quote": "Policy Number: SAMPLE-CGL-2026-0001",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/1"
+      },
+      {
+        "label": "Named Insured",
+        "value": "Example Contractors LLC",
+        "page": 1,
+        "page_label": "p. 1",
+        "quote": "Named Insured: Example Contractors LLC",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/1"
+      },
+      {
+        "label": "Mailing Address",
+        "value": "100 Example Street, Sampletown, ST 00000",
+        "page": 1,
+        "page_label": "p. 1",
+        "quote": "Mailing Address: 100 Example Street, Sampletown, ST 00000",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/1"
+      },
+      {
+        "label": "Form of Business",
+        "value": "Limited liability company",
+        "page": 1,
+        "page_label": "p. 1",
+        "quote": "Form of Business: Limited liability company",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/1"
+      },
+      {
+        "label": "Business Description",
+        "value": "Residential and light commercial roofing contractor",
+        "page": 1,
+        "page_label": "p. 1",
+        "quote": "Business Description: Residential and light commercial roofing contractor",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/1"
+      },
+      {
+        "label": "Producer",
+        "value": "Example Brokerage Services",
+        "page": 1,
+        "page_label": "p. 1",
+        "quote": "Producer: Example Brokerage Services",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/1"
+      },
+      {
+        "label": "Total Advance Premium",
+        "value": "$18,450",
+        "page": 1,
+        "page_label": "p. 1",
+        "quote": "Total Advance Premium: $18,450",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/1"
+      },
+      {
+        "label": "Premium Audit Period",
+        "value": "Annual",
+        "page": 1,
+        "page_label": "p. 1",
+        "quote": "Premium Audit Period: Annual",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/1"
+      },
+      {
+        "label": "Each Occurrence Limit",
+        "value": "$1,000,000",
+        "page": 2,
+        "page_label": "p. 2",
+        "quote": "Each Occurrence Limit $1,000,000",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/2"
+      },
+      {
+        "label": "Damage to Premises Rented to You Limit",
+        "value": "$100,000 any one premises",
+        "page": 2,
+        "page_label": "p. 2",
+        "quote": "Damage to Premises Rented to You Limit $100,000 any one premises",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/2"
+      },
+      {
+        "label": "Medical Expense Limit",
+        "value": "$5,000 any one person",
+        "page": 2,
+        "page_label": "p. 2",
+        "quote": "Medical Expense Limit $5,000 any one person",
+        "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/2"
+      }
+    ],
+    "tags": [
+      "commercial",
+      "general",
+      "liability",
+      "policy"
+    ],
+    "coverage": {
+      "pages_read": 7,
+      "page_count": 7
+    },
+    "dropped_key_facts": 0,
+    "model": "fake-chat",
+    "prompt_version": "insights-v1"
+  }
+}

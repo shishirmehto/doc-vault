@@ -1,0 +1,19 @@
+{
+  "status": 422,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "invalid_request",
+      "message": "The request is not valid. body.question: String should have at least 1 character",
+      "retryable": false,
+      "details": {
+        "errors": [
+          {
+            "field": "body.question",
+            "message": "String should have at least 1 character"
+          }
+        ]
+      }
+    }
+  }
+}

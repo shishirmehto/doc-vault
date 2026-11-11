@@ -1,0 +1,19 @@
+{
+  "status": 422,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "invalid_request",
+      "message": "The request is not valid. path.doc_id: Input should be a valid UUID, invalid character: found `n` at 0",
+      "retryable": false,
+      "details": {
+        "errors": [
+          {
+            "field": "path.doc_id",
+            "message": "Input should be a valid UUID, invalid character: found `n` at 0"
+          }
+        ]
+      }
+    }
+  }
+}

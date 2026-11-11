@@ -1,0 +1,78 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "window": "1h",
+    "since": "2026-11-11T05:28:09.774871Z",
+    "uploaded": 0,
+    "indexed": 0,
+    "time_to_ready_ms": {
+      "p50": null,
+      "p95": null
+    },
+    "queue_wait_ms": {
+      "p50": null,
+      "p95": null
+    },
+    "steps": {
+      "parse": {
+        "runs": 0,
+        "ok": 0,
+        "failed": 0,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": null,
+          "p95": null
+        },
+        "failures_by_code": {}
+      },
+      "embed": {
+        "runs": 0,
+        "ok": 0,
+        "failed": 0,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": null,
+          "p95": null
+        },
+        "failures_by_code": {}
+      },
+      "analyze": {
+        "runs": 0,
+        "ok": 0,
+        "failed": 0,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": null,
+          "p95": null
+        },
+        "failures_by_code": {}
+      }
+    },
+    "ai": {
+      "calls": 0,
+      "errors": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "unpriced_calls": 0,
+      "by_purpose_and_model": []
+    },
+    "chat": {
+      "turns": 0,
+      "outcomes": {
+        "answered": 0,
+        "no_evidence": 0,
+        "model_declined": 0,
+        "unverified": 0
+      },
+      "latency_ms": {
+        "p50": null,
+        "p95": null
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "status": "unavailable",
+    "reason": "This document failed to process, so it has no insights."
+  }
+}

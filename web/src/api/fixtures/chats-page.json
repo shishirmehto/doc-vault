@@ -1,0 +1,79 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "items": [
+      {
+        "id": "54da5af8-df4c-46b2-87c3-a688062d0087",
+        "title": null,
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false
+          },
+          {
+            "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+            "filename": "sample-renewal-quote.pdf",
+            "deleted": false
+          }
+        ],
+        "created_at": "2026-11-11T06:28:09.744341Z"
+      },
+      {
+        "id": "148929b8-5cdd-44c9-8ef5-e8b9bc0439df",
+        "title": null,
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false
+          },
+          {
+            "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+            "filename": "sample-renewal-quote.pdf",
+            "deleted": false
+          }
+        ],
+        "created_at": "2026-11-11T04:02:37.201975Z"
+      },
+      {
+        "id": "77c6b481-397b-49a3-90bf-6eb57b96c80d",
+        "title": null,
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false
+          }
+        ],
+        "created_at": "2026-11-11T03:59:42.116074Z"
+      },
+      {
+        "id": "fb545521-5fa1-449c-b922-423fc8b962bc",
+        "title": null,
+        "documents": [
+          {
+            "id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+            "filename": "sample-endorsement-additional-insured.docx",
+            "deleted": false
+          }
+        ],
+        "created_at": "2026-11-11T03:52:45.455040Z"
+      },
+      {
+        "id": "7a0bed62-ed27-4bf7-a9c6-31b3f4030052",
+        "title": null,
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false
+          }
+        ],
+        "created_at": "2026-11-11T03:52:32.215197Z"
+      }
+    ],
+    "next_cursor": "MjAyNi0xMS0xMVQwMzo1MjozMi4yMTUxOTcrMDA6MDB8N2EwYmVkNjItZWQyNy00YmY3LWE5YzYtMzFiM2Y0MDMwMDUy"
+  }
+}

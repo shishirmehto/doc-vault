@@ -6,3 +6,4 @@ tests
 samples
 decisions.tsv
 **/__pycache__
+web

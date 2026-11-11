@@ -1,0 +1,21 @@
+{
+  "status": 201,
+  "headers": {},
+  "body": {
+    "id": "54da5af8-df4c-46b2-87c3-a688062d0087",
+    "title": null,
+    "documents": [
+      {
+        "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+        "filename": "sample-cgl-policy.pdf",
+        "deleted": false
+      },
+      {
+        "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+        "filename": "sample-renewal-quote.pdf",
+        "deleted": false
+      }
+    ],
+    "created_at": "2026-11-11T06:28:09.744341Z"
+  }
+}

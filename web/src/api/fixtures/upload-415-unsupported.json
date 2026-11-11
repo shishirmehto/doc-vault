@@ -1,0 +1,12 @@
+{
+  "status": 415,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "unsupported_type",
+      "message": "This looks like a binary file of an unknown type. Upload a PDF, a Word .docx file or a plain text file.",
+      "retryable": false,
+      "details": {}
+    }
+  }
+}

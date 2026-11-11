@@ -1,0 +1,12 @@
+{
+  "status": 404,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "page_not_found",
+      "message": "This document has no page 99. It has 7.",
+      "retryable": false,
+      "details": {}
+    }
+  }
+}
