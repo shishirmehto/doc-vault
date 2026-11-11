@@ -1,0 +1,263 @@
+# The eval case set for python -m docvault.evals. See docs/evals.md for how each case is scored.
+#
+# A case is one chat: its scope (aliases from `documents`) and its turns, asked in order.
+# Each turn expects fact ids from samples/facts.yaml (one per document for a comparison),
+# or `not_found` when the documents in scope do not answer it.
+# Questions are worded the way a broker asks, not by echoing a fact's text: a question that
+# repeats the fact's words passes the gate's all-terms arm every time and measures nothing.
+# The questions were written before any calibration and are not edited afterwards.
+
+documents:
+  policy: sample-cgl-policy.pdf
+  quote: sample-renewal-quote.pdf
+  endorsement: sample-endorsement-additional-insured.docx
+
+# Every fact in samples/facts.yaml is expected by at least one turn, or is listed here with the reason.
+not_asked:
+  policy-footer-boilerplate: running footer repeated on pages 2-7; no broker asks for it and every page would answer
+  quote-footer-boilerplate: running footer repeated on pages 1-3; no broker asks for it and every page would answer
+
+cases:
+# Required. At 453d327 under the fake this came back not_found/no_evidence.
+- id: deductible-differ
+  scope: [policy, quote]
+  turns:
+  - ask: How does the deductible differ between the two?
+    expect: [policy-deductible, quote-deductible]
+
+# Required. At 453d327 under the fake the follow-up was not condensed and came back model_declined.
+- id: premium-follow-up
+  scope: [policy, quote]
+  turns:
+  - ask: What is the per-occurrence limit on the policy and on the renewal quote?
+    expect: [policy-each-occurrence-limit, quote-each-occurrence-limit]
+  - ask: And the premium?
+    expect: [policy-premium, quote-premium]
+
+# Required. Retrieval found both deductibles, but the fake's answer quoted policy p. 5 instead of p. 2.
+- id: deductible-differ-explicit
+  scope: [policy, quote]
+  turns:
+  - ask: How does the property damage deductible differ between the policy and the renewal quote?
+    expect: [policy-deductible, quote-deductible]
+
+# ---------------------------------------------------------------- the policy
+- id: policy-number
+  scope: [policy]
+  turns:
+  - ask: What policy number do I quote when I call the carrier?
+    expect: [policy-number]
+
+- id: insured-then-fired-employee
+  scope: [policy]
+  turns:
+  - ask: Who is insured under this policy?
+    expect: [policy-named-insured]
+  - ask: Does the policy cover a claim from someone they fired?
+    expect: [policy-employment-exclusion]
+  - ask: Are they covered if a flood damages a job site?
+    expect: not_found
+
+- id: policy-period
+  scope: [policy]
+  turns:
+  - ask: When does this policy start and end?
+    expect: [policy-period]
+
+- id: medical-bills
+  scope: [policy]
+  turns:
+  - ask: How much is available for an injured person's medical bills?
+    expect: [policy-medical-expense-limit]
+
+- id: most-paid-in-total
+  scope: [policy]
+  turns:
+  - ask: What is the most the policy pays in total during the period?
+    expect: [policy-general-aggregate-limit]
+
+- id: completed-operations-aggregate
+  scope: [policy]
+  turns:
+  - ask: What is the aggregate for completed operations?
+    expect: [policy-products-aggregate-limit]
+
+# CG 21 47 is listed on the schedule (p. 3) and its endorsement heading on p. 7 repeats the same words;
+# facts.yaml places the fact on p. 3, so the question asks about the schedule.
+- id: attached-endorsements
+  scope: [policy]
+  turns:
+  - ask: Which endorsements are attached to the policy?
+    expect: [policy-form-cg-21-47]
+
+- id: defence-of-uncovered-suits
+  scope: [policy]
+  turns:
+  - ask: Will the insurer defend a suit for damage the policy does not cover?
+    expect: [policy-defence-clause]
+
+- id: roofing-height
+  scope: [policy]
+  turns:
+  - ask: Is there a height limit on the roofing jobs they can do?
+    expect: [policy-roofing-height-exclusion]
+
+- id: open-roof-rain
+  scope: [policy]
+  turns:
+  - ask: What happens if rain gets in through a roof left open overnight?
+    expect: [policy-open-roof-exclusion]
+
+- id: cancellation-then-nonpayment
+  scope: [policy]
+  turns:
+  - ask: How much notice must the insurer give before cancelling?
+    expect: [policy-cancellation-notice]
+  - ask: Is it shorter if the premium goes unpaid?
+    expect: [policy-cancellation-notice]
+
+- id: subcontractor-limits
+  scope: [policy]
+  turns:
+  - ask: What limits do subcontractors need to carry?
+    expect: [policy-subcontractor-certificates]
+
+# ---------------------------------------------------------------- the renewal quote
+- id: renewal-term-then-deductible
+  scope: [quote]
+  turns:
+  - ask: When would the renewal term run?
+    expect: [quote-period]
+  - ask: Deductible?
+    expect: [quote-deductible]
+
+- id: quote-reference
+  scope: [quote]
+  turns:
+  - ask: What is the quote reference number?
+    expect: [quote-number]
+
+- id: new-exclusions-then-out-of-scope
+  scope: [policy, quote]
+  turns:
+  - ask: Is the carrier adding any new exclusions at renewal?
+    expect: [quote-new-exclusion]
+  - ask: Does the renewal include terrorism coverage?
+    expect: not_found
+  - ask: And cyber liability?
+    expect: not_found
+
+- id: aggregate-then-medical
+  scope: [policy, quote]
+  turns:
+  - ask: Has the general aggregate gone up at renewal?
+    expect: [policy-general-aggregate-limit, quote-general-aggregate-limit]
+  - ask: What about the medical expense cover?
+    expect: [policy-medical-expense-limit, quote-medical-expense-limit]
+
+# ---------------------------------------------------------------- the endorsement
+- id: endorsement-start
+  scope: [endorsement]
+  turns:
+  - ask: From what date does this endorsement apply?
+    expect: [endorsement-effective-date]
+
+- id: company-added
+  scope: [endorsement]
+  turns:
+  - ask: Which company is added to the policy by this endorsement?
+    expect: [endorsement-additional-insured]
+
+- id: extra-charge
+  scope: [endorsement]
+  turns:
+  - ask: Is there an extra charge for this endorsement?
+    expect: [endorsement-additional-premium]
+
+# The policy gives the named insured 30 days; the question is about the additional insured.
+- id: additional-insured-warning
+  scope: [policy, endorsement]
+  turns:
+  - ask: How much warning does the additional insured get if the policy is cancelled?
+    expect: [endorsement-cancellation-notice]
+
+# ---------------------------------------------------------------- not answered by the documents
+# One per absent topic in facts.yaml (flood is in insured-then-fired-employee, cyber liability in
+# new-exclusions-then-out-of-scope), then questions that share the documents' vocabulary.
+- id: earthquake
+  scope: [policy]
+  turns:
+  - ask: Is there any earthquake cover?
+    expect: not_found
+
+- id: cyber-breach
+  scope: [policy]
+  turns:
+  - ask: Does the policy include cyber liability cover for a data breach?
+    expect: not_found
+
+- id: aircraft
+  scope: [policy]
+  turns:
+  - ask: Is the client covered for using aircraft on a job?
+    expect: not_found
+
+- id: liquor
+  scope: [policy, quote]
+  turns:
+  - ask: Does the policy cover liquor liability at the company party?
+    expect: not_found
+
+- id: flood-renewal
+  scope: [quote]
+  turns:
+  - ask: What does the renewal pay for flood damage?
+    expect: not_found
+
+- id: umbrella-limit
+  scope: [policy]
+  turns:
+  - ask: What is the umbrella or excess liability limit?
+    expect: not_found
+
+- id: professional-liability-limit
+  scope: [policy, quote]
+  turns:
+  - ask: What is the professional liability limit?
+    expect: not_found
+
+- id: hired-auto
+  scope: [policy]
+  turns:
+  - ask: What is the hired and non-owned auto limit?
+    expect: not_found
+
+- id: rented-equipment
+  scope: [policy]
+  turns:
+  - ask: What limit applies to damage to equipment they rent?
+    expect: not_found
+
+- id: producer-commission
+  scope: [policy]
+  turns:
+  - ask: What commission does the producer earn on this policy?
+    expect: not_found
+
+- id: claims-adjuster
+  scope: [policy]
+  turns:
+  - ask: Who is the claims adjuster assigned to this policy?
+    expect: not_found
+
+- id: endorsement-deductible
+  scope: [endorsement]
+  turns:
+  - ask: What deductible applies under this endorsement?
+    expect: not_found
+
+- id: business-interruption
+  scope: [policy, quote]
+  turns:
+  - ask: What is the waiting period for business interruption claims?
+    expect: not_found
