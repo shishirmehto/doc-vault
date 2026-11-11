@@ -1,6 +1,6 @@
 # Doc Vault
 
-Upload documents, get cited insights, chat with them, compare them side by side, and rewrite a summary at the length, focus and tone a reader needs. Every answer, every compared value and every summary source points at a page you can open and check.
+Upload documents, keep each re-upload as a new version, get cited insights, chat with them, compare them side by side, and rewrite a summary at the length, focus and tone a reader needs. Every answer, every compared value and every summary source points at a page you can open and check.
 
 The service is a FastAPI app with Celery workers. Postgres 16 with pgvector is the only datastore, and Redis is the Celery broker. `docs/design.md` explains the data model, the request flows, retrieval, the prompts, the assumptions and how it scales. `docs/lifecycle.md` covers the indexing state machine, and `docs/evals.md` covers answer quality.
 
@@ -61,10 +61,25 @@ Every error has one shape, `{"error": {"code", "message", "retryable", "details"
 curl -s -F file=@samples/sample-cgl-policy.pdf $API/documents
 ```
 
-`GET /documents` lists documents, newest first, 20 per page by default. Filter with `status`, and page with the `next_cursor` of the previous page.
+New bytes under a filename the vault already holds become the next version of that document. The names are compared without case, after the upload's name is cut to its last path part. When several stored documents have the name, the newest one's family gets the version. `?replaces=<id>` makes a file with any name the next version of that document's family. Bytes the vault already holds still return 200 with the existing document, whatever the name or `replaces`. An unknown `replaces` id is 404 `document_not_found`, and the upload is not stored.
+
+```bash
+curl -s -F file=@renewal-2027.pdf "$API/documents?replaces=$POLICY"
+```
+
+A version is a document of its own, with its own id, status, indexing, insights and summaries. Uploading one changes nothing stored for the earlier versions. Each document has `family_id`, shared by every version of one document, `version`, its number in the family from 1, and `latest_version`, the highest number in the family now.
+
+`GET /documents` lists documents, newest first, 20 per page by default. Filter with `status`, and page with the `next_cursor` of the previous page. `latest=true` keeps only the highest version of each family, so a family is listed where its newest version was uploaded. The two filters combine: `latest=true&status=ready` leaves out a family whose newest version is still processing. Without `latest`, every version is listed.
 
 ```bash
 curl -s "$API/documents?status=ready&limit=10"
+curl -s "$API/documents?latest=true&limit=100"
+```
+
+`GET /documents/{id}/versions` lists every version of the document's family, oldest first, in `items`. An unknown id is 404 `document_not_found`.
+
+```bash
+curl -s $API/documents/$DOC/versions
 ```
 
 `GET /documents/{id}` returns one document. `status` is `queued`, `parsing`, `embedding`, `ready` or `failed`. `pages` is the stored page count once parsing has finished, in every status. A failed document has `error` and `failed_stage` (`parse` or `embed`).
@@ -91,7 +106,7 @@ curl -s $API/documents/$DOC/pages/2
 curl -s -X POST $API/documents/$DOC/retry
 ```
 
-`DELETE /documents/{id}` deletes the document, its pages, chunks, insights and file. Processing history and spend stay.
+`DELETE /documents/{id}` deletes the document, its pages, chunks, insights, summaries and file. Processing history and spend stay, and so do chats and comparisons, with their snapshots. Deleting one version leaves the family's other versions and their numbers: delete version 1 of 2 and the other is still version 2 of 2.
 
 ```bash
 curl -s -X DELETE $API/documents/$DOC
@@ -99,7 +114,7 @@ curl -s -X DELETE $API/documents/$DOC
 
 `GET /events/documents` streams live document status as server-sent events, so a client sees every upload, stage change, retry and delete without polling. Each event is about one document whose `GET /documents/{id}` body may have changed:
 
-- `document`, data: that body, read after the change committed.
+- `document`, data: that body, read after the change committed. Uploading or deleting a version also sends one for each other version of its family, because their `latest_version` changed.
 - `deleted`, data `{"id": "..."}`: the document is gone.
 - `resync`, data `{}`: events may have been missed, so read the list again. The server sends it after its database listener reconnects, after a failed read, and to a client more than 1000 events behind.
 
@@ -111,7 +126,7 @@ curl -N $API/events/documents
 
 ### Chat
 
-`POST /chats` starts a chat over one or more ready documents. The set is fixed for the chat's life.
+`POST /chats` starts a chat over one or more ready documents. The set is fixed for the chat's life. This holds for versions too, by design: a chat keeps the document ids it was started with, so after a new version arrives an old chat still answers from the version it was asked about. To ask the new version, start a chat on it.
 
 ```bash
 CHAT=$(curl -s $API/chats -H 'content-type: application/json' \
@@ -190,7 +205,7 @@ CMP=$(curl -s $API/comparisons -H 'content-type: application/json' \
   -d "{\"document_ids\": [\"$POLICY\", \"$QUOTE\"]}" | jq -r .id)
 ```
 
-`documents` are the columns, in request order, each with `deleted`, `pages_read` and `page_count`. Each of the `rows` has a `field`, one cell per document (`cells[i]` belongs to `documents[i]`) and `differs`. A filled cell has the `value` as the document writes it, its `page` and `page_label`, and a `quote` found on that page. An empty cell has all four null: the document does not state the field, or the model gave a value that could not be checked against its page. `dropped_cells` counts the second kind: a quote not on the cited page, a missing page or quote, or a cell naming no document or one already placed in its row.
+`documents` are the columns, in request order, each with `deleted`, `pages_read`, `page_count` and `version`, the document's version number when the comparison was made. Two versions of one file can be compared like any two documents. A comparison stored before versions existed has `version: null`. Each of the `rows` has a `field`, one cell per document (`cells[i]` belongs to `documents[i]`) and `differs`. A filled cell has the `value` as the document writes it, its `page` and `page_label`, and a `quote` found on that page. An empty cell has all four null: the document does not state the field, or the model gave a value that could not be checked against its page. `dropped_cells` counts the second kind: a quote not on the cited page, a missing page or quote, or a cell naming no document or one already placed in its row.
 
 ```json
 {"field": "Property Damage Deductible", "differs": true, "cells": [
@@ -233,6 +248,8 @@ A new summary returns 201. Documents never change once stored, so each summary i
 A document that is not ready is 409 `documents_not_ready`, with the same `details.not_ready` as chats. An unknown id is 404 `document_not_found`. A length or tone outside its values, or a focus over 200 characters, is 422 `invalid_request`. The model call is one attempt of at most 90 s with no repair turn, so a provider failure is 503 `ai_unavailable` and invalid output or an empty summary is 502 `ai_bad_output`, both with `retryable: true`. Nothing is stored for either.
 
 `GET /documents/{id}/summaries` lists a document's summaries newest first, each with `cached: true`, with the same `next_cursor` paging as `GET /chats`. A summary is deleted with its document.
+
+A summary belongs to one version, because each version's content differs. A new version starts with no summaries, and deleting a version deletes its summaries and no other version's.
 
 ```bash
 curl -s "$API/documents/$POLICY/summaries?limit=20"
@@ -295,6 +312,7 @@ Built:
 - Up to three follow-up suggestions per turn, which the UI offers as one-click questions. On the evals, 108 of 108 suggestions asked come back answered.
 - Side-by-side comparison (`POST /comparisons`): 2 to 5 ready documents aligned field by field in one model call. Each cell's quote is checked on the page it cites, and `differs` is computed in code. In the web UI, the Compare section, the new-chat screen and each document page start one, and every value opens its page with the quote marked. On the samples, the fake marks 3 of the 4 planted changes between the policy and its renewal quote.
 - Summary options (`POST /documents/{id}/summaries`): the document's summary written again at a length (about 60, 150 or 300 words), about a focus, and in a plain, formal or client tone, from the page prefix insights read. Up to 6 sources are each checked on the page they cite. A summary is stored by document, normalised options, model and prompt version, so asking again returns it with no model call. In the web UI, "Rewrite the summary" sits under each ready document's summary, with its earlier rewrites, and each source opens its page with the quote marked. On the fake, every source of the three samples grounds at every length (`docs/evals.md`).
+- Document versions: new bytes under a stored filename, or sent with `replaces=<id>`, become the next version of that document's family (`family_id`, `version`, `latest_version`). A unique index on the family and number makes two concurrent uploads into one family take the next two numbers; the one that loses retries with the next number, and no error reaches the client. `GET /documents?latest=true` lists each family once and `GET /documents/{id}/versions` lists a family. In the web UI, the rail lists the latest version of each document with a "v2" mark, and follows live events as versions arrive and go. A document page says "Version 2 of 2" with links to the others. An earlier version opens with a note that links the newest. "Compare with version N" compares the two, "Versions (n)" lists the family, and "Upload a new version" sends a file of any name as the next version.
 - Metrics: `GET /metrics/documents` and `GET /metrics/processing`, each figure read at request time from the one table that records it.
 - Per-client rate limits on upload and ask.
 - Evals: `python -m docvault.evals` scores retrieval, citations, refusals, insights, comparisons and summary sources separately on a fixed broker case set, and calibrates the relevance gate. Results are in `docs/evals.md`.
@@ -318,7 +336,7 @@ Known limits:
 - Postgres drops notifications while the listener is disconnected. After it reconnects, every stream gets `resync` and the web UI reads the list again.
 - An open event stream never ends by itself, so stopping the API gives requests 5 s (`--timeout-graceful-shutdown 5` in compose) and then cancels them. Uvicorn logs that cancellation as an error.
 - Over HTTP/1.1 a browser allows six connections to one host across all its tabs, and each visible tab of the web UI holds one for its stream. A hidden tab gives its stream back and reads the list again when shown.
-- In the web UI, a document older than the newest 100, opened by its link, is read again on each event that names it, so it updates but shows its loading state for a moment each time. While the stream is down and nothing in the list is processing, changes from elsewhere show when the stream reconnects, at most 30 s later.
+- In the web UI, a document the rail does not list, opened by its link, is read again on each event that names it, so it updates but shows its loading state for a moment each time. That is a document older than the newest 100, or any earlier version, which also gets an event whenever a version of its family is uploaded or deleted. While the stream is down and nothing in the list is processing, changes from elsewhere show when the stream reconnects, at most 30 s later.
 - A comparison runs synchronously: one model call of at most 90 s (`COMPARE_TIMEOUT_S`), with no gateway retry and no repair turn, so the API answers before the web proxy's 120 s timeout. Output that fails validation is a retryable 502 `ai_bad_output`, and the UI offers Try again.
 - Each compared document gets an even share of the 240,000-character insights budget, so five long documents are read for at most 48,000 characters each. `pages_read` says how far, and the UI says when a document was read only in part.
 - A comparison cell is checked for its quote being on the cited page, not for its value appearing in the quote. `differs` compares the values, so it trusts the model's copy of each one.
@@ -329,5 +347,13 @@ Known limits:
 - The fake's summaries are passages of the page text: 2, 4 or 8 of them after a tone's fixed opening, so they run far under the word targets (12 to 39 words on the samples). They show that each option changes the output, not how well a model writes.
 - In the web UI, a summary request belongs to its document page. A reader who leaves while it runs and asks again on return starts a second model call, which returns the summary the first one stored.
 - Chats and comparisons cannot be deleted, and a summary is deleted only with its document.
+- A version is linked by filename alone, so two unrelated files uploaded under one name, such as `scan.pdf`, become versions of one document. No route splits a family or moves a version to another, so the only fix is to delete the version and upload it under another name.
+- Two concurrent first uploads of one new name both find no stored document with that name, so each starts its own family at version 1. A later upload of the name joins the newer of the two.
+- Version numbers never shift, but the highest one can be used again: delete version 2 of 2, and the next upload becomes version 2 again. A gap left by deleting an earlier version is not filled.
+- An upload with no filename is stored as `upload`, so every such upload joins one family.
+- Bytes the vault already holds return the existing document even when `replaces` names another family. Nothing is linked, and the response's `family_id` says which family the bytes belong to.
+- `GET /documents/{id}/versions` returns the whole family in one response, with no paging.
+- In the web UI, the rail and both pickers list only the latest version of each document. An earlier version is opened from a link on its family's document pages. Its own page asks about it ("Ask about this document") and compares it ("Compare with version N", or "Compare with...", which ticks it in the compare picker).
+- A chat keeps the version it was started with, but the chat screen names its files without their version numbers and does not say when a newer version exists.
 - A delete racing an upload of the same bytes can delete the blob that the new row needs.
 - An upload sent without Content-Length is read in full into a temporary file before its size is checked, so the limit bounds what is stored, not what a client can send.
