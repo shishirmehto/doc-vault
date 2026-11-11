@@ -97,18 +97,24 @@ def history(db: Db, chat_id: ChatId, *, limit: int = 50, before: TurnId | None =
 
 # ------------------------------------------------------------------ retrieval
 
-# A chat's scope is small (a few documents, a few thousand chunks).
-# MATERIALIZED stops the planner from using the HNSW index, so every scoped
-# chunk is scored exactly; filtering can never starve the top-k.
+# A chat's scope is small (a few documents, a few thousand chunks), so every
+# scoped chunk is scored exactly; filtering can never starve the top-k, and
+# MATERIALIZED keeps any future vector index out of this plan.
+# The full-text rank uses any query term (websearch_to_tsquery ANDs them all,
+# and a natural question rarely has every term in one chunk); lexical_hit, the
+# relevance gate's arm, still needs all of them.
 # Both rankings and the per-document rank come from window functions over the
 # same scored set, so hybrid fusion costs one query.
 EXACT_SQL = """
-WITH scored AS MATERIALIZED (
+WITH query AS (
+  SELECT websearch_to_tsquery('english', %(qtext)s) AS q_all,
+         replace(websearch_to_tsquery('english', %(qtext)s)::text, '&', '|')::tsquery AS q_any
+), scored AS MATERIALIZED (
   SELECT c.id, c.document_id, c.text, c.page_map,
          c.embedding <=> %(q)s AS distance,
-         c.tsv @@ websearch_to_tsquery('english', %(qtext)s) AS lexical_hit,
-         ts_rank_cd(c.tsv, websearch_to_tsquery('english', %(qtext)s)) AS lex
-  FROM chunks c
+         c.tsv @@ query.q_all AS lexical_hit,
+         ts_rank_cd(c.tsv, query.q_any) AS lex
+  FROM chunks c, query
   WHERE c.document_id = ANY(%(doc_ids)s) AND c.embedding_model = %(model)s
 ), ranked AS (
   SELECT *,
