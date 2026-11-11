@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import type { DocumentId, Result, Summary, SummaryCite, SummaryId, SummaryLength, SummaryList, SummaryOptions, SummaryTone } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
-import { LISTED, idle, mergeSummary, shownSummary, step, type Run, type RunEvent } from "@/lib/summary";
+import { LISTED, idle, mergeSummary, paneList, shownSummary, step, type Run, type RunEvent } from "@/lib/summary";
 
 /** The options as typed; the focus is normalised when it is sent. */
 export type Draft = { length: SummaryLength; focus: string; tone: SummaryTone };
@@ -13,8 +13,8 @@ export type Rewrites = ReturnType<typeof useRewrites>;
 
 /**
  * One document's rewritten summaries, the request in flight, and the disclosure's state. The document screen holds
- * it, because the disclosure moves within the insights panel as the insights load, which remounts it, and the source
- * pane resolves a summary's cite against the same list. `closeCite` takes the cite out of the URL.
+ * it, because the source pane resolves a summary's cite against the same summaries. `closeCite` takes the cite out
+ * of the URL.
  */
 export function useRewrites(id: DocumentId, cite: SummaryCite | null, closeCite: () => void) {
   const listed = useFetched(`summaries:${id}`, () => api.summaries(id, LISTED));
@@ -70,7 +70,9 @@ export function useRewrites(id: DocumentId, cite: SummaryCite | null, closeCite:
     : listed.result;
 
   return {
+    /** The earlier rewrites as the list shows them, with this session's results; its failure is the GET's. */
     list,
+    paneList: paneList(list, made, cite),
     reload: listed.reload,
     run,
     start,

@@ -282,7 +282,9 @@ export const SAVED_EARLIER = "Saved earlier, no new model call.";
 /** Said under a summary's sources when it has none, or when the backend left some out; null otherwise. */
 export function sourcesNote({ sources, droppedSources: dropped }: Summary): string | null {
   if (sources.length === 0) {
-    return "None of its quotes could be found on the page it cited, so this summary has no sources. Treat it as an overview.";
+    return dropped === 0
+      ? "The model gave no sources for this summary. Treat it as an overview."
+      : "None of its quotes could be found on the page it cited, so this summary has no sources. Treat it as an overview.";
   }
   if (dropped === 0) return null;
   return dropped === 1

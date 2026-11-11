@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { api } from "@/api/client";
 import type {
   ApiError, Doc, DocumentId, Insights, KeyFact, PaneRequest, Result, Selection, SummaryId, SummaryList,
@@ -90,7 +90,7 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry,
             rewrite={doc.lifecycle.status === "ready" && <SummaryRewrite rewrites={rewrites} cite={cite} onOpenSource={openSource} />} />
         </article>
       </main>
-      {pane && <SourcePane view={sourceView(doc, pane, insights.result, rewrites.list)}
+      {pane && <SourcePane view={sourceView(doc, pane, insights.result, rewrites.paneList)}
         onPage={(page) => replace({ kind: "doc", doc: id, pane: pane.kind === "cite" ? { ...pane, page } : { kind: "page", page } })}
         onClose={() => push({ kind: "doc", doc: id, pane: null })} />}
     </>
@@ -131,7 +131,10 @@ function AskButton({ onAsk }: { onAsk(): Promise<ApiError | null> }) {
   );
 }
 
-/** `rewrite` sits under the summary, or under the note that it is still being written or failed. */
+/**
+ * `rewrite` sits under the summary, or under the note that it is loading, being written or failed. Every branch is
+ * the one section with `rewrite` keyed, so the disclosure keeps its node, and the focus in it, as the insights land.
+ */
 function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry, rewrite }: {
   doc: Doc;
   result: Result<Insights> | null;
@@ -141,32 +144,39 @@ function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry, r
   onRetry(): Promise<ApiError | null>;
   rewrite: ReactNode;
 }) {
-  if (result === null) return <SummarySkeleton label="Loading the summary" />;
+  const slot = <Fragment key="rewrite">{rewrite}</Fragment>;
+  if (result === null) {
+    return <section className="insights"><SummarySkeleton label="Loading the summary" />{slot}</section>;
+  }
   if (!result.ok) {
     return (
       <section className="insights">
         <p className="notice" data-tone="failed">{explain(result.error)}</p>
         <button type="button" className="button" onClick={reload}>Try again</button>
+        {slot}
       </section>
     );
   }
   const insights = result.value;
   switch (insights.status) {
     case "pending":
-      return doc.lifecycle.status === "ready"
-        ? <><SummarySkeleton label="Writing the summary" />{rewrite}</>
-        : <p className="notice">The summary appears when indexing finishes.</p>;
+      return (
+        <section className="insights">
+          {doc.lifecycle.status === "ready"
+            ? <SummarySkeleton label="Writing the summary" />
+            : <p className="notice">The summary appears when indexing finishes.</p>}
+          {slot}
+        </section>
+      );
     case "unavailable":
-      return <p className="notice">{insights.reason}</p>;
+      return <section className="insights"><p className="notice">{insights.reason}</p></section>;
     case "failed":
       return (
-        <>
-          <section className="insights">
-            <h2>The summary failed</h2>
-            <FailureNote failure={insights.failure} onRetry={onRetry} />
-          </section>
-          {rewrite}
-        </>
+        <section className="insights">
+          <h2>The summary failed</h2>
+          <FailureNote failure={insights.failure} onRetry={onRetry} />
+          {slot}
+        </section>
       );
     case "ready":
       return (
@@ -183,7 +193,7 @@ function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry, r
           </p>
           <CoverageNotice coverage={insights.coverage} doc={doc} />
           <p className="summary">{insights.summary}</p>
-          {rewrite}
+          {slot}
           <h3>Key facts</h3>
           <KeyFacts facts={insights.keyFacts} active={activeFact} onOpen={onOpenFact} />
           {insights.droppedKeyFacts > 0 && (
@@ -238,12 +248,13 @@ function sentenceCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Busy on its own, so the disclosure beside it is not. */
 function SummarySkeleton({ label }: { label: string }): ReactNode {
   return (
-    <section className="insights" aria-busy="true">
+    <div aria-busy="true">
       <p className="quiet">{label}</p>
       {[92, 100, 76].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}
-    </section>
+    </div>
   );
 }
 

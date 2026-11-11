@@ -1,12 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseSummary, parseSummaryPage } from "../api/parse.ts";
-import type { SummaryId } from "../api/domain.ts";
-import { idle, mergeSummary, normaliseFocus, shownSummary, step } from "./summary.ts";
+import { parseError, parseSummary, parseSummaryPage } from "../api/parse.ts";
+import type { Result, SummaryId, SummaryList } from "../api/domain.ts";
+import { worthRetrying } from "./compare.ts";
+import { idle, mergeSummary, normaliseFocus, paneList, shownSummary, step } from "./summary.ts";
+
+function captured(name: string) {
+  return JSON.parse(readFileSync(new URL(`../api/fixtures/${name}.json`, import.meta.url), "utf8"));
+}
 
 function fixture(name: string) {
-  return JSON.parse(readFileSync(new URL(`../api/fixtures/${name}.json`, import.meta.url), "utf8")).body;
+  return captured(name).body;
 }
 
 const page = parseSummaryPage(fixture("summaries-page")).summaries;
@@ -54,4 +59,37 @@ test("the disclosure shows the summary the URL cites, else the chosen one, else 
   assert.equal(shownSummary(page, DETAILED, null)?.id, DETAILED);
   assert.equal(shownSummary(page, DETAILED, { ...cite, summary: "9f0c6a52-36a3-4a8e-9a0b-4c6f2f0e1d11" as SummaryId }), null);
   assert.equal(shownSummary(page, null, null), null);
+});
+
+test("the source pane resolves a cite of a summary made this session while the earlier rewrites load or after they fail", () => {
+  const cite = { kind: "summary", summary: BRIEF, index: 0 } as const;
+  const failed: Result<SummaryList> = { ok: false, error: { kind: "offline" } };
+  const listed: Result<SummaryList> = { ok: true, value: { summaries: page, complete: true } };
+  assert.deepEqual(paneList(null, [cached], cite), { ok: true, value: { summaries: [cached], complete: false } });
+  assert.deepEqual(paneList(failed, [cached], cite), { ok: true, value: { summaries: [cached], complete: false } });
+  assert.deepEqual(paneList(failed, [cached], { ...cite, summary: DETAILED }), { ok: false, error: { kind: "offline" } });
+  assert.deepEqual(paneList(failed, [], cite), { ok: false, error: { kind: "offline" } });
+  assert.equal(paneList(null, [cached], null), null);
+  assert.equal(paneList(listed, [cached], cite), listed);
+});
+
+test("a failed rewrite offers Try again for a refusal that can pass on a second try, not for a missing document or bad options", () => {
+  const error = (name: string) => {
+    const { status, body, headers } = captured(name);
+    return parseError(status, body, headers["retry-after"] ?? null);
+  };
+  const badOutput = parseError(502, { error: { code: "ai_bad_output", message: "The model returned an empty summary.", retryable: true, details: {} } }, null);
+  assert.deepEqual(
+    [
+      error("summaries-404-not-found"),
+      error("summary-422-length"),
+      error("summary-409-not-ready"),
+      error("upload-429-rate-limited"),
+      error("constructed/error-503-ai-unavailable"),
+      badOutput,
+      parseError(502, null, null),
+      { kind: "offline" } as const,
+    ].map(worthRetrying),
+    [false, false, true, true, true, true, true, true],
+  );
 });

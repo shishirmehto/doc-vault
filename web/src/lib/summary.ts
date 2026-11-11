@@ -1,7 +1,9 @@
 // A rewritten summary's options, its run as a pure state machine, and which summary the document screen shows.
 // The run holds only the request; each summary it returns joins the list.
 
-import type { ApiError, Summary, SummaryCite, SummaryId, SummaryLength, SummaryOptions, SummaryTone } from "../api/domain.ts";
+import type {
+  ApiError, Result, Summary, SummaryCite, SummaryId, SummaryLength, SummaryList, SummaryOptions, SummaryTone,
+} from "../api/domain.ts";
 
 /** POST /documents/{id}/summaries takes a focus of at most 200 characters after trimming. */
 export const FOCUS_MAX = 200;
@@ -63,4 +65,15 @@ export function mergeSummary(list: readonly Summary[], summary: Summary): Summar
 export function shownSummary(list: readonly Summary[], chosen: SummaryId | null, cite: SummaryCite | null): Summary | null {
   const id = cite?.summary ?? chosen;
   return list.find((s) => s.id === id) ?? null;
+}
+
+/**
+ * The list the source pane resolves a cite against. While the earlier rewrites load, or after they fail, a cite of a
+ * summary made this session still opens its passage: this session's results stand in for the list, marked incomplete.
+ */
+export function paneList(list: Result<SummaryList> | null, made: readonly Summary[], cite: SummaryCite | null): Result<SummaryList> | null {
+  if (list?.ok !== true && cite !== null && made.some((s) => s.id === cite.summary)) {
+    return { ok: true, value: { summaries: made, complete: false } };
+  }
+  return list;
 }

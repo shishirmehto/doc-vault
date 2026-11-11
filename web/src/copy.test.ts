@@ -159,12 +159,14 @@ test("a rewritten summary's notes: no sources, quotes left out, each source's ta
       { ...summary, droppedSources: 1 },
       { ...summary, droppedSources: 3 },
       { ...summary, sources: [], droppedSources: 2 },
+      { ...summary, sources: [], droppedSources: 0 },
     ].map(sourcesNote),
     [
       null,
       "One more quote was left out because it was not on the page it cited.",
       "3 more quotes were left out because they were not on the pages they cited.",
       "None of its quotes could be found on the page it cited, so this summary has no sources. Treat it as an overview.",
+      "The model gave no sources for this summary. Treat it as an overview.",
     ],
   );
   assert.equal(sourceLabel(1, 4, "p. 2"), "Source 2 of 4: show the passage on p. 2");

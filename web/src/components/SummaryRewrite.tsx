@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type Ref } from "react";
 import type { Summary, SummaryCite, SummaryId, SummaryLength, SummaryTone } from "@/api/domain";
 import type { Rewrites } from "@/hooks/useRewrites";
+import { worthRetrying } from "@/lib/compare";
 import { FOCUS_MAX, LENGTHS, TONES, normaliseFocus, type Run } from "@/lib/summary";
 import {
   LOADING_REWRITES, LONG_DOCUMENT, MORE_REWRITES, NO_REWRITES, REWRITE_LEAD, REWRITTEN, SAVED_EARLIER, clockTime,
@@ -34,12 +35,17 @@ export function SummaryRewrite({ rewrites, cite, onOpenSource }: {
             <Running key={run.startedAt} run={run} />
           ) : run.kind === "failed" ? (
             <p className="notice" data-tone="failed">
-              {explain(run.error)}{" "}
-              {/* The run replaces this button, so focus goes to Rewrite, which holds it while the run is in flight. */}
-              <button type="button" className="text-button" onClick={() => {
-                submit.current?.focus();
-                void rewrites.start(run.options);
-              }}>Try again</button>
+              {explain(run.error)}
+              {worthRetrying(run.error) && (
+                <>
+                  {" "}
+                  {/* The run replaces this button, so focus goes to Rewrite, which holds it while the run is in flight. */}
+                  <button type="button" className="text-button" onClick={() => {
+                    submit.current?.focus();
+                    void rewrites.start(run.options);
+                  }}>Try again</button>
+                </>
+              )}
             </p>
           ) : (
             landed && <p className="visually-hidden">{landed.cached ? SAVED_EARLIER : REWRITTEN}</p>
@@ -139,16 +145,21 @@ function RewriteSheet({ summary, cite, onOpenSource }: {
 
 function EarlierRewrites({ rewrites }: { rewrites: Rewrites }) {
   const { list, shown } = rewrites;
+  const heading = useRef<HTMLHeadingElement>(null);
   const now = new Date();
   return (
     <section className="rewrites" aria-labelledby="earlier-rewrites">
-      <h3 id="earlier-rewrites">Earlier rewrites</h3>
+      <h3 id="earlier-rewrites" ref={heading} tabIndex={-1}>Earlier rewrites</h3>
       {list === null ? (
         <p className="quiet">{LOADING_REWRITES}</p>
       ) : !list.ok ? (
         <p className="notice" data-tone="failed">
           {explain(list.error)}{" "}
-          <button type="button" className="text-button" onClick={rewrites.reload}>Try again</button>
+          {/* The reload replaces this button, so focus goes to the heading, which stays. */}
+          <button type="button" className="text-button" onClick={() => {
+            heading.current?.focus();
+            rewrites.reload();
+          }}>Try again</button>
         </p>
       ) : list.value.summaries.length === 0 ? (
         <p className="quiet">{NO_REWRITES}</p>
