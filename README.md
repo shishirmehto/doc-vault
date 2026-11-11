@@ -165,7 +165,7 @@ curl -s $API/health
 | 422 | `empty_file`, `invalid_request` (a parameter or body failed validation; `details.errors` names each field) |
 | 429 | `rate_limited`, with `Retry-After` |
 | 502 | `ai_bad_output` |
-| 503 | `ai_unavailable`, with `Retry-After: 5` |
+| 503 | `ai_unavailable`, with `Retry-After: 5` when `retryable` is true |
 
 ## Sample documents
 
