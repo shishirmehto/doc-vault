@@ -103,7 +103,7 @@ curl -s -X DELETE $API/documents/$DOC
 - `deleted`, data `{"id": "..."}`: the document is gone.
 - `resync`, data `{}`: events may have been missed, so read the list again. The server sends it after its database listener reconnects, after a failed read, and to a client more than 1000 events behind.
 
-The stream opens with the comment `: connected` and sends `: keepalive` after 15 s with nothing else to send. Past 100 open streams on one API process it answers 503 `too_many_streams` with `Retry-After: 5`.
+The stream opens with the comment `: connected` and `retry: 1000`, and sends `: keepalive` after 15 s with nothing else to send. Past 100 open streams on one API process it answers 503 `too_many_streams` with `Retry-After: 5`.
 
 ```bash
 curl -N $API/events/documents
@@ -258,7 +258,8 @@ Known limits:
 - Live status runs one database listener per API process. Each process reads a changed document once, whatever the number of streams it serves. A deployment with several API processes holds one listener per process and fans out the same way. Each process takes at most 100 streams.
 - Postgres drops notifications while the listener is disconnected. After it reconnects, every stream gets `resync` and the web UI reads the list again.
 - An open event stream never ends by itself, so stopping the API gives requests 5 s (`--timeout-graceful-shutdown 5` in compose) and then cancels them. Uvicorn logs that cancellation as an error.
-- In the web UI, a document older than the newest 100, opened by its link, does not update live. While the stream is down and nothing in the list is processing, changes from elsewhere show when the stream reconnects, at most 30 s later.
+- Over HTTP/1.1 a browser allows six connections to one host across all its tabs, and each visible tab of the web UI holds one for its stream. A hidden tab gives its stream back and reads the list again when shown.
+- In the web UI, a document older than the newest 100, opened by its link, is read again on each event that names it, so it updates but shows its loading state for a moment each time. While the stream is down and nothing in the list is processing, changes from elsewhere show when the stream reconnects, at most 30 s later.
 - Chats cannot be deleted.
 - A delete racing an upload of the same bytes can delete the blob that the new row needs.
 - An upload sent without Content-Length is read in full into a temporary file before its size is checked, so the limit bounds what is stored, not what a client can send.
