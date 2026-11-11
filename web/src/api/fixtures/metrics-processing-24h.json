@@ -1,0 +1,165 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "window": "24h",
+    "since": "2026-11-10T06:28:09.768330Z",
+    "uploaded": 11,
+    "indexed": 10,
+    "time_to_ready_ms": {
+      "p50": 438,
+      "p95": 617
+    },
+    "queue_wait_ms": {
+      "p50": 114,
+      "p95": 592
+    },
+    "steps": {
+      "parse": {
+        "runs": 13,
+        "ok": 10,
+        "failed": 3,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": 20,
+          "p95": 174
+        },
+        "failures_by_code": {
+          "no_extractable_text": 3
+        }
+      },
+      "embed": {
+        "runs": 10,
+        "ok": 10,
+        "failed": 0,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": 9,
+          "p95": 166
+        },
+        "failures_by_code": {}
+      },
+      "analyze": {
+        "runs": 10,
+        "ok": 10,
+        "failed": 0,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": 7,
+          "p95": 18
+        },
+        "failures_by_code": {}
+      }
+    },
+    "ai": {
+      "calls": 130,
+      "errors": 0,
+      "input_tokens": 418875,
+      "output_tokens": 1157,
+      "cost_usd": 0.0,
+      "unpriced_calls": 0,
+      "by_purpose_and_model": [
+        {
+          "purpose": "answer",
+          "model": "fake-chat",
+          "calls": 34,
+          "errors": 0,
+          "input_tokens": 74451,
+          "output_tokens": 500,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 3,
+            "p95": 8
+          }
+        },
+        {
+          "purpose": "condense",
+          "model": "fake-chat",
+          "calls": 25,
+          "errors": 0,
+          "input_tokens": 3185,
+          "output_tokens": 169,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 0,
+            "p95": 1
+          }
+        },
+        {
+          "purpose": "embed_chunks",
+          "model": "fake-hash",
+          "calls": 15,
+          "errors": 0,
+          "input_tokens": 249490,
+          "output_tokens": 0,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 22,
+            "p95": 33
+          }
+        },
+        {
+          "purpose": "embed_chunks",
+          "model": "fake-hash-1536",
+          "calls": 3,
+          "errors": 0,
+          "input_tokens": 2731,
+          "output_tokens": 0,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 1,
+            "p95": 1
+          }
+        },
+        {
+          "purpose": "embed_query",
+          "model": "fake-hash",
+          "calls": 43,
+          "errors": 0,
+          "input_tokens": 289,
+          "output_tokens": 0,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 0,
+            "p95": 3
+          }
+        },
+        {
+          "purpose": "insights",
+          "model": "fake-chat",
+          "calls": 10,
+          "errors": 0,
+          "input_tokens": 88729,
+          "output_tokens": 488,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 1,
+            "p95": 13
+          }
+        }
+      ]
+    },
+    "chat": {
+      "turns": 43,
+      "outcomes": {
+        "answered": 28,
+        "no_evidence": 9,
+        "model_declined": 6,
+        "unverified": 0
+      },
+      "latency_ms": {
+        "p50": 12,
+        "p95": 155
+      }
+    }
+  }
+}

@@ -87,9 +87,9 @@ export function NewChat({ docs, onStarted }: { docs: readonly Doc[] | null; onSt
 /** A 409 names the documents that are not ready; they are named here with their current status. */
 function StartRefusal({ error, docs }: { error: ApiError; docs: readonly Doc[] }) {
   const notReady = error.kind === "refused" && error.code === "documents_not_ready" ? error.documents : [];
-  const names = notReady.map((id) => {
+  const names = notReady.map(({ id, filename }) => {
     const doc = docs.find((d) => d.id === id);
-    return doc ? `${doc.filename} (${statusLine(doc).text.toLowerCase()})` : "a document no longer in the vault";
+    return doc ? `${doc.filename} (${statusLine(doc).text.toLowerCase()})` : (filename ?? "a document no longer in the vault");
   });
   return (
     <div className="start-refusal" role="alert">

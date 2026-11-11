@@ -1,7 +1,10 @@
 // One function per endpoint. Browser only: every call goes to same-origin /api/*, which
 // next.config.ts rewrites to the API. Every call returns Result<T> and never throws.
 
-import type { Chat, ChatId, Doc, DocumentId, Health, Insights, NonEmpty, Page, Result, Turn, UploadReceipt } from "./domain.ts";
+import type {
+  Chat, ChatId, Doc, DocumentId, DocumentMetrics, Health, Insights, MetricsWindow, NonEmpty, Page, ProcessingMetrics, Result,
+  Turn, UploadReceipt,
+} from "./domain.ts";
 import * as P from "./parse.ts";
 import type * as W from "./wire.ts";
 
@@ -27,7 +30,18 @@ export const api = {
   startChat: (ids: NonEmpty<DocumentId>): Promise<Result<Chat>> =>
     call("POST", "/chats", P.parseChat, { body: { document_ids: [...ids] } satisfies W.StartChatIn }),
 
-  /** Records exactly one turn on success. A 503 records none. */
+  /** Its documents, with any deleted since it started marked. */
+  chat: (id: ChatId): Promise<Result<Chat>> => call("GET", `/chats/${id}`, P.parseChat),
+
+  /** The newest five, for the new-chat screen. */
+  recentChats: (): Promise<Result<Chat[]>> => call("GET", "/chats?limit=5", P.parseChatPage),
+
+  documentMetrics: (): Promise<Result<DocumentMetrics>> => call("GET", "/metrics/documents", P.parseDocumentMetrics),
+
+  processingMetrics: (window: MetricsWindow): Promise<Result<ProcessingMetrics>> =>
+    call("GET", `/metrics/processing?window=${window}`, P.parseProcessingMetrics),
+
+  /** Records exactly one turn on success. A 503 or a 429 records none. */
   ask: (chat: ChatId, question: string): Promise<Result<Turn>> =>
     call("POST", `/chats/${chat}/messages`, P.parseTurn, { body: { question } satisfies W.AskIn }),
 
@@ -36,7 +50,7 @@ export const api = {
 
   /**
    * XHR, because fetch reports no upload progress. 202 is a new document; 200 means the same
-   * bytes were uploaded before and nothing was reprocessed. 413, 415 and 422 arrive as "refused".
+   * bytes were uploaded before and nothing was reprocessed. 413, 415, 422 and 429 arrive as "refused".
    */
   upload: (file: File, onProgress: (sent: number, total: number) => void): Promise<Result<UploadReceipt>> =>
     new Promise((resolve) => {

@@ -4,6 +4,116 @@
   "body": {
     "items": [
       {
+        "id": "3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7",
+        "filename": "live-scan.pdf",
+        "kind": "pdf",
+        "size_bytes": 1329,
+        "status": "failed",
+        "progress": null,
+        "pages": null,
+        "page_basis": null,
+        "empty_pages": [],
+        "insights_status": "unavailable",
+        "error": {
+          "code": "no_extractable_text",
+          "message": "None of the 1 pages has a text layer. This looks like a scanned PDF, and OCR is not supported.",
+          "retryable": false,
+          "details": {}
+        },
+        "failed_stage": "parse",
+        "processing_ms": null,
+        "created_at": "2026-11-11T03:47:42.506857Z",
+        "links": {
+          "self": "/documents/3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7",
+          "insights": "/documents/3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7/insights",
+          "pages": "/documents/3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7/pages/{n}"
+        }
+      },
+      {
+        "id": "84ad86a0-1f07-4a74-bbbb-f21b00d924b3",
+        "filename": "ui-drop-check.txt",
+        "kind": "txt",
+        "size_bytes": 147,
+        "status": "ready",
+        "progress": null,
+        "pages": 1,
+        "page_basis": "synthetic",
+        "empty_pages": [],
+        "insights_status": "ready",
+        "error": null,
+        "failed_stage": null,
+        "processing_ms": 111,
+        "created_at": "2026-11-11T03:28:27.859987Z",
+        "links": {
+          "self": "/documents/84ad86a0-1f07-4a74-bbbb-f21b00d924b3",
+          "insights": "/documents/84ad86a0-1f07-4a74-bbbb-f21b00d924b3/insights",
+          "pages": "/documents/84ad86a0-1f07-4a74-bbbb-f21b00d924b3/pages/{n}"
+        }
+      },
+      {
+        "id": "7a63c943-d3c1-433d-91b2-223c47149d6d",
+        "filename": "ui-renewal-memo-4.txt",
+        "kind": "txt",
+        "size_bytes": 558490,
+        "status": "ready",
+        "progress": null,
+        "pages": 194,
+        "page_basis": "synthetic",
+        "empty_pages": [],
+        "insights_status": "ready",
+        "error": null,
+        "failed_stage": null,
+        "processing_ms": 360,
+        "created_at": "2026-11-11T03:17:25.521358Z",
+        "links": {
+          "self": "/documents/7a63c943-d3c1-433d-91b2-223c47149d6d",
+          "insights": "/documents/7a63c943-d3c1-433d-91b2-223c47149d6d/insights",
+          "pages": "/documents/7a63c943-d3c1-433d-91b2-223c47149d6d/pages/{n}"
+        }
+      },
+      {
+        "id": "70eebfea-0db0-468f-b3e3-58c67c2f6d5f",
+        "filename": "ui-renewal-memo-2.txt",
+        "kind": "txt",
+        "size_bytes": 733308,
+        "status": "ready",
+        "progress": null,
+        "pages": 254,
+        "page_basis": "synthetic",
+        "empty_pages": [],
+        "insights_status": "ready",
+        "error": null,
+        "failed_stage": null,
+        "processing_ms": 438,
+        "created_at": "2026-11-11T03:17:25.467894Z",
+        "links": {
+          "self": "/documents/70eebfea-0db0-468f-b3e3-58c67c2f6d5f",
+          "insights": "/documents/70eebfea-0db0-468f-b3e3-58c67c2f6d5f/insights",
+          "pages": "/documents/70eebfea-0db0-468f-b3e3-58c67c2f6d5f/pages/{n}"
+        }
+      },
+      {
+        "id": "d05c5033-4d51-49e7-92db-048b060e62eb",
+        "filename": "ui-renewal-memo-3.txt",
+        "kind": "txt",
+        "size_bytes": 642843,
+        "status": "ready",
+        "progress": null,
+        "pages": 223,
+        "page_basis": "synthetic",
+        "empty_pages": [],
+        "insights_status": "ready",
+        "error": null,
+        "failed_stage": null,
+        "processing_ms": 396,
+        "created_at": "2026-11-11T03:17:25.467637Z",
+        "links": {
+          "self": "/documents/d05c5033-4d51-49e7-92db-048b060e62eb",
+          "insights": "/documents/d05c5033-4d51-49e7-92db-048b060e62eb/insights",
+          "pages": "/documents/d05c5033-4d51-49e7-92db-048b060e62eb/pages/{n}"
+        }
+      },
+      {
         "id": "723645a0-5244-4242-b8d0-84140e7a7dd0",
         "filename": "ui-textless.pdf",
         "kind": "pdf",
@@ -20,6 +130,7 @@
           "retryable": false,
           "details": {}
         },
+        "failed_stage": "parse",
         "processing_ms": null,
         "created_at": "2026-11-11T03:06:52.288386Z",
         "links": {
@@ -40,32 +151,13 @@
         "empty_pages": [],
         "insights_status": "ready",
         "error": null,
+        "failed_stage": null,
         "processing_ms": 242,
         "created_at": "2026-11-11T03:06:51.941850Z",
         "links": {
           "self": "/documents/5958a67a-0fe6-4c0a-92fb-231c5fa72b87",
           "insights": "/documents/5958a67a-0fe6-4c0a-92fb-231c5fa72b87/insights",
           "pages": "/documents/5958a67a-0fe6-4c0a-92fb-231c5fa72b87/pages/{n}"
-        }
-      },
-      {
-        "id": "8b3527b2-b23c-4561-b6f1-f8d8351b1cad",
-        "filename": "u5-check2.txt",
-        "kind": "txt",
-        "size_bytes": 85,
-        "status": "ready",
-        "progress": null,
-        "pages": 1,
-        "page_basis": "synthetic",
-        "empty_pages": [],
-        "insights_status": "ready",
-        "error": null,
-        "processing_ms": 349,
-        "created_at": "2026-11-11T02:30:16.627172Z",
-        "links": {
-          "self": "/documents/8b3527b2-b23c-4561-b6f1-f8d8351b1cad",
-          "insights": "/documents/8b3527b2-b23c-4561-b6f1-f8d8351b1cad/insights",
-          "pages": "/documents/8b3527b2-b23c-4561-b6f1-f8d8351b1cad/pages/{n}"
         }
       },
       {
@@ -80,6 +172,7 @@
         "empty_pages": [],
         "insights_status": "ready",
         "error": null,
+        "failed_stage": null,
         "processing_ms": 624,
         "created_at": "2026-11-11T02:23:18.641346Z",
         "links": {
@@ -100,6 +193,7 @@
         "empty_pages": [],
         "insights_status": "ready",
         "error": null,
+        "failed_stage": null,
         "processing_ms": 592,
         "created_at": "2026-11-11T01:43:48.660840Z",
         "links": {
@@ -120,6 +214,7 @@
         "empty_pages": [],
         "insights_status": "ready",
         "error": null,
+        "failed_stage": null,
         "processing_ms": 595,
         "created_at": "2026-11-11T01:43:48.660206Z",
         "links": {
@@ -140,6 +235,7 @@
         "empty_pages": [],
         "insights_status": "ready",
         "error": null,
+        "failed_stage": null,
         "processing_ms": 607,
         "created_at": "2026-11-11T01:43:48.657505Z",
         "links": {

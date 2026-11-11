@@ -1,0 +1,20 @@
+{
+  "status": 409,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "documents_deleted",
+      "message": "1 of 2 documents in this chat were deleted. Start a new chat with the documents you want to ask about.",
+      "retryable": false,
+      "details": {
+        "deleted": [
+          {
+            "id": "8b3527b2-b23c-4561-b6f1-f8d8351b1cad",
+            "filename": "u5-check2.txt",
+            "status": "deleted"
+          }
+        ]
+      }
+    }
+  }
+}

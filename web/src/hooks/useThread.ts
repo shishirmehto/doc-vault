@@ -122,7 +122,7 @@ function readScope(id: ChatId): NonEmpty<ChatDocument> | null {
     if (typeof d !== "object" || d === null) return [];
     const { id: rawId, filename } = d as Record<string, unknown>;
     const docId = typeof rawId === "string" ? asDocumentId(rawId) : null;
-    return docId && typeof filename === "string" ? [{ id: docId, filename }] : [];
+    return docId && typeof filename === "string" ? [{ id: docId, filename, deleted: false }] : [];
   });
   const [first, ...rest] = documents;
   return first === undefined || documents.length !== stored.length ? null : [first, ...rest];

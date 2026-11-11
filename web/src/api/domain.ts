@@ -69,13 +69,14 @@ export type Insights =
   | { status: "failed"; failure: Failure }
   | { status: "unavailable"; reason: string };
 
-export type Health = { aiMode: string; unreachable: readonly string[] };
+/** maxUploadBytes: the API answers 413 for anything larger, so the browser refuses it before sending. */
+export type Health = { aiMode: "live" | "fake" | "mixed"; unreachable: readonly ("db" | "redis")[]; maxUploadBytes: number };
 
 // ------------------------------------------------------------------ chat
 
-/** A chat answers from a fixed set of documents, chosen when it starts. */
-export type ChatDocument = { id: DocumentId; filename: string };
-export type Chat = { id: ChatId; documents: NonEmpty<ChatDocument> };
+/** A chat answers from a fixed set of documents, chosen when it starts. A deleted one keeps its filename. */
+export type ChatDocument = { id: DocumentId; filename: string; deleted: boolean };
+export type Chat = { id: ChatId; title: string | null; documents: NonEmpty<ChatDocument>; createdAt: Date };
 
 /** `ref` is the number the answer's [n] markers use. pageLabel is the backend's ("p. 2" or "section 2"). */
 export type Citation = { ref: number; source: SourceRef; filename: string; pageLabel: string };
@@ -118,14 +119,17 @@ export type PaneRequest =
 /** The chat's pane: always a citation, so it always knows its document. `page` is set after paging. */
 export type ChatPane = { cite: TurnCite; page: number | null };
 
+export type MetricsWindow = "24h" | "7d";
+
 /** Everything the URL selects. Nothing selected is the screen that starts a chat. */
 export type Selection =
   | { kind: "none" }
+  | { kind: "metrics"; window: MetricsWindow }
   | { kind: "doc"; doc: DocumentId; pane: PaneRequest | null }
   | { kind: "chat"; chat: ChatId; pane: ChatPane | null };
 
 export type ApiError =
-  /** The backend's error envelope: 404, 409, 413, 415, 422 and 503 (with Retry-After). */
+  /** The backend's error envelope: 404, 409, 413, 415, 422, and 429 and 503 with Retry-After. */
   | {
       kind: "refused";
       status: number;
@@ -134,13 +138,70 @@ export type ApiError =
       retryable: boolean | null;
       retryAfterS: number | null;
       /** The documents a refusal names: not ready (409), missing (404) or deleted from a chat (409). */
-      documents: readonly DocumentId[];
+      documents: readonly RefusedDocument[];
     }
-  /** A non-2xx without the envelope: an unbuilt route's 500, FastAPI's own 422, or the proxy failing to reach the API. */
+  /** A non-2xx without the envelope: an unhandled 500, or the proxy failing to reach the API. */
   | { kind: "broken"; status: number }
   /** A 2xx whose body did not match the contract. Regenerate schema.d.ts. */
   | { kind: "unexpected"; detail: string }
   /** No HTTP response at all. */
   | { kind: "offline" };
 
+/** A 404 names a missing document by id only; a 409 also gives its filename. */
+export type RefusedDocument = { id: DocumentId; filename: string | null };
+
 export type Result<T> = { ok: true; value: T } | { ok: false; error: ApiError };
+
+// ------------------------------------------------------------------ metrics
+
+/** Milliseconds. Null when the window holds no sample. */
+export type Spread = { p50Ms: number; p95Ms: number } | null;
+
+export type CodeCount = { code: string; count: number };
+
+export type DocumentMetrics = {
+  total: number;
+  byStatus: Record<Lifecycle["status"], number>;
+  /** Failed documents by error code, most first. */
+  failures: readonly CodeCount[];
+  pages: number;
+  chunks: number;
+  bytes: number;
+};
+
+export type Step = "parse" | "embed" | "analyze";
+export type Purpose = "embed_chunks" | "embed_query" | "insights" | "condense" | "answer";
+export type TurnOutcome = "answered" | NotFoundReason;
+
+/** Runs, not documents: a retried document counts once per run. */
+export type StepMetrics = {
+  step: Step;
+  runs: number;
+  failed: number;
+  retries: number;
+  duration: Spread;
+  /** Failed runs by error code, most first. */
+  failures: readonly CodeCount[];
+};
+
+/** costUsd counts priced calls only; unpricedCalls used a model with no price. */
+export type AiUsage = {
+  calls: number;
+  errors: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  unpricedCalls: number;
+};
+
+export type ProcessingMetrics = {
+  window: string;
+  since: Date;
+  uploaded: number;
+  indexed: number;
+  timeToReady: Spread;
+  queueWait: Spread;
+  steps: readonly StepMetrics[];
+  ai: AiUsage & { rows: readonly (AiUsage & { purpose: Purpose; model: string; latency: Spread })[] };
+  chat: { turns: number; outcomes: Record<TurnOutcome, number>; latency: Spread };
+};

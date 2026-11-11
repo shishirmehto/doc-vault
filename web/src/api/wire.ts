@@ -13,11 +13,16 @@ export type InsightsOut =
   | S["InsightsPendingOut"]
   | S["InsightsFailedOut"]
   | S["InsightsUnavailableOut"];
-// GET /health declares no response model: {db, redis, ai_mode, embed_model}, on 200 and on 503.
-export type HealthOut = Record<string, string>;
+/** The same body on 200 and on 503. */
+export type HealthOut = S["HealthOut"];
 export type ChatOut = S["ChatOut"];
+export type ChatPage = S["ChatPage"];
 export type TurnOut = S["TurnOut"];
 export type HistoryOut = S["HistoryOut"];
 export type CitationOut = S["CitationOut"];
 export type StartChatIn = S["StartChatIn"];
 export type AskIn = S["AskIn"];
+export type DocumentMetricsOut = S["DocumentMetricsOut"];
+export type ProcessingMetricsOut = S["ProcessingMetricsOut"];
+export type PercentilesOut = S["PercentilesOut"];
+export type StepMetricsOut = S["StepMetricsOut"];

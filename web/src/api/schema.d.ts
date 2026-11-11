@@ -98,10 +98,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Chats */
+        get: operations["list_chats_chats_get"];
         put?: never;
         /** Start Chat */
         post: operations["start_chat_chats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chats/{chat_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Chat */
+        get: operations["get_chat_chats__chat_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -150,10 +168,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Processing Metrics
-         * @description window like 1h, 24h, 7d; parsed here into a timedelta for metrics.processing_stats.
-         */
+        /** Processing Metrics */
         get: operations["processing_metrics_metrics_processing_get"];
         put?: never;
         post?: never;
@@ -187,6 +202,42 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AIMetricsOut */
+        AIMetricsOut: {
+            /** Calls */
+            calls: number;
+            /** Errors */
+            errors: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+            /** By Purpose And Model */
+            by_purpose_and_model: components["schemas"]["AIUsageOut"][];
+        };
+        /** AIUsageOut */
+        AIUsageOut: {
+            purpose: components["schemas"]["Purpose"];
+            /** Model */
+            model: string;
+            /** Calls */
+            calls: number;
+            /** Errors */
+            errors: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
+            latency_ms: components["schemas"]["PercentilesOut"];
+        };
         /** AskIn */
         AskIn: {
             /** Question */
@@ -196,6 +247,28 @@ export interface components {
         Body_upload_documents_post: {
             /** File */
             file: string;
+        };
+        /** ChatDocumentOut */
+        ChatDocumentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Filename */
+            filename: string;
+            /** Deleted */
+            deleted: boolean;
+        };
+        /** ChatMetricsOut */
+        ChatMetricsOut: {
+            /** Turns */
+            turns: number;
+            /** Outcomes */
+            outcomes: {
+                [key: string]: number;
+            };
+            latency_ms: components["schemas"]["PercentilesOut"];
         };
         /** ChatOut */
         ChatOut: {
@@ -207,14 +280,19 @@ export interface components {
             /** Title */
             title: string | null;
             /** Documents */
-            documents: {
-                [key: string]: string;
-            }[];
+            documents: components["schemas"]["ChatDocumentOut"][];
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+        };
+        /** ChatPage */
+        ChatPage: {
+            /** Items */
+            items: components["schemas"]["ChatOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /** CitationOut */
         CitationOut: {
@@ -259,6 +337,33 @@ export interface components {
          * @enum {string}
          */
         DocStatus: "queued" | "parsing" | "embedding" | "ready" | "failed";
+        /** DocumentMetricsOut */
+        DocumentMetricsOut: {
+            /** Total */
+            total: number;
+            /** By Status */
+            by_status: {
+                [key: string]: number;
+            };
+            /** By Kind */
+            by_kind: {
+                [key: string]: number;
+            };
+            /** Insights */
+            insights: {
+                [key: string]: number;
+            };
+            /** Pages */
+            pages: number;
+            /** Chunks */
+            chunks: number;
+            /** Bytes */
+            bytes: number;
+            /** Failures By Code */
+            failures_by_code: {
+                [key: string]: number;
+            };
+        };
         /** DocumentOut */
         DocumentOut: {
             /**
@@ -281,12 +386,10 @@ export interface components {
              * @default []
              */
             empty_pages: number[];
-            /**
-             * Insights Status
-             * @enum {string}
-             */
-            insights_status: "pending" | "ready" | "failed" | "unavailable";
+            insights_status: components["schemas"]["InsightsStatus"];
             error: components["schemas"]["ErrorBody"] | null;
+            /** Failed Stage */
+            failed_stage: ("parse" | "embed") | null;
             /** Processing Ms */
             processing_ms: number | null;
             /**
@@ -322,10 +425,31 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
+        /** ErrorOut */
+        ErrorOut: {
+            error: components["schemas"]["ErrorBody"];
+        };
+        /** HealthOut */
+        HealthOut: {
+            /**
+             * Db
+             * @enum {string}
+             */
+            db: "ok" | "unreachable";
+            /**
+             * Redis
+             * @enum {string}
+             */
+            redis: "ok" | "unreachable";
+            /**
+             * Ai Mode
+             * @enum {string}
+             */
+            ai_mode: "live" | "fake" | "mixed";
+            /** Embed Model */
+            embed_model: string;
+            /** Max Upload Bytes */
+            max_upload_bytes: number;
         };
         /** HistoryOut */
         HistoryOut: {
@@ -379,6 +503,12 @@ export interface components {
             /** Prompt Version */
             prompt_version: string;
         };
+        /**
+         * InsightsStatus
+         * @description What GET /documents/{id}/insights reads as. Each value names one InsightsState variant.
+         * @enum {string}
+         */
+        InsightsStatus: "pending" | "ready" | "failed" | "unavailable";
         /** InsightsUnavailableOut */
         InsightsUnavailableOut: {
             /**
@@ -429,6 +559,35 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** PercentilesOut */
+        PercentilesOut: {
+            /** P50 */
+            p50: number | null;
+            /** P95 */
+            p95: number | null;
+        };
+        /** ProcessingMetricsOut */
+        ProcessingMetricsOut: {
+            /** Window */
+            window: string;
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+            /** Uploaded */
+            uploaded: number;
+            /** Indexed */
+            indexed: number;
+            time_to_ready_ms: components["schemas"]["PercentilesOut"];
+            queue_wait_ms: components["schemas"]["PercentilesOut"];
+            /** Steps */
+            steps: {
+                [key: string]: components["schemas"]["StepMetricsOut"];
+            };
+            ai: components["schemas"]["AIMetricsOut"];
+            chat: components["schemas"]["ChatMetricsOut"];
+        };
         /** Progress */
         Progress: {
             /** Embedded Chunks */
@@ -436,6 +595,11 @@ export interface components {
             /** Total Chunks */
             total_chunks: number;
         };
+        /**
+         * Purpose
+         * @enum {string}
+         */
+        Purpose: "embed_chunks" | "embed_query" | "insights" | "condense" | "answer";
         /** StartChatIn */
         StartChatIn: {
             /**
@@ -445,6 +609,29 @@ export interface components {
             document_ids: string[];
             /** Title */
             title?: string | null;
+        };
+        /**
+         * Step
+         * @enum {string}
+         */
+        Step: "parse" | "embed" | "analyze";
+        /** StepMetricsOut */
+        StepMetricsOut: {
+            /** Runs */
+            runs: number;
+            /** Ok */
+            ok: number;
+            /** Failed */
+            failed: number;
+            /** Abandoned */
+            abandoned: number;
+            /** Retries */
+            retries: number;
+            duration_ms: components["schemas"]["PercentilesOut"];
+            /** Failures By Code */
+            failures_by_code: {
+                [key: string]: number;
+            };
         };
         /** TurnOut */
         TurnOut: {
@@ -477,6 +664,11 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * TurnOutcome
+         * @enum {string}
+         */
+        TurnOutcome: "answered" | "no_evidence" | "model_declined" | "unverified";
         /** UsageOut */
         UsageOut: {
             /** Calls */
@@ -487,19 +679,6 @@ export interface components {
             output_tokens: number;
             /** Cost Usd */
             cost_usd: number | null;
-        };
-        /** ValidationError */
-        ValidationError: {
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
         };
     };
     responses: never;
@@ -532,13 +711,22 @@ export interface operations {
                     "application/json": components["schemas"]["DocumentPage"];
                 };
             };
-            /** @description Validation Error */
+            /** @description invalid_cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -556,12 +744,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Same bytes uploaded before; existing document returned */
+            /** @description Same bytes uploaded before; existing document */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
             };
             /** @description Successful Response */
             202: {
@@ -572,13 +762,40 @@ export interface operations {
                     "application/json": components["schemas"]["DocumentOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description file_too_large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description unsupported_type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description empty_file, invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description rate_limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -603,13 +820,22 @@ export interface operations {
                     "application/json": components["schemas"]["DocumentOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -632,13 +858,22 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Validation Error */
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -663,13 +898,22 @@ export interface operations {
                     "application/json": components["schemas"]["InsightsReadyOut"] | components["schemas"]["InsightsPendingOut"] | components["schemas"]["InsightsFailedOut"] | components["schemas"]["InsightsUnavailableOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -695,13 +939,22 @@ export interface operations {
                     "application/json": components["schemas"]["PageOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description document_not_found, page_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -726,13 +979,72 @@ export interface operations {
                     "application/json": components["schemas"]["DocumentOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description nothing_to_retry */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    list_chats_chats_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatPage"];
+                };
+            };
+            /** @description invalid_cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -759,13 +1071,71 @@ export interface operations {
                     "application/json": components["schemas"]["ChatOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description documents_not_ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    get_chat_chats__chat_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatOut"];
+                };
+            };
+            /** @description chat_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -792,13 +1162,22 @@ export interface operations {
                     "application/json": components["schemas"]["HistoryOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description chat_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -827,13 +1206,58 @@ export interface operations {
                     "application/json": components["schemas"]["TurnOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description chat_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description documents_deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description rate_limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description ai_bad_output */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description ai_unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -853,9 +1277,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["DocumentMetricsOut"];
                 };
             };
         };
@@ -863,6 +1285,7 @@ export interface operations {
     processing_metrics_metrics_processing_get: {
         parameters: {
             query?: {
+                /** @description Hours or days back from now: 1h, 24h, 7d. */
                 window?: string;
             };
             header?: never;
@@ -877,18 +1300,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ProcessingMetricsOut"];
                 };
             };
-            /** @description Validation Error */
+            /** @description invalid_request */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };
@@ -908,9 +1329,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["HealthOut"];
+                };
+            };
+            /** @description Postgres or Redis is unreachable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthOut"];
                 };
             };
         };

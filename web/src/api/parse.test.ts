@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { settle } from "./client.ts";
 import {
-  parseChat, parseDoc, parseDocumentPage, parseHealth, parseHistory, parseInsights, parsePage, parseSelection, parseTurn,
-  selectionQuery,
+  parseChat, parseChatPage, parseDoc, parseDocumentMetrics, parseDocumentPage, parseHealth, parseHistory, parseInsights,
+  parsePage, parseProcessingMetrics, parseSelection, parseTurn, selectionQuery,
 } from "./parse.ts";
 import type { ChatId, DocumentId, TurnId } from "./domain.ts";
 
@@ -19,7 +19,7 @@ const POLICY = "6e67edc4-27c9-4d1b-9090-4b47a40b3c29" as DocumentId;
 const RENEWAL = "23b7e49c-b644-4ccf-8768-5716b69cb9cc" as DocumentId;
 const TEXTLESS = "723645a0-5244-4242-b8d0-84140e7a7dd0" as DocumentId;
 
-test("a failed document keeps the backend's reason and says parsing never finished", () => {
+test("a failed document keeps the backend's reason and the stage that failed", () => {
   assert.deepEqual(replay("document-pdf-failed-insights-unavailable", parseDoc), {
     ok: true,
     value: {
@@ -88,10 +88,14 @@ test("the document list is complete when there is no next cursor", () => {
   const r = replay("documents-page", parseDocumentPage);
   assert.ok(r.ok);
   assert.equal(r.value.complete, true);
-  assert.deepEqual(r.value.docs.map((d) => `${d.filename}:${d.lifecycle.status}`), [
-    "ui-textless.pdf:failed",
+  assert.deepEqual(r.value.docs.map((d) => `${d.filename}:${d.lifecycle.status === "failed" ? `failed at ${d.lifecycle.stage}` : d.lifecycle.status}`), [
+    "live-scan.pdf:failed at parse",
+    "ui-drop-check.txt:ready",
+    "ui-renewal-memo-4.txt:ready",
+    "ui-renewal-memo-2.txt:ready",
+    "ui-renewal-memo-3.txt:ready",
+    "ui-textless.pdf:failed at parse",
     "ui-renewal-memo-1.txt:ready",
-    "u5-check2.txt:ready",
     "u5-check.txt:ready",
     "sample-endorsement-additional-insured.docx:ready",
     "sample-renewal-quote.pdf:ready",
@@ -153,8 +157,31 @@ test("a page keeps its label and text; a missing page is the backend's 404", () 
   });
 });
 
-test("FastAPI's own 422 has no envelope, so it is broken; a 503 carries Retry-After", () => {
-  assert.deepEqual(replay("error-422-validation", parseDoc), { ok: false, error: { kind: "broken", status: 422 } });
+test("a 422 carries the envelope; a 503 and a 429 carry Retry-After", () => {
+  assert.deepEqual(replay("error-422-validation", parseDoc), {
+    ok: false,
+    error: {
+      kind: "refused",
+      status: 422,
+      code: "invalid_request",
+      message: "The request is not valid. path.doc_id: Input should be a valid UUID, invalid character: found `n` at 0",
+      retryable: false,
+      retryAfterS: null,
+      documents: [],
+    },
+  });
+  assert.deepEqual(replay("upload-429-rate-limited", parseDoc), {
+    ok: false,
+    error: {
+      kind: "refused",
+      status: 429,
+      code: "rate_limited",
+      message: "Too many requests. Try again in 2 seconds.",
+      retryable: true,
+      retryAfterS: 2,
+      documents: [],
+    },
+  });
   const busy = replay("constructed/error-503-ai-unavailable", parseDoc);
   assert.deepEqual(busy.ok ? null : busy.error, {
     kind: "refused",
@@ -175,9 +202,15 @@ test("a 2xx body in the wrong shape is unexpected, a proxy error page is broken"
   assert.deepEqual(settle(500, "Internal Server Error", null, parseDoc), { ok: false, error: { kind: "broken", status: 500 } });
 });
 
-test("health names the fake provider and anything unreachable", () => {
-  assert.deepEqual(replay("health", parseHealth, [503]), { ok: true, value: { aiMode: "fake", unreachable: [] } });
-  assert.deepEqual(parseHealth({ db: "unreachable", redis: "ok", ai_mode: "openai" }), { aiMode: "openai", unreachable: ["db"] });
+test("health names the fake provider, the upload limit and anything unreachable", () => {
+  assert.deepEqual(replay("health", parseHealth, [503]), {
+    ok: true,
+    value: { aiMode: "fake", unreachable: [], maxUploadBytes: 52428800 },
+  });
+  assert.deepEqual(
+    parseHealth({ db: "unreachable", redis: "ok", ai_mode: "live", embed_model: "text-embedding-3-small", max_upload_bytes: 1024 }),
+    { aiMode: "live", unreachable: ["db"], maxUploadBytes: 1024 },
+  );
 });
 
 test("the URL selects a document, then a cited fact or a page; malformed parts are dropped", () => {
@@ -218,13 +251,49 @@ test("a started chat lists its documents in the backend's order", () => {
   assert.deepEqual(replay("chat-start-201-two-documents", parseChat), {
     ok: true,
     value: {
-      id: "be7dd439-f780-4f75-a619-d8f8ab87b4b1",
+      id: "54da5af8-df4c-46b2-87c3-a688062d0087",
+      title: null,
       documents: [
-        { id: POLICY, filename: "sample-cgl-policy.pdf" },
-        { id: RENEWAL, filename: "sample-renewal-quote.pdf" },
+        { id: POLICY, filename: "sample-cgl-policy.pdf", deleted: false },
+        { id: RENEWAL, filename: "sample-renewal-quote.pdf", deleted: false },
       ],
+      createdAt: new Date("2026-11-11T06:28:09.744Z"),
     },
   });
+});
+
+test("a chat read back marks a document deleted since it started, and asking it is refused with that filename", () => {
+  const chat = replay("chat-get-deleted-document", parseChat);
+  assert.ok(chat.ok);
+  assert.deepEqual(chat.value.documents, [
+    { id: POLICY, filename: "sample-cgl-policy.pdf", deleted: false },
+    { id: "8b3527b2-b23c-4561-b6f1-f8d8351b1cad", filename: "u5-check2.txt", deleted: true },
+  ]);
+  const ask = replay("ask-409-documents-deleted", parseTurn);
+  assert.deepEqual(ask.ok ? null : ask.error, {
+    kind: "refused",
+    status: 409,
+    code: "documents_deleted",
+    message: "1 of 2 documents in this chat were deleted. Start a new chat with the documents you want to ask about.",
+    retryable: false,
+    retryAfterS: null,
+    documents: [{ id: "8b3527b2-b23c-4561-b6f1-f8d8351b1cad", filename: "u5-check2.txt" }],
+  });
+});
+
+test("recent chats come newest first with their documents", () => {
+  const r = replay("chats-page", parseChatPage);
+  assert.ok(r.ok);
+  assert.deepEqual(
+    r.value.map((c) => `${c.createdAt.toISOString()} ${c.documents.map((d) => d.filename).join(" + ")}`),
+    [
+      "2026-11-11T06:28:09.744Z sample-cgl-policy.pdf + sample-renewal-quote.pdf",
+      "2026-11-11T04:02:37.201Z sample-cgl-policy.pdf + sample-renewal-quote.pdf",
+      "2026-11-11T03:59:42.116Z sample-cgl-policy.pdf",
+      "2026-11-11T03:52:45.455Z sample-endorsement-additional-insured.docx",
+      "2026-11-11T03:52:32.215Z sample-cgl-policy.pdf",
+    ],
+  );
 });
 
 test("a 409 names the documents that are not ready", () => {
@@ -237,7 +306,7 @@ test("a 409 names the documents that are not ready", () => {
       message: "1 of 2 documents are not ready.",
       retryable: false,
       retryAfterS: null,
-      documents: [TEXTLESS],
+      documents: [{ id: TEXTLESS, filename: "ui-textless.pdf" }],
     },
   });
 });
@@ -351,5 +420,80 @@ test("history is oldest first, and a missing chat or an empty question is refuse
     "refused",
     "chat_not_found",
   ]);
-  assert.deepEqual(replay("ask-422-empty-question", parseTurn), { ok: false, error: { kind: "broken", status: 422 } });
+  const empty = replay("ask-422-empty-question", parseTurn);
+  assert.deepEqual(empty.ok ? null : empty.error.kind === "refused" && [empty.error.status, empty.error.code, empty.error.message], [
+    422,
+    "invalid_request",
+    "The request is not valid. body.question: String should have at least 1 character",
+  ]);
+});
+
+// ------------------------------------------------------------------ metrics
+
+test("document metrics count every status and list failures most first", () => {
+  assert.deepEqual(replay("metrics-documents", parseDocumentMetrics), {
+    ok: true,
+    value: {
+      total: 11,
+      byStatus: { queued: 0, parsing: 0, embedding: 0, ready: 9, failed: 2 },
+      failures: [{ code: "no_extractable_text", count: 2 }],
+      pages: 697,
+      chunks: 1303,
+      bytes: 2025683,
+    },
+  });
+});
+
+test("processing metrics keep the step order, the AI rows and the chat outcomes", () => {
+  const r = replay("metrics-processing-24h", parseProcessingMetrics);
+  assert.ok(r.ok);
+  const m = r.value;
+  assert.deepEqual([m.window, m.uploaded, m.indexed, m.timeToReady, m.queueWait], [
+    "24h", 11, 10, { p50Ms: 438, p95Ms: 617 }, { p50Ms: 114, p95Ms: 592 },
+  ]);
+  assert.deepEqual(m.steps[0], {
+    step: "parse",
+    runs: 13,
+    failed: 3,
+    retries: 0,
+    duration: { p50Ms: 20, p95Ms: 174 },
+    failures: [{ code: "no_extractable_text", count: 3 }],
+  });
+  assert.deepEqual(m.steps.map((s) => s.step), ["parse", "embed", "analyze"]);
+  assert.deepEqual([m.ai.calls, m.ai.costUsd, m.ai.unpricedCalls, m.ai.rows.length], [130, 0, 0, 6]);
+  assert.deepEqual(m.ai.rows[0], {
+    purpose: "answer",
+    model: "fake-chat",
+    calls: 34,
+    errors: 0,
+    inputTokens: 74451,
+    outputTokens: 500,
+    costUsd: 0,
+    unpricedCalls: 0,
+    latency: { p50Ms: 3, p95Ms: 8 },
+  });
+  assert.deepEqual(m.chat, {
+    turns: 43,
+    outcomes: { answered: 28, no_evidence: 9, model_declined: 6, unverified: 0 },
+    latency: { p50Ms: 12, p95Ms: 155 },
+  });
+});
+
+test("an empty window has no samples, so every spread is null", () => {
+  const r = replay("metrics-processing-1h", parseProcessingMetrics);
+  assert.ok(r.ok);
+  assert.deepEqual(
+    [r.value.timeToReady, r.value.queueWait, r.value.chat.latency, ...r.value.steps.map((s) => s.duration)],
+    [null, null, null, null, null, null],
+  );
+  assert.equal(r.value.chat.turns, 0);
+});
+
+test("the URL selects the metrics view; 24h is the default window", () => {
+  const sel = (q: string) => parseSelection(new URLSearchParams(q));
+  assert.deepEqual(sel("view=metrics"), { kind: "metrics", window: "24h" });
+  assert.deepEqual(sel(`view=metrics&window=7d&doc=${POLICY}`), { kind: "metrics", window: "7d" });
+  assert.deepEqual(sel("view=metrics&window=1h"), { kind: "metrics", window: "24h" });
+  assert.equal(selectionQuery({ kind: "metrics", window: "24h" }), "?view=metrics");
+  assert.equal(selectionQuery({ kind: "metrics", window: "7d" }), "?view=metrics&window=7d");
 });

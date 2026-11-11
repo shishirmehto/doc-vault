@@ -3,8 +3,9 @@
 
 import type * as W from "./wire.ts";
 import type {
-  AnswerPart, ApiError, Chat, ChatId, Citation, Doc, DocumentId, FactCite, Failure, Health, Insights, Lifecycle, Outcome,
-  Page, PaneRequest, Selection, Turn, TurnCite, TurnId,
+  AnswerPart, ApiError, Chat, ChatId, Citation, CodeCount, Doc, DocumentId, DocumentMetrics, FactCite, Failure, Health,
+  Insights, Lifecycle, Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument, Selection, Spread, Step, Turn,
+  TurnCite, TurnId, TurnOutcome,
 } from "./domain.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,7 +49,7 @@ function lifecycle(w: W.DocumentOut): Lifecycle {
     case "failed":
       return {
         status: "failed",
-        stage: w.pages === null ? "parse" : "embed",
+        stage: required(w.failed_stage, "a failed stage"),
         failure: w.error ? failure(w.error) : { code: "internal_error", message: "Processing failed.", retryable: true },
       };
     default: {
@@ -117,14 +118,15 @@ export function parseInsights(w: W.InsightsOut, id: DocumentId): Insights {
 
 // ------------------------------------------------------------------ chat
 
-/** ChatOut.documents is typed as string maps, so each entry's id and filename are checked here. */
 export function parseChat(w: W.ChatOut): Chat {
-  const [first, ...rest] = w.documents.map((d) => ({
-    id: documentId(d.id ?? ""),
-    filename: required(d.filename ?? null, "a filename"),
-  }));
+  const [first, ...rest] = w.documents.map((d) => ({ id: documentId(d.id), filename: d.filename, deleted: d.deleted }));
   if (first === undefined) throw new TypeError("a chat with no documents");
-  return { id: required(asChatId(w.id), "a chat id"), documents: [first, ...rest] };
+  return { id: required(asChatId(w.id), "a chat id"), title: w.title, documents: [first, ...rest], createdAt: new Date(w.created_at) };
+}
+
+/** Newest first. */
+export function parseChatPage(w: W.ChatPage): Chat[] {
+  return w.items.map(parseChat);
 }
 
 export function parseTurn(w: W.TurnOut): Turn {
@@ -194,8 +196,9 @@ function sameWords(a: string, b: string): boolean {
 /** Read on 200 and on 503: a 503 body names the dependency that is down. */
 export function parseHealth(w: W.HealthOut): Health {
   return {
-    aiMode: w.ai_mode ?? "unknown",
-    unreachable: ["db", "redis"].filter((k) => w[k] !== undefined && w[k] !== "ok"),
+    aiMode: w.ai_mode,
+    unreachable: (["db", "redis"] as const).filter((k) => w[k] !== "ok"),
+    maxUploadBytes: w.max_upload_bytes,
   };
 }
 
@@ -214,18 +217,79 @@ export function parseError(status: number, body: unknown, retryAfter: string | n
     message: envelope.message,
     retryable: typeof envelope.retryable === "boolean" ? envelope.retryable : null,
     retryAfterS: Number.isFinite(seconds) ? seconds : null,
-    documents: ["not_ready", "missing", "deleted"].flatMap((key) => documentIds(details[key])),
+    documents: ["not_ready", "missing", "deleted"].flatMap((key) => refusedDocuments(details[key])),
   };
 }
 
-/** details.not_ready and details.deleted list {id, ...} objects; details.missing lists bare ids. */
-function documentIds(list: unknown): DocumentId[] {
+/** details.not_ready and details.deleted list {id, filename, status}; details.missing lists bare ids. */
+function refusedDocuments(list: unknown): RefusedDocument[] {
   if (!Array.isArray(list)) return [];
   return list.flatMap((item: unknown) => {
-    const raw = typeof item === "string" ? item : isRecord(item) && typeof item.id === "string" ? item.id : "";
-    const id = asDocumentId(raw);
-    return id === null ? [] : [id];
+    const entry: Record<string, unknown> = typeof item === "string" ? { id: item } : isRecord(item) ? item : {};
+    const id = typeof entry.id === "string" ? asDocumentId(entry.id) : null;
+    return id === null ? [] : [{ id, filename: typeof entry.filename === "string" ? entry.filename : null }];
   });
+}
+
+// ------------------------------------------------------------------ metrics
+
+function spread(w: W.PercentilesOut): Spread {
+  if (w.p50 === null && w.p95 === null) return null;
+  return { p50Ms: required(w.p50, "a p50"), p95Ms: required(w.p95, "a p95") };
+}
+
+/** Most first, then by code, so the table order does not depend on the wire's key order. */
+function codeCounts(w: { [code: string]: number }): CodeCount[] {
+  return Object.entries(w)
+    .map(([code, count]) => ({ code, count }))
+    .sort((a, b) => b.count - a.count || a.code.localeCompare(b.code));
+}
+
+export function parseDocumentMetrics(w: W.DocumentMetricsOut): DocumentMetrics {
+  const status = (s: Lifecycle["status"]) => w.by_status[s] ?? 0;
+  return {
+    total: w.total,
+    byStatus: { queued: status("queued"), parsing: status("parsing"), embedding: status("embedding"), ready: status("ready"), failed: status("failed") },
+    failures: codeCounts(w.failures_by_code),
+    pages: w.pages,
+    chunks: w.chunks,
+    bytes: w.bytes,
+  };
+}
+
+const STEPS: readonly Step[] = ["parse", "embed", "analyze"];
+const OUTCOMES: readonly TurnOutcome[] = ["answered", "no_evidence", "model_declined", "unverified"];
+
+export function parseProcessingMetrics(w: W.ProcessingMetricsOut): ProcessingMetrics {
+  const usage = (u: W.ProcessingMetricsOut["ai"] | W.ProcessingMetricsOut["ai"]["by_purpose_and_model"][number]) => ({
+    calls: u.calls,
+    errors: u.errors,
+    inputTokens: u.input_tokens,
+    outputTokens: u.output_tokens,
+    costUsd: u.cost_usd,
+    unpricedCalls: u.unpriced_calls,
+  });
+  return {
+    window: w.window,
+    since: new Date(w.since),
+    uploaded: w.uploaded,
+    indexed: w.indexed,
+    timeToReady: spread(w.time_to_ready_ms),
+    queueWait: spread(w.queue_wait_ms),
+    steps: STEPS.map((step) => {
+      const s = required(w.steps[step] ?? null, `the ${step} step`);
+      return { step, runs: s.runs, failed: s.failed, retries: s.retries, duration: spread(s.duration_ms), failures: codeCounts(s.failures_by_code) };
+    }),
+    ai: {
+      ...usage(w.ai),
+      rows: w.ai.by_purpose_and_model.map((r) => ({ ...usage(r), purpose: r.purpose, model: r.model, latency: spread(r.latency_ms) })),
+    },
+    chat: {
+      turns: w.chat.turns,
+      outcomes: Object.fromEntries(OUTCOMES.map((o) => [o, w.chat.outcomes[o] ?? 0])) as Record<TurnOutcome, number>,
+      latency: spread(w.chat.latency_ms),
+    },
+  };
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -250,10 +314,11 @@ function turnCite(raw: string | null): TurnCite | null {
 }
 
 /**
- * `?chat=<uuid>&cite=turn.<turn uuid>.<n>&p=<n>`, or `?doc=<uuid>&cite=fact.<i>&p=<n>`.
+ * `?chat=<uuid>&cite=turn.<turn uuid>.<n>&p=<n>`, `?doc=<uuid>&cite=fact.<i>&p=<n>`, or `?view=metrics&window=7d`.
  * Anything malformed is dropped, never an error page.
  */
 export function parseSelection(params: URLSearchParams): Selection {
+  if (params.get("view") === "metrics") return { kind: "metrics", window: params.get("window") === "7d" ? "7d" : "24h" };
   const page = positiveInt(params.get("p"));
   const chat = asChatId(params.get("chat") ?? "");
   if (chat !== null) {
@@ -272,6 +337,10 @@ export function selectionQuery(s: Selection): string {
   const params = new URLSearchParams();
   switch (s.kind) {
     case "none":
+      break;
+    case "metrics":
+      params.set("view", "metrics");
+      if (s.window !== "24h") params.set("window", s.window);
       break;
     case "doc":
       params.set("doc", s.doc);
