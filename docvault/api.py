@@ -1,13 +1,17 @@
 """FastAPI routes. Each route parses input, calls one domain function, maps the result.
 
 No business rules live here. The only table in this file maps domain error
-codes to HTTP statuses, so the domain never imports HTTP concepts.
+codes to HTTP statuses, so the domain never imports HTTP concepts. The streamed
+ask runs chat.ask in a worker thread and turns its progress into server-sent events.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+import queue
+import threading
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Annotated, Any, Literal
@@ -16,12 +20,13 @@ from uuid import UUID
 import redis
 from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
 
 from . import chat, documents, metrics, wire
 from .config import load_settings
 from .context import Ctx, build_ctx, too_large
-from .domain import ChatId, Created, DocStatus, DocumentId, ErrorCode, Existing, VaultError
+from .domain import ChatId, Created, DocStatus, DocumentId, ErrorCode, Existing, Failure, Turn, VaultError
 from .ratelimit import Action
 from .tasks import CeleryJobs
 
@@ -60,6 +65,14 @@ def errors(*codes: ErrorCode) -> dict[int | str, dict[str, Any]]:
             for status, names in sorted(by_status.items())}
 
 
+def json_errors(*codes: ErrorCode) -> dict[int | str, dict[str, Any]]:
+    """errors() for a route whose 200 is not JSON. FastAPI files a `model` under the route's own media type,
+    so these name the JSON envelope directly; the other routes keep ErrorOut in the components."""
+    return {status: {"description": response["description"],
+                     "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorOut"}}}}
+            for status, response in errors(*codes).items()}
+
+
 def get_ctx(request: Request) -> Ctx:
     return request.app.state.ctx
 
@@ -75,9 +88,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ctx.db.close()
 
 
+def error_out(exc: VaultError) -> wire.ErrorOut:
+    return wire.ErrorOut(error=wire.error_body(exc.failure, exc.details))
+
+
 def vault_error_handler(request: Request, exc: VaultError) -> JSONResponse:
     failure = exc.failure
-    body = wire.ErrorOut(error=wire.error_body(failure, exc.details))
+    body = error_out(exc)
     retry_after = 5 if failure.code is ErrorCode.AI_UNAVAILABLE and failure.retryable else exc.details.get("retry_after_s")
     headers = None if retry_after is None else {"Retry-After": str(retry_after)}
     return JSONResponse(body.model_dump(mode="json"), status_code=ERROR_STATUS.get(failure.code, 500), headers=headers)
@@ -210,6 +227,96 @@ def get_chat(chat_id: UUID, ctx: Deps) -> wire.ChatOut:
                               ErrorCode.AI_BAD_OUTPUT, ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED))
 def ask(chat_id: UUID, body: wire.AskIn, ctx: Deps) -> wire.TurnOut:
     return wire.turn_out(chat.ask(ctx, ChatId(chat_id), body.question))
+
+
+class EventStreamResponse(StreamingResponse):
+    media_type = "text/event-stream"
+
+
+# no-cache keeps any cache from holding the stream back; X-Accel-Buffering: no turns off nginx-style proxy buffering.
+STREAM_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+UNEXPECTED = Failure(ErrorCode.INTERNAL, "Answering failed unexpectedly. Try again.", retryable=True)
+
+
+def sse(event: str, data: BaseModel | dict[str, object]) -> str:
+    body = data.model_dump_json() if isinstance(data, BaseModel) else json.dumps(data)
+    return f"event: {event}\ndata: {body}\n\n"
+
+
+class AskInThread:
+    """One chat.ask in a worker thread, its progress queued as server-sent event frames.
+
+    The thread owns the ask. When the client leaves, the response stops reading
+    the queue, but the thread runs on, stores the turn and bills every attempt,
+    so the chat's history shows the answer. The queue is unbounded, so the thread
+    never waits for a reader that has gone.
+    """
+
+    def __init__(self, ctx: Ctx, chat_id: ChatId, question: str) -> None:
+        self._events: queue.SimpleQueue[str | Turn | Exception] = queue.SimpleQueue()
+        self.thread = threading.Thread(target=self._run, args=(ctx, chat_id, question), daemon=True,
+                                       name=f"ask-{chat_id}")
+        self.thread.start()
+
+    def _run(self, ctx: Ctx, chat_id: ChatId, question: str) -> None:
+        put = self._events.put
+        try:
+            put(chat.ask(ctx, chat_id, question, on_stage=lambda stage: put(sse("stage", {"stage": stage})),
+                         on_text=lambda text: put(sse("delta", {"text": text})),
+                         on_reset=lambda: put(sse("reset", {}))))
+        except VaultError as exc:
+            put(exc)
+        except Exception as exc:
+            log.exception("a streamed ask failed")
+            put(exc)
+
+    def first(self) -> str | Turn | Exception:
+        """Blocks until the ask reports anything. chat.ask checks the chat and its scope before its first stage."""
+        return self._events.get()
+
+    def frames(self, first: str | Turn | Exception) -> Iterator[str]:
+        """Every frame from `first` on, ending with one turn or error frame."""
+        item = first
+        while isinstance(item, str):
+            yield item
+            item = self._events.get()
+        match item:
+            case VaultError():
+                yield sse("error", error_out(item))
+            case Exception():
+                yield sse("error", wire.ErrorOut(error=wire.error_body(UNEXPECTED)))
+            case _:
+                yield sse("turn", wire.turn_out(item))
+
+
+STREAM_EVENTS = """\
+Asks like `POST /chats/{chat_id}/messages` and spends from the same rate-limit budget, but answers with
+server-sent events while the answer is written. A refusal found before the stream starts (404, 409, 422, 429)
+is the usual status with the error envelope. After a 200, the events are:
+
+- `stage`, data `{"stage": "condensing" | "searching" | "answering"}`, as each step starts. `condensing` comes
+  only when the chat has earlier turns.
+- `delta`, data `{"text": "..."}`: provisional answer text with every `[S#]` marker removed. Append it.
+- `reset`, data `{}`: discard the provisional text. Sent before a retry or repair that follows text already sent.
+- `turn`, data: the same body `POST /chats/{chat_id}/messages` returns. It is grounded and final, replaces all
+  provisional text, and ends the stream.
+- `error`, data: the error envelope (`ai_unavailable`, `ai_bad_output` or `internal_error`). It ends the stream.
+
+If the client disconnects, the answer still finishes and is stored, so `GET /chats/{chat_id}/messages` shows it."""
+
+
+@router.post("/chats/{chat_id}/messages/stream", response_class=EventStreamResponse, dependencies=[rate_limited("ask")],
+             description=STREAM_EVENTS,
+             responses={200: {"description": "stage, delta, reset, then one turn or error event",
+                              "content": {"text/event-stream": {"schema": {"type": "string"}}}},
+                        **json_errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED,
+                                      ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED)})
+def ask_stream(chat_id: UUID, body: wire.AskIn, ctx: Deps) -> EventStreamResponse:
+    asking = AskInThread(ctx, ChatId(chat_id), body.question)
+    first = asking.first()
+    if isinstance(first, Exception):
+        raise first
+    return EventStreamResponse(asking.frames(first), headers=STREAM_HEADERS)
 
 
 @router.get("/chats/{chat_id}/messages", response_model=wire.HistoryOut,

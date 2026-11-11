@@ -8,17 +8,18 @@ one function a reader can follow top to bottom:
 
 Pure decisions (select_sources, gate, ground) are separate functions with
 no I/O, so the grounding and refusal rules are unit-tested without a model
-or a database.
+or a database. A caller that shows progress (the stream route) passes sinks
+to ask(); the pipeline is the same with or without them.
 """
 
 from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pgvector import Vector as PgVector
@@ -27,6 +28,7 @@ from psycopg.types.json import Jsonb
 
 from . import pages, prompts
 from .ai import TurnOwner, Vector
+from .answer_text import AnswerField, MarkerFilter
 from .context import Ctx
 from .db import Db, decode_cursor, encode_cursor
 from .domain import (
@@ -53,6 +55,8 @@ from .domain import (
     VaultError,
 )
 from .prompts import AnswerDraft, CondensedQuery
+
+type Stage = Literal["condensing", "searching", "answering"]
 
 RRF_K = 60
 CANDIDATES = 50
@@ -125,14 +129,22 @@ def list_chats(db: Db, *, limit: int, cursor: str | None) -> tuple[list[Chat], s
     return [_row_to_chat(row) for row in rows[:limit]], last and encode_cursor(last["created_at"], last["id"])
 
 
-def ask(ctx: Ctx, chat_id: ChatId, question: str) -> Turn:
+def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage], None] | None = None,
+        on_text: Callable[[str], None] | None = None, on_reset: Callable[[], None] | None = None) -> Turn:
     """Answer one question with citations, or refuse honestly. Persists exactly one turn.
 
     Every model call is billed to the turn id, which exists before the first
     call. A provider failure raises VaultError(AI_UNAVAILABLE) (HTTP 503, with
     Retry-After when retryable) and writes no turn; the failed calls stay in llm_calls. No
     connection or transaction is held across a model call.
+
+    The optional sinks report progress. on_stage hears each step as it starts, after the
+    chat and its scope are checked, so a missing chat or a deleted document raises
+    before any of them. on_text gets provisional answer text, markers removed, while
+    the answer model writes it, and on_reset means "discard the text sent so far"
+    (a retry or repair follows). The returned turn replaces all provisional text.
     """
+    stage = on_stage or _ignore
     turn_id = TurnId(uuid4())
     owner = TurnOwner(turn_id)
     started = datetime.now(UTC)
@@ -141,8 +153,11 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str) -> Turn:
         documents = _scope(conn, chat_id)
         past = _turns(conn, chat_id, limit=ctx.settings.history_turns)
 
+    if past:
+        stage("condensing")
     standalone = question if not past else ctx.ai.complete(
         prompts.condense(past, question), CondensedQuery, owner=owner).standalone
+    stage("searching")
     [q_vec] = ctx.ai.embed([standalone], purpose=Purpose.EMBED_QUERY, owner=owner)
     with ctx.db.connection() as conn:
         candidates = retrieve(conn, documents, q_vec, standalone, ctx.ai.embed_model,
@@ -151,7 +166,9 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str) -> Turn:
     answer: Answer
     if gate(candidates, ctx.ai.min_similarity):
         sources = select_sources(candidates, k=ctx.settings.retrieval_k, per_doc_min=ctx.settings.retrieval_per_doc_min)
-        draft = ctx.ai.complete(prompts.answer(question, standalone, past, sources), AnswerDraft, owner=owner)
+        stage("answering")
+        draft = ctx.ai.complete(prompts.answer(question, standalone, past, sources), AnswerDraft, owner=owner,
+                                stream=None if on_text is None else _ProvisionalAnswer(on_text, on_reset or _ignore))
         answer = ground(draft, sources)
     else:
         answer = NotFound(TurnOutcome.NO_EVIDENCE, prompts.no_evidence_text(documents))
@@ -163,6 +180,37 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str) -> Turn:
             (turn_id, chat_id, question, standalone, answer.outcome, answer.text,
              Jsonb([_snapshot(citation) for citation in answer.citations]), started, datetime.now(UTC)))
         return _row_to_turn(conn.execute(_TURN_SQL + "WHERE t.id = %s GROUP BY t.id", (turn_id,)).fetchone())
+
+
+def _ignore(*_: object) -> None:
+    pass
+
+
+class _ProvisionalAnswer:
+    """The ai.TextSink for a streamed answer: the JSON's answer field with its [S#] markers removed.
+
+    Each provider attempt starts afresh. When the attempt before it had already sent
+    text, the caller hears on_reset first, so text from a failed or repaired attempt
+    never mixes with the next one.
+    """
+
+    def __init__(self, on_text: Callable[[str], None], on_reset: Callable[[], None]) -> None:
+        self._on_text, self._on_reset = on_text, on_reset
+        self._field, self._markers = AnswerField(), MarkerFilter()
+        self._sent = False
+
+    def attempt(self) -> None:
+        if self._sent:
+            self._on_reset()
+        self._field, self._markers, self._sent = AnswerField(), MarkerFilter(), False
+
+    def text(self, chunk: str) -> None:
+        delta = self._markers.feed(self._field.feed(chunk))
+        if self._field.done:
+            delta += self._markers.flush()
+        if delta:
+            self._sent = True
+            self._on_text(delta)
 
 
 def history(db: Db, chat_id: ChatId, *, limit: int = 50) -> list[Turn]:
