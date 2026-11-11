@@ -7,6 +7,9 @@ import { useFetched } from "@/hooks/useFetched";
 import { locateQuote } from "@/lib/quote";
 import { explain } from "@/copy";
 
+/** A passage to mark. `flag` is the short text on the page-edge flag: a chat citation's number. */
+export type Mark = { quote: string; label: string; flag?: string };
+
 /**
  * What the pane shows, resolved from the URL: a document's page with an optional passage to mark, or
  * why it cannot (the fact or citation is gone, or its document is no longer in the vault).
@@ -14,7 +17,7 @@ import { explain } from "@/copy";
 export type SourceView =
   | { kind: "resolving" }
   | { kind: "unknown"; message: string }
-  | { kind: "page"; doc: Doc; page: number; mark: { quote: string; label: string } | null; citedPage?: number };
+  | { kind: "page"; doc: Doc; page: number; mark: Mark | null; citedPage?: number };
 
 type Props = { view: SourceView; onPage(page: number): void; onClose(): void };
 
@@ -69,7 +72,7 @@ export function SourcePane({ view, onPage, onClose }: Props) {
   );
 }
 
-function PageSheet({ doc, page, mark }: { doc: Doc; page: number; mark: { quote: string; label: string } | null }) {
+function PageSheet({ doc, page, mark }: { doc: Doc; page: number; mark: Mark | null }) {
   const { result, reload } = useFetched(`${doc.id}:${page}`, () => api.page(doc.id, page));
   if (result === null) return <SheetSkeleton />;
   if (!result.ok) {
@@ -86,26 +89,26 @@ function PageSheet({ doc, page, mark }: { doc: Doc; page: number; mark: { quote:
   return <MarkedText page={result.value} mark={mark} />;
 }
 
-/** The page text with the quote marked: a canary passage and a carbon bracket in the margin. */
-function MarkedText({ page, mark }: { page: Page; mark: { quote: string; label: string } | null }) {
+/** The page text with the quote marked: a canary passage and a canary flag on the page edge. */
+function MarkedText({ page, mark }: { page: Page; mark: Mark | null }) {
   const sheet = useRef<HTMLDivElement>(null);
   const marked = useRef<HTMLElement>(null);
-  const bracket = useRef<HTMLSpanElement>(null);
+  const flag = useRef<HTMLSpanElement>(null);
   const match = mark ? locateQuote(page.text, mark.quote) : null;
 
   useLayoutEffect(() => {
     const el = marked.current;
     const box = sheet.current;
-    const bar = bracket.current;
-    if (!el || !box || !bar) return;
+    const tab = flag.current;
+    if (!el || !box || !tab) return;
     const place = () => {
       const rects = el.getClientRects();
       const first = rects[0];
       const last = rects[rects.length - 1];
       if (!first || !last) return;
       const top = box.getBoundingClientRect().top;
-      bar.style.top = `${first.top - top}px`;
-      bar.style.height = `${last.bottom - first.top}px`;
+      tab.style.top = `${first.top - top}px`;
+      tab.style.height = `${last.bottom - first.top}px`;
     };
     place();
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -138,7 +141,7 @@ function MarkedText({ page, mark }: { page: Page; mark: { quote: string; label: 
           page.text
         )}
       </p>
-      {match?.kind === "exact" && <span className="bracket" ref={bracket} aria-hidden="true" />}
+      {match?.kind === "exact" && <span className="flag" ref={flag} aria-hidden="true">{mark?.flag}</span>}
     </div>
   );
 }

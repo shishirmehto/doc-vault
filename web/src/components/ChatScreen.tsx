@@ -106,7 +106,7 @@ function sourceView(pane: ChatPane, turns: readonly Turn[] | null, docs: readonl
   const doc = docs.find((d) => d.id === citation.source.documentId);
   if (!doc) return { kind: "unknown", message: `${citation.filename} is no longer in the vault.` };
   const page = pane.page ?? citation.source.page;
-  const mark = page === citation.source.page ? { quote: citation.source.quote, label: `source ${citation.ref}` } : null;
+  const mark = page === citation.source.page ? { quote: citation.source.quote, label: `source ${citation.ref}`, flag: String(citation.ref) } : null;
   return { kind: "page", doc, page, mark, citedPage: citation.source.page };
 }
 
