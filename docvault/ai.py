@@ -39,16 +39,20 @@ from pydantic import BaseModel, ValidationError
 from . import prompts
 from .config import ReasoningEffort, Settings
 from .db import Db
-from .domain import ComparisonId, DocumentId, ErrorCode, Page, Purpose, Source, Turn, TurnId, VaultError
+from .domain import ComparisonId, DocumentId, ErrorCode, KeyFact, Page, Purpose, Source, Turn, TurnId, VaultError
 from .pages import SENTENCE_OR_PARAGRAPH_END, TABLE_CELL, collapse_whitespace
 from .prompts import (
     DOCUMENT_TYPES,
     AnswerDraft,
+    CellDraft,
+    CompareDoc,
+    ComparisonDraft,
     CondensedQuery,
     EvidenceDraft,
     InsightsDraft,
     KeyFactDraft,
     Prompt,
+    RowDraft,
     Tier,
 )
 
@@ -579,6 +583,34 @@ def _fake_insights(prompt: Prompt) -> InsightsDraft:
         tags=list(dict.fromkeys(word for word in words if len(word) > 3))[:6])
 
 
+def _fake_compare(prompt: Prompt) -> ComparisonDraft:
+    """Each document's fields in order: its key facts, then the label-and-value passages of its pages (_key_fact).
+    The first field per label wins, labels compared as lowercase words. One row per label that two or more
+    documents have, in order of first appearance, named as first written; with a focus, only labels sharing a
+    content word with it. A document without the field gets a null cell."""
+    documents: tuple[CompareDoc, ...] = prompt.inputs["documents"]
+    focus: str | None = prompt.inputs["focus"]
+    fields: list[dict[str, KeyFact | KeyFactDraft]] = []
+    for doc in documents:
+        found = [*doc.key_facts, *(fact for page in doc.pages for passage in _segments(page.text)
+                                   if (fact := _key_fact(page.number, passage)))]
+        fields.append({})
+        for fact in found:
+            fields[-1].setdefault(" ".join(re.findall(r"[a-z0-9]+", fact.label.lower())), fact)
+    wanted = set(_tokens(focus or ""))
+    rows: list[RowDraft] = []
+    for label in dict.fromkeys(label for by_label in fields for label in by_label):
+        facts = [by_label.get(label) for by_label in fields]
+        named = [fact for fact in facts if fact is not None]
+        if len(named) < 2 or (focus and not wanted & set(_tokens(named[0].label))):
+            continue
+        rows.append(RowDraft(field=named[0].label, cells=[
+            CellDraft(document=doc.label, value=None, page=None, quote=None) if fact is None else
+            CellDraft(document=doc.label, value=fact.value, page=fact.page, quote=fact.quote)
+            for doc, fact in zip(documents, facts, strict=True)]))
+    return ComparisonDraft(rows=rows)
+
+
 _REFERENCE_WORD = re.compile(r"\b(?:it|its|that|this|these|those|they|them|one|same|other)\b", re.IGNORECASE)
 _CONTINUATION = re.compile(r"^\W*(?:and|also|but|or|what about|how about)\b", re.IGNORECASE)
 
@@ -638,7 +670,8 @@ class FakeChat:
     handler raises NotImplementedError. Tests subclass FakeChat and replace
     `handlers` to script other output or a provider failure.
 
-    Handlers: insights (_fake_insights), condense (_fake_condense), answer (_fake_answer).
+    Handlers: insights (_fake_insights), condense (_fake_condense), answer (_fake_answer),
+    compare (_fake_compare).
 
     Token counts are whitespace word counts (system and messages in, JSON out),
     so ledger and metrics tests have real numbers. Asked to stream, it sends the
@@ -649,7 +682,7 @@ class FakeChat:
     provider = "fake"
     models: Mapping[Tier, str] = {"main": "fake-chat", "small": "fake-chat"}
     handlers: Mapping[str, Callable[[Prompt], BaseModel]] = {
-        "insights": _fake_insights, "condense": _fake_condense, "answer": _fake_answer}
+        "insights": _fake_insights, "condense": _fake_condense, "answer": _fake_answer, "compare": _fake_compare}
 
     def __init__(self, stream_delay_ms: int = 0) -> None:
         self.stream_delay_ms = stream_delay_ms
