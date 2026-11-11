@@ -11,7 +11,7 @@ import httpx2
 import pytest
 from pydantic import BaseModel
 
-from docvault import compare, documents, pages, prompts
+from docvault import compare, documents, insights, pages, prompts
 from docvault.ai import AI, ComparisonOwner, FakeChat, FakeEmbedder, ProviderError, RawCompletion, Tokens
 from docvault.api import app
 from docvault.config import Settings
@@ -280,6 +280,25 @@ def test_a_document_deleted_during_the_model_call_reads_back_as_deleted(ctx):
     assert [(doc.filename, doc.deleted, doc.pages_read, doc.page_count) for doc in stored.documents] == [
         (POLICY, False, 7, 7), (QUOTE, True, 3, 3)]
     assert len(stored.rows) == 12
+
+
+def test_verified_key_facts_reach_the_prompt_only_for_documents_with_ready_insights(ctx):
+    policy, quote = indexed(ctx, SAMPLES / POLICY), indexed(ctx, SAMPLES / QUOTE)
+    insights.run_analyze(ctx, policy)
+    sent: list[Prompt] = []
+
+    class RecordingChat(FakeChat):
+        def complete_json(self, prompt, output, *, timeout_s, on_text=None):
+            sent.append(prompt)
+            return super().complete_json(prompt, output, timeout_s=timeout_s, on_text=on_text)
+
+    compare.create(with_chat(ctx, RecordingChat()), [policy, quote], None)
+
+    [prompt] = sent
+    assert [len(doc.key_facts) for doc in prompt.inputs["documents"]] == [12, 0]
+    assert f'<document id="D1" filename="{POLICY}">\n<key_facts>\n- Insurer: Sample Mutual Insurance Company (p. 1)\n' in (
+        prompt.messages[0].content)
+    assert f'<document id="D2" filename="{QUOTE}">\n<page n="1">' in prompt.messages[0].content
 
 
 # ------------------------------------------------------------------ over HTTP
