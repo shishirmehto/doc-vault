@@ -111,7 +111,7 @@ class RowDraft(BaseModel):
 
 
 class ComparisonDraft(BaseModel):
-    # No max_length: an extra row must not cost a repair call. compare.ground keeps at most MAX_ROWS.
+    # No max_length: a comparison gets no repair turn, so an extra row would fail it. compare.ground keeps MAX_ROWS.
     rows: list[RowDraft]
 
 
