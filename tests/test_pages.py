@@ -10,7 +10,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen.canvas import Canvas
 
 from docvault import pages
-from docvault.domain import DocKind, ErrorCode, ExtractedText, Page, PageBasis, VaultError
+from docvault.domain import DocKind, ErrorCode, ExtractedText, Failure, Page, PageBasis, VaultError
 
 from .conftest import ENDORSEMENT, FACTS, POLICY, QUOTE, SAMPLES, TRUTH
 
@@ -206,3 +206,19 @@ def test_text_with_no_breaks_at_all_is_still_cut_to_size():
     doc = ExtractedText(PageBasis.SYNTHETIC, (Page(1, "x" * 4000),))
     assert [(c.start, c.end) for c in pages.chunk(doc, max_chars=1800, overlap_chars=250)] == [
         (0, 1800), (1800, 3600), (3600, 4000)]
+
+
+def test_a_docx_whose_text_would_inflate_past_the_bound_is_refused_before_it_is_parsed(tmp_path, monkeypatch):
+    path = tmp_path / "bomb.docx"
+    with zipfile.ZipFile(SAMPLES / ENDORSEMENT) as sample, zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as bomb:
+        for item in sample.infolist():
+            data = sample.read(item)
+            bomb.writestr(item, data + b" " * 2_000_000 if item.filename == "word/document.xml" else data)
+    monkeypatch.setattr(pages, "MAX_DOCX_XML_BYTES", 1_000_000, raising=False)
+
+    with pytest.raises(VaultError) as raised:
+        pages.extract(DocKind.DOCX, path, max_pages=100)
+
+    assert raised.value.failure == Failure(ErrorCode.UNREADABLE_FILE,
+                                           "The Word file's text would expand to more than 1 MB. Split the document "
+                                           "and upload the parts.", retryable=False)

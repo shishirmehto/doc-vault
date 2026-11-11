@@ -24,6 +24,7 @@ PAGE_JOINER = "\n\n"   # placed between non-empty pages in the document text str
 TABLE_CELL = " | "     # joins the cells of a DOCX table row on one line
 SYNTHETIC_PAGE_CHARS = 3000
 SNIFF_BYTES = 8192
+MAX_DOCX_XML_BYTES = 200_000_000   # word/document.xml inflated; a zip bomb compresses far past this
 
 _KNOWN_UNSUPPORTED = {
     b"\xd0\xcf\x11\xe0": "a legacy Office file (.doc, .xls or .ppt)",
@@ -131,6 +132,12 @@ def _extract_docx(path: Path, max_pages: int) -> ExtractedText:
     SYNTHETIC sections of ~SYNTHETIC_PAGE_CHARS at paragraph boundaries.
     Tables become one line per row, cells joined by " | ".
     """
+    with zipfile.ZipFile(path) as archive:
+        inflated = archive.getinfo("word/document.xml").file_size   # zipfile reads no more than this
+    if inflated > MAX_DOCX_XML_BYTES:
+        raise VaultError(ErrorCode.UNREADABLE_FILE,
+                         f"The Word file's text would expand to more than {MAX_DOCX_XML_BYTES // 1_000_000} MB. "
+                         "Split the document and upload the parts.")
     paragraphs: list[str] = []
     for item in open_docx(str(path)).iter_inner_content():
         if isinstance(item, Table):
