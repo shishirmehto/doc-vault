@@ -5,25 +5,45 @@ import { api } from "@/api/client";
 import type { ApiError, Chat, ChatId, Doc, DocumentId, NonEmpty } from "@/api/domain";
 import { selectionQuery } from "@/api/parse";
 import { useFetched } from "@/hooks/useFetched";
+import { useFileDrop } from "@/hooks/useFileDrop";
 import { threads } from "@/hooks/useThread";
+import { CHAT_MAX_DOCUMENTS, FIND_AFTER, chooseAll, findDocs } from "@/lib/find";
 import { docMeta, explain, listNames, statusLine } from "@/copy";
 import { Composer } from "./Composer";
+import { DropZone } from "./DropZone";
+import { FindField } from "./FindField";
 
-/** The screen with nothing selected: choose ready documents and ask the first question, or reopen a recent chat. */
-export function NewChat({ docs, deleted, onDismiss, onOpen }: {
+/**
+ * The screen with nothing selected: choose ready documents and ask the first question, or reopen a recent chat.
+ * An empty vault shows the steps from upload to first question instead.
+ */
+export function NewChat({ docs, deleted, onDismiss, onOpen, onFiles }: {
   docs: readonly Doc[] | null;
   /** The filename of a document just deleted, to confirm it. */
   deleted: string | null;
   onDismiss(): void;
   onOpen(id: ChatId): void;
+  onFiles(files: File[]): void;
 }) {
   const [chosen, setChosen] = useState<ReadonlySet<DocumentId>>(() => new Set());
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<ApiError | null>(null);
+  const [query, setQuery] = useState("");
+  const [capped, setCapped] = useState(false);
 
   const ready = (docs ?? []).filter((d) => d.lifecycle.status === "ready");
   const scope = nonEmpty(ready.filter((d) => chosen.has(d.id)).map((d) => d.id));
+  const finding = docs !== null && docs.length > FIND_AFTER;
+  const shown = docs && finding ? findDocs(docs, query) : (docs ?? []);
+  const shownReady = shown.filter((d) => d.lifecycle.status === "ready").map((d) => d.id);
+  const allShownChosen = shownReady.length > 0 && shownReady.every((id) => chosen.has(id));
+  const hiddenChosen = (scope ?? []).filter((id) => !shown.some((d) => d.id === id)).length;
+  const selectAll = () => {
+    const next = chooseAll(chosen, shownReady, CHAT_MAX_DOCUMENTS);
+    setChosen(next.chosen);
+    setCapped(next.capped);
+  };
 
   const toggle = (id: DocumentId) =>
     setChosen((was) => {
@@ -49,19 +69,40 @@ export function NewChat({ docs, deleted, onDismiss, onOpen }: {
           {deleted && <DeletedNote key={deleted} filename={deleted} onDismiss={onDismiss} />}
           <h1 id="new-chat-title">Ask your documents</h1>
           <p className="lead">
-            Choose the documents to ask about. Every answer cites the page it came from, with the passage marked, so you
-            can check it against the source.
+            {docs?.length === 0 ? "" : "Choose the documents to ask about. "}Every answer cites the page it came from,
+            with the passage marked, so you can check it against the source.
           </p>
           {docs === null ? (
             <div aria-busy="true">{[70, 55, 62].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}</div>
           ) : docs.length === 0 ? (
-            <p className="notice">Upload a document on the left to start. You can ask about it once it shows Ready.</p>
+            <FirstSteps onFiles={onFiles} />
           ) : (
             <fieldset className="picker">
               <legend>Documents</legend>
+              <div className="picker-tools">
+                {finding && <FindField value={query} onChange={setQuery} />}
+                <p className="pick-count" aria-live="polite">
+                  {scope === null ? "None chosen" : `${scope.length} chosen`}
+                  {hiddenChosen > 0 && `, ${hiddenChosen} not shown by the search`}
+                </p>
+                {ready.length > 1 && (
+                  <button type="button" className="text-button" disabled={busy || shownReady.length === 0} onClick={selectAll}>
+                    {allShownChosen ? "Unselect all ready" : "Select all ready"}
+                  </button>
+                )}
+              </div>
+              {capped && (
+                <p className="quiet">A chat answers from at most {CHAT_MAX_DOCUMENTS} documents, so only the first {CHAT_MAX_DOCUMENTS} are chosen.</p>
+              )}
               {ready.length === 0 && <p className="quiet">Questions open up once a document is ready.</p>}
+              {finding && shown.length === 0 && (
+                <p className="quiet">
+                  No document matches &ldquo;{query.trim()}&rdquo;.{" "}
+                  <button type="button" className="text-button" onClick={() => setQuery("")}>Clear</button>
+                </p>
+              )}
               <ul>
-                {docs.map((d) => {
+                {shown.map((d) => {
                   const isReady = d.lifecycle.status === "ready";
                   return (
                     <li key={d.id}>
@@ -98,6 +139,29 @@ export function NewChat({ docs, deleted, onDismiss, onOpen }: {
         </div>
       )}
     </main>
+  );
+}
+
+/** An empty vault: the real sequence from upload to first question, with the upload target in step 1. */
+function FirstSteps({ onFiles }: { onFiles(files: File[]): void }) {
+  const drop = useFileDrop(onFiles);
+  return (
+    <ol className="steps">
+      <li>
+        <p className="step-title">Upload policies, quotes or endorsements.</p>
+        <div className="step-drop" {...drop.handlers}>
+          <DropZone dragging={drop.dragging} onFiles={onFiles} large>
+            <p className="dropzone-hint">The repo&apos;s samples folder has three insurance documents to try.</p>
+          </DropZone>
+        </div>
+      </li>
+      <li>
+        <p className="step-title">Wait until each shows Ready, when its pages are read and its key facts found.</p>
+      </li>
+      <li>
+        <p className="step-title">Ask a question.</p>
+      </li>
+    </ol>
   );
 }
 

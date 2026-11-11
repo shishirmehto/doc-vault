@@ -129,22 +129,37 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
 
 .workspace { position: relative; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr) 0; grid-template-rows: minmax(0, 1fr); min-height: 0; }
 .workspace[data-pane="open"] { grid-template-columns: var(--rail) minmax(0, 1fr) var(--pane); }
-.rail, .centre { overflow-y: auto; min-height: 0; }
+.centre { overflow-y: auto; min-height: 0; }
 
 /* ------------------------------------------------------------- rail */
 
-.rail { border-right: 1px solid var(--rule); padding: var(--s4) var(--s4) var(--s8); }
+.rail { display: grid; grid-template-rows: minmax(0, 1fr); min-height: 0; border-right: 1px solid var(--rule); }
 .rail[data-dragging] { background: var(--desk-raised); box-shadow: inset 0 0 0 2px var(--carbon); }
+.rail-body { overflow-y: auto; min-height: 0; padding: var(--s4) var(--s4) var(--s8); }
+/* The phone layout's "Documents (n)" button; the wide layout always shows the list. */
+.rail-toggle { display: none; }
 
 .dropzone {
-  display: grid; gap: var(--s2); padding: var(--s4); border: 1.5px dashed var(--graphite);
+  display: grid; gap: var(--s2); justify-items: start; padding: var(--s4); border: 1.5px dashed var(--graphite);
   border-radius: var(--r-control); margin-bottom: var(--s4);
 }
-.dropzone[data-empty] { min-height: 260px; align-content: center; justify-items: start; background: var(--desk-raised); }
-.rail[data-dragging] .dropzone { border-style: solid; border-color: var(--carbon); }
+.dropzone[data-large] {
+  min-height: 220px; align-content: center; justify-items: center; text-align: center; margin: 0;
+  padding: var(--s8) var(--s6); background: var(--desk-raised);
+}
+.dropzone[data-large] .button { justify-self: center; }
+.dropzone[data-dragging] { border-style: solid; border-color: var(--carbon); }
 .dropzone-lead { font-weight: 600; }
 .dropzone-hint { color: var(--graphite); font-size: var(--t-meta); }
-.rail-note { font-size: var(--t-meta); margin-bottom: var(--s3); }
+.rail-note { font-size: var(--t-meta); margin: var(--s3) 0; }
+
+.find { display: grid; gap: 2px; flex: 1 1 18ch; min-width: 0; margin-bottom: var(--s3); }
+.find > span { font-size: var(--t-meta); font-weight: 600; color: var(--graphite); }
+.find input {
+  min-width: 0; padding: 6px var(--s3); border: 1px solid var(--rule); border-radius: var(--r-control);
+  background: var(--sheet); color: var(--ink); font: 400 var(--t-ui)/1.4 var(--font-ui);
+}
+.find input:focus-visible { outline: 2px solid var(--carbon); outline-offset: 0; border-color: var(--carbon); }
 .rail-note[data-tone="failed"] { color: var(--stamp); }
 
 .rows { display: grid; gap: 2px; }
@@ -206,6 +221,21 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .lead { font-size: var(--t-body); line-height: 1.55; color: var(--graphite); max-width: 60ch; }
 .picker { border: 0; padding: 0; margin: 0; min-width: 0; }
 .picker legend { font-weight: 600; padding: 0; margin-bottom: var(--s2); }
+.picker-tools { display: flex; flex-wrap: wrap; align-items: end; column-gap: var(--s4); row-gap: var(--s2); margin-bottom: var(--s3); }
+.picker-tools .find { margin-bottom: 0; }
+.picker-tools .text-button { padding: 4px 0; }
+.pick-count { font-size: var(--t-meta); color: var(--graphite); padding: 6px 0; font-variant-numeric: tabular-nums; }
+.picker > .quiet { margin-bottom: var(--s2); }
+
+/* An empty vault: the sequence from upload to first question, numbered like the sections of a form. */
+.steps { display: grid; gap: var(--s6); counter-reset: step; }
+.steps > li { display: grid; grid-template-columns: 2ch minmax(0, 1fr); column-gap: var(--s3); row-gap: var(--s3); counter-increment: step; }
+.steps > li::before {
+  content: counter(step) "."; grid-row: 1; color: var(--carbon); font: 600 var(--t-h2)/1.3 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.steps > li > * { grid-column: 2; }
+.step-title { font-size: var(--t-body); font-weight: 600; line-height: 1.4; padding-top: 2px; }
 .picker ul { display: grid; gap: 2px; margin: 0 calc(-1 * var(--s3)); }
 .pick {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: var(--s3);
@@ -425,7 +455,17 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .topbar { column-gap: var(--s4); padding: 0 var(--s4); }
   .sections { gap: var(--s4); }
   .workspace, .workspace[data-pane="open"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: fit-content(50%) minmax(0, 1fr); }
-  .rail { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .rail { grid-template-rows: auto minmax(0, 1fr); border-right: 0; border-bottom: 1px solid var(--rule); }
+  .rail-toggle {
+    display: flex; align-items: center; gap: var(--s2); width: 100%; padding: var(--s3) var(--s4); border: 0;
+    background: none; color: var(--ink); font-weight: 600; text-align: left; cursor: pointer;
+  }
+  .rail-toggle::after { content: ""; margin-left: auto; width: 8px; height: 8px; border: solid var(--graphite); border-width: 0 2px 2px 0; rotate: 45deg; translate: 0 -2px; }
+  .rail-toggle[aria-expanded="true"]::after { rotate: 225deg; translate: 0 2px; }
+  .rail[data-open="false"] .rail-body { display: none; }
+  .rail-body { padding-top: 0; }
+  .pick { grid-template-columns: auto minmax(0, 1fr); row-gap: 0; }
+  .pick-meta { grid-column: 2; text-align: left; }
   .pane { width: 100%; }
   .pane-header { margin: 0 var(--s4); }
   .pane-body { padding: var(--s4) var(--s8) var(--s8) var(--s4); }

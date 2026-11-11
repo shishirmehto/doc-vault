@@ -103,7 +103,7 @@ export function Workspace() {
       />
       {selection.kind === "none" && (
         <NewChat docs={docs} deleted={deleted} onDismiss={() => setDeleted(null)}
-          onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
+          onFiles={(files) => uploads.add(files, uploadLimit)} onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
       )}
       {selection.kind === "missing" && (
         <main className="centre">{selection.what === "doc" ? <MissingDocument /> : <MissingChat />}</main>

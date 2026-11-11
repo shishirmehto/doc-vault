@@ -1,10 +1,14 @@
 "use client";
 
-import { useRef, useState, type DragEvent } from "react";
+import { useState } from "react";
 import type { ApiError, Doc, DocumentId, Failure } from "@/api/domain";
 import { selectionQuery } from "@/api/parse";
+import { useFileDrop } from "@/hooks/useFileDrop";
+import { FIND_AFTER, findDocs } from "@/lib/find";
 import type { Upload } from "@/lib/uploads";
 import { docMeta, explain, formatBytes, statusLine } from "@/copy";
+import { DropZone } from "./DropZone";
+import { FindField } from "./FindField";
 import { StageBar } from "./StageBar";
 
 type Props = {
@@ -18,67 +22,49 @@ type Props = {
   onRetry(id: DocumentId): Promise<ApiError | null>;
 };
 
+/**
+ * The documents column. The whole rail takes dropped files. Below 760px it folds into a "Documents (n)"
+ * button over the centre column: open while the vault is empty or uploads are listed, so the upload target
+ * and their progress show, and closed once a document is opened from it.
+ */
 export function Rail({ docs, connection, uploads, selected, onFiles, onDismiss, onOpen, onRetry }: Props) {
-  const [dragging, setDragging] = useState(false);
-  const empty = docs !== null && docs.length === 0 && uploads.length === 0;
-
-  const drop = (e: DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    if (e.dataTransfer.files.length > 0) onFiles([...e.dataTransfer.files]);
+  const drop = useFileDrop(onFiles);
+  const [query, setQuery] = useState("");
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const open = choice ?? (docs !== null && (docs.length === 0 || uploads.length > 0));
+  const finding = docs !== null && docs.length > FIND_AFTER;
+  const shown = docs && finding ? findDocs(docs, query) : docs;
+  const openDoc = (id: DocumentId) => {
+    setChoice(false);
+    onOpen(id);
   };
 
   return (
-    <aside
-      className="rail"
-      aria-label="Documents"
-      data-dragging={dragging || undefined}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragging(true);
-      }}
-      onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
-      }}
-      onDrop={drop}
-    >
-      <DropZone empty={empty} dragging={dragging} onFiles={onFiles} />
-      {connection && <p className="rail-note" data-tone="failed">{explain(connection)} Retrying.</p>}
-      {docs === null && !connection && <RailSkeleton />}
-      <ul className="rows">
-        {uploads.map((u) => (
-          <UploadRow key={u.key} upload={u} onDismiss={() => onDismiss(u.key)} onOpen={onOpen} />
-        ))}
-        {docs?.map((doc) => (
-          <DocumentRow key={doc.id} doc={doc} current={doc.id === selected} onOpen={onOpen} onRetry={onRetry} />
-        ))}
-      </ul>
-    </aside>
-  );
-}
-
-function DropZone({ empty, dragging, onFiles }: { empty: boolean; dragging: boolean; onFiles(files: File[]): void }) {
-  const input = useRef<HTMLInputElement>(null);
-  return (
-    <div className="dropzone" data-empty={empty || undefined}>
-      <p className="dropzone-lead">{dragging ? "Drop to upload" : "Drop PDF, Word or text files here"}</p>
-      <button type="button" className="button" onClick={() => input.current?.click()}>
-        Choose files
+    <aside className="rail" aria-label="Documents" data-open={open} data-dragging={drop.dragging || undefined} {...drop.handlers}>
+      <button type="button" className="rail-toggle" aria-expanded={open} aria-controls="rail-body" onClick={() => setChoice(!open)}>
+        Documents{docs ? ` (${docs.length})` : ""}
       </button>
-      {empty && <p className="dropzone-hint">The repo&apos;s samples folder has three insurance documents to try.</p>}
-      <input
-        ref={input}
-        type="file"
-        multiple
-        accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-        hidden
-        onChange={(e) => {
-          const files = [...(e.currentTarget.files ?? [])];
-          e.currentTarget.value = "";
-          if (files.length > 0) onFiles(files);
-        }}
-      />
-    </div>
+      <div className="rail-body" id="rail-body">
+        <DropZone dragging={drop.dragging} onFiles={onFiles} />
+        {connection && <p className="rail-note" data-tone="failed">{explain(connection)} Retrying.</p>}
+        {docs === null && !connection && <RailSkeleton />}
+        {finding && <FindField value={query} onChange={setQuery} />}
+        <ul className="rows">
+          {uploads.map((u) => (
+            <UploadRow key={u.key} upload={u} onDismiss={() => onDismiss(u.key)} onOpen={openDoc} />
+          ))}
+          {shown?.map((doc) => (
+            <DocumentRow key={doc.id} doc={doc} current={doc.id === selected} onOpen={openDoc} onRetry={onRetry} />
+          ))}
+        </ul>
+        {finding && shown?.length === 0 && (
+          <p className="rail-note">
+            No document matches &ldquo;{query.trim()}&rdquo;.{" "}
+            <button type="button" className="text-button" onClick={() => setQuery("")}>Clear</button>
+          </p>
+        )}
+      </div>
+    </aside>
   );
 }
 
