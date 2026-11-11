@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import type { ApiError, Chat, ChatId, Doc, DocumentId, NonEmpty } from "@/api/domain";
 import { selectionQuery } from "@/api/parse";
@@ -10,7 +10,13 @@ import { docMeta, explain, listNames, statusLine } from "@/copy";
 import { Composer } from "./Composer";
 
 /** The screen with nothing selected: choose ready documents and ask the first question, or reopen a recent chat. */
-export function NewChat({ docs, onOpen }: { docs: readonly Doc[] | null; onOpen(id: ChatId): void }) {
+export function NewChat({ docs, deleted, onDismiss, onOpen }: {
+  docs: readonly Doc[] | null;
+  /** The filename of a document just deleted, to confirm it. */
+  deleted: string | null;
+  onDismiss(): void;
+  onOpen(id: ChatId): void;
+}) {
   const [chosen, setChosen] = useState<ReadonlySet<DocumentId>>(() => new Set());
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
@@ -40,6 +46,7 @@ export function NewChat({ docs, onOpen }: { docs: readonly Doc[] | null; onOpen(
     <main className="centre with-composer">
       <div className="centre-scroll">
         <section className="new-chat" aria-labelledby="new-chat-title">
+          {deleted && <DeletedNote key={deleted} filename={deleted} onDismiss={onDismiss} />}
           <h1 id="new-chat-title">Ask your documents</h1>
           <p className="lead">
             Choose the documents to ask about. Every answer cites the page it came from, with the passage marked, so you
@@ -91,6 +98,18 @@ export function NewChat({ docs, onOpen }: { docs: readonly Doc[] | null; onOpen(
         </div>
       )}
     </main>
+  );
+}
+
+/** Takes focus when it appears, because the screen the reader acted on is gone. */
+function DeletedNote({ filename, onDismiss }: { filename: string; onDismiss(): void }) {
+  const note = useRef<HTMLParagraphElement>(null);
+  useEffect(() => note.current?.focus(), []);
+  return (
+    <p className="done-note" role="status" tabIndex={-1} ref={note}>
+      Deleted {filename}. Chats that used it keep their answers and citations.{" "}
+      <button type="button" className="text-button" onClick={onDismiss}>Dismiss</button>
+    </p>
   );
 }
 

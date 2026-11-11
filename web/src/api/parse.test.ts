@@ -213,6 +213,16 @@ test("health names the fake provider, the upload limit and anything unreachable"
   );
 });
 
+test("a delete answers 204 with no body; a 404 names the document the vault no longer has", () => {
+  assert.deepEqual(settle(204, "", null, () => null), { ok: true, value: null });
+  const gone = replay("delete-404-not-found", () => null);
+  assert.deepEqual(gone.ok ? null : gone.error, {
+    kind: "refused", status: 404, code: "document_not_found",
+    message: "No document has the id 00000000-0000-4000-8000-000000000000.",
+    retryable: false, retryAfterS: null, documents: [],
+  });
+});
+
 test("the URL selects a document, then a cited fact or a page; malformed parts are dropped", () => {
   const sel = (q: string) => parseSelection(new URLSearchParams(q));
   assert.deepEqual(sel(`doc=${POLICY}&cite=fact.3&p=2`), {

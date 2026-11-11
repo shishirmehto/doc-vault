@@ -28,8 +28,9 @@ export function SourcePane({ view, onPage, onClose }: Props) {
     close.current = onClose;
   });
   useEffect(() => {
+    // Escape in an open dialog or popover closes that, not the pane under it.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close.current();
+      if (e.key === "Escape" && !document.querySelector("dialog[open], :popover-open")) close.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

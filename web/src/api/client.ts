@@ -16,6 +16,12 @@ export const api = {
   documents: (): Promise<Result<{ docs: Doc[]; complete: boolean }>> =>
     call("GET", "/documents?limit=100", P.parseDocumentPage),
 
+  /**
+   * Removes the document, its pages and its insights. Chats keep their turns, whose citations carry their own
+   * quotes. A 404 means it is already gone.
+   */
+  deleteDocument: (id: DocumentId): Promise<Result<null>> => call("DELETE", `/documents/${id}`, () => null),
+
   /** Re-runs whichever stage failed: indexing for a failed document, analysis for failed insights. */
   retry: (id: DocumentId): Promise<Result<Doc>> => call("POST", `/documents/${id}/retry`, P.parseDoc),
 
@@ -94,7 +100,7 @@ export const api = {
 } as const;
 
 async function call<WireT, T>(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   path: string,
   parse: (w: WireT) => T,
   { body, dataStatuses = [] }: { body?: object; dataStatuses?: readonly number[] } = {},
@@ -156,7 +162,7 @@ export function settle<WireT, T>(
   if (status === 0) return { ok: false, error: { kind: "offline" } };
   if ((status >= 200 && status < 300) || dataStatuses.includes(status)) {
     try {
-      return { ok: true, value: parse(JSON.parse(text) as WireT) };
+      return { ok: true, value: parse((status === 204 ? null : JSON.parse(text)) as WireT) };
     } catch (err) {
       return { ok: false, error: { kind: "unexpected", detail: err instanceof Error ? err.message : String(err) } };
     }

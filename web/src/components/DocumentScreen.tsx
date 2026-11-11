@@ -5,6 +5,7 @@ import { api } from "@/api/client";
 import type { ApiError, Doc, DocumentId, Insights, KeyFact, PaneRequest, Result, Selection } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { docMeta, explain, formatMs, statusLine, unitName } from "@/copy";
+import { DeleteDocument } from "./DeleteDocument";
 import { FailureNote } from "./Rail";
 import { SourcePane, type SourceView } from "./SourcePane";
 import { StageBar } from "./StageBar";
@@ -19,10 +20,12 @@ type Props = {
   onRetry(id: DocumentId): Promise<ApiError | null>;
   /** Starts a chat on this document and opens it. Resolves to the refusal, if any. */
   onAsk(id: DocumentId): Promise<ApiError | null>;
+  /** Deletes it and leaves for the home screen. Resolves to the refusal, if any. */
+  onDelete(doc: Doc): Promise<ApiError | null>;
 };
 
 /** The centre column for one document, and the source pane beside it. */
-export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry, onAsk }: Props) {
+export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry, onAsk, onDelete }: Props) {
   // A new key whenever the list shows the document or its insights moving on, so the panel refetches once.
   const insights = useFetched(`${id}:${doc?.lifecycle.status}:${doc?.insights}`, () => api.insights(id));
 
@@ -63,6 +66,7 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry,
                   Read the {unitName(doc.layout.unit, 2)}
                 </button>
               )}
+              <DeleteDocument doc={doc} onDelete={() => onDelete(doc)} />
             </div>
           </header>
           <InsightsPanel doc={doc} result={insights.result} reload={insights.reload} activeFact={activeFact}

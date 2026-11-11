@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { api } from "@/api/client";
 import type { ApiError, Doc, DocumentId } from "@/api/domain";
 import { useSelection } from "@/hooks/useSelection";
@@ -63,6 +63,26 @@ export function Workspace() {
     [push],
   );
 
+  // Shown on the home screen after a delete, until the reader dismisses it or leaves the home screen.
+  const [deleted, setDeleted] = useState<string | null>(null);
+  const [screen, setScreen] = useState(selection.kind);
+  if (screen !== selection.kind) {
+    setScreen(selection.kind);
+    if (selection.kind !== "none") setDeleted(null);
+  }
+
+  const remove = useCallback(
+    async (doc: Doc): Promise<ApiError | null> => {
+      const result = await api.deleteDocument(doc.id);
+      if (!result.ok && !(result.error.kind === "refused" && result.error.status === 404)) return result.error;
+      patch((list) => ({ ...list, docs: list.docs.filter((d) => d.id !== doc.id) }));
+      setDeleted(doc.filename);
+      push({ kind: "none" });
+      return null;
+    },
+    [patch, push],
+  );
+
   const docs = documents.data?.docs ?? null;
   const selectedDoc = selection.kind === "doc" ? selection.doc : null;
   const current = selectedDoc && docs ? (docs.find((d) => d.id === selectedDoc) ?? null) : null;
@@ -81,7 +101,8 @@ export function Workspace() {
         onRetry={retry}
       />
       {selection.kind === "none" && (
-        <NewChat docs={docs} onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
+        <NewChat docs={docs} deleted={deleted} onDismiss={() => setDeleted(null)}
+          onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
       )}
       {selection.kind === "metrics" && (
         <Metrics window={selection.window} onWindow={(window) => replace({ kind: "metrics", window })} />
@@ -100,6 +121,7 @@ export function Workspace() {
           replace={replace}
           onRetry={retry}
           onAsk={askAbout}
+          onDelete={remove}
         />
       )}
     </div>
