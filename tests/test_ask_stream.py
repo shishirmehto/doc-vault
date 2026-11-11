@@ -34,7 +34,7 @@ def stream(client, chat_id: str, question: str) -> list[tuple[str, dict]]:
     response = client.post(f"/chats/{chat_id}/messages/stream", json={"question": question})
     assert response.status_code == 200, response.text
     assert (response.headers["content-type"], response.headers["cache-control"],
-            response.headers["x-accel-buffering"]) == ("text/event-stream; charset=utf-8", "no-cache", "no")
+            response.headers["x-accel-buffering"]) == ("text/event-stream; charset=utf-8", "no-cache, no-transform", "no")
     return events(response.text)
 
 

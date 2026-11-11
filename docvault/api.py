@@ -233,8 +233,10 @@ class EventStreamResponse(StreamingResponse):
     media_type = "text/event-stream"
 
 
-# no-cache keeps any cache from holding the stream back; X-Accel-Buffering: no turns off nginx-style proxy buffering.
-STREAM_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+# no-cache keeps any cache from holding the stream back, and X-Accel-Buffering: no turns off nginx-style proxy
+# buffering. no-transform stops a proxy from compressing it: the web UI's Next.js rewrite gzips text/event-stream
+# by default and so delivers every event at once when the answer ends.
+STREAM_HEADERS = {"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"}
 UNEXPECTED = Failure(ErrorCode.INTERNAL, "Answering failed unexpectedly. Try again.", retryable=True)
 
 
