@@ -344,6 +344,8 @@ class OpenAIEmbedder:
                                                       dimensions=self.dimensions, timeout=timeout_s)
         except (APIConnectionError, APIStatusError) as exc:
             raise _provider_error(exc) from exc
+        except ValueError as exc:   # the SDK's response parser raises it when "data" is empty or null
+            raise ProviderError("malformed_response", retryable=True) from exc
         if len(response.data) != len(texts) or response.usage is None:
             raise ProviderError("malformed_response", retryable=True)
         ordered = sorted(response.data, key=lambda item: item.index)

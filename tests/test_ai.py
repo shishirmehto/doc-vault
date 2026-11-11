@@ -326,12 +326,14 @@ def test_openai_embedding_failures_are_retried_like_chat_failures(db):
 
 @pytest.mark.parametrize(("vectors", "usage"), [
     (1, {"prompt_tokens": 6, "total_tokens": 6}),   # fewer vectors than texts
+    (None, {"prompt_tokens": 6, "total_tokens": 6}),
     (2, None),
 ])
 def test_an_embedding_response_short_of_vectors_or_usage_is_a_provider_error(db, vectors, usage):
     client = openai_client(httpx2.Response(200, json={
         "object": "list", "model": "text-embedding-3-small",
-        "data": [{"object": "embedding", "index": i, "embedding": float32(0.5, 0.5)} for i in range(vectors)],
+        "data": None if vectors is None else [
+            {"object": "embedding", "index": i, "embedding": float32(0.5, 0.5)} for i in range(vectors)],
         "usage": usage}))
     live = gateway(db, ScriptedChat([]), embedder=OpenAIEmbedder(client, "text-embedding-3-small", 2), ai_max_attempts=1)
 
