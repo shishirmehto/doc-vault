@@ -8,13 +8,13 @@ import type {
 import * as P from "./parse.ts";
 import { createSseReader } from "./sse.ts";
 import type * as W from "./wire.ts";
+import { LIST_LIMIT, type DocList } from "../lib/docList.ts";
 
 const BASE = "/api";
 
 export const api = {
-  /** The newest 100. Older documents need cursor paging, which pass 1 leaves out. */
-  documents: (): Promise<Result<{ docs: Doc[]; complete: boolean }>> =>
-    call("GET", "/documents?limit=100", P.parseDocumentPage),
+  /** The newest LIST_LIMIT. Older documents need cursor paging, which pass 1 leaves out. */
+  documents: (): Promise<Result<DocList>> => call("GET", `/documents?limit=${LIST_LIMIT}`, P.parseDocumentPage),
 
   /**
    * Removes the document, its pages and its insights. Chats keep their turns, whose citations carry their own
