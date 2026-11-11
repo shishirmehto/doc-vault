@@ -203,6 +203,28 @@ def test_the_upload_route_takes_replaces(client):
     assert client.get(f"/documents/{uuid4()}/versions").json()["error"]["code"] == "document_not_found"
 
 
+TERMS = ("Named Insured:\nExample Contractors LLC\n\nPolicy Number:\nTERMS-0001\n\n"
+         "Property Damage Deductible:\n{}\n")
+
+
+def test_a_comparison_of_two_versions_names_each_version_and_marks_the_changed_field(client, ctx):
+    v1 = created(upload(ctx, TERMS.format("$2,500 per occurrence"), "terms.txt"))
+    v2 = created(upload(ctx, TERMS.format("$5,000 per occurrence"), "terms.txt"))
+    for doc in (v1, v2):
+        documents.run_index(ctx, doc.id)
+
+    body = client.post("/comparisons", json={"document_ids": [str(v1.id), str(v2.id)]}).json()
+    with ctx.db.connection() as conn:   # as a comparison stored before versions holds its columns
+        conn.execute("UPDATE comparisons SET documents = (SELECT jsonb_agg(doc - 'version') FROM"
+                     " jsonb_array_elements(documents) AS doc) WHERE id = %s", (body["id"],))
+    older = client.get(f"/comparisons/{body['id']}").json()
+
+    assert [(d["filename"], d["version"]) for d in body["documents"]] == [("terms.txt", 1), ("terms.txt", 2)]
+    assert [(row["field"], [c["value"] for c in row["cells"]]) for row in body["rows"] if row["differs"]] == [
+        ("Property Damage Deductible", ["$2,500 per occurrence", "$5,000 per occurrence"])]
+    assert [d["version"] for d in older["documents"]] == [None, None]
+
+
 @pytest.fixture
 def scratch_url(database_url: str) -> Iterator[str]:
     name = conninfo_to_dict(database_url)["dbname"] + "_versions_upgrade"

@@ -432,6 +432,7 @@ class ComparedDocument:
 
     id: DocumentId
     filename: str
+    version: int | None     # None in a comparison stored before versions existed
     page_basis: PageBasis   # labels the column's cell pages
     pages_read: int         # coverage: pages 1..pages_read went into the prompt
     page_count: int

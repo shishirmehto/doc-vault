@@ -259,6 +259,7 @@ class CompareIn(BaseModel):
 class ComparedDocumentOut(BaseModel):
     id: UUID
     filename: str                      # as it was when the comparison ran
+    version: int | None                # the document's version then; null for a comparison stored before versions
     deleted: bool                      # deleted since; its column keeps its cells and page labels
     pages_read: int                    # coverage: pages 1..pages_read went into the prompt
     page_count: int
@@ -508,8 +509,8 @@ def comparison_out(comparison: Comparison) -> ComparisonOut:
     return ComparisonOut(
         id=comparison.id, focus=comparison.focus, dropped_cells=comparison.dropped_cells, model=comparison.model,
         prompt_version=comparison.prompt_version, created_at=comparison.created_at,
-        documents=[ComparedDocumentOut(id=doc.id, filename=doc.filename, deleted=doc.deleted, pages_read=doc.pages_read,
-                                       page_count=doc.page_count) for doc in docs],
+        documents=[ComparedDocumentOut(id=doc.id, filename=doc.filename, version=doc.version, deleted=doc.deleted,
+                                       pages_read=doc.pages_read, page_count=doc.page_count) for doc in docs],
         rows=[RowOut(field=row.field, differs=row.differs,
                      cells=[_cell_out(doc, cell) for doc, cell in zip(docs, row.cells, strict=True)])
               for row in comparison.rows],

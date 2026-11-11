@@ -65,6 +65,8 @@ def create(ctx: Ctx, document_ids: Sequence[DocumentId], focus: str | None) -> C
         facts = {row["document_id"]: tuple(KeyFact(**fact) for fact in row["body"]["key_facts"])
                  for row in conn.execute("SELECT document_id, body FROM document_insights"
                                          " WHERE document_id = ANY(%s) AND status = 'ready'", (ids,))}
+        versions = {row["id"]: row["version"] for row in conn.execute(
+            "SELECT id, version FROM documents WHERE id = ANY(%s)", (ids,))}
     docs = [CompareDoc(f"D{n}", ref.filename, ref.page_basis, facts.get(ref.id, ()), tuple(pages[ref.id]))
             for n, ref in enumerate(refs, start=1)]
 
@@ -72,8 +74,9 @@ def create(ctx: Ctx, document_ids: Sequence[DocumentId], focus: str | None) -> C
     draft = ctx.ai.complete(prompt, ComparisonDraft, owner=ComparisonOwner(comparison_id))
     rows, dropped = ground(draft, docs)
 
-    snapshot = [{"id": str(ref.id), "filename": ref.filename, "page_basis": ref.page_basis, "pages_read": read,
-                 "page_count": doc.pages[-1].number} for ref, doc, read in zip(refs, docs, pages_read, strict=True)]
+    snapshot = [{"id": str(ref.id), "filename": ref.filename, "version": versions[ref.id], "page_basis": ref.page_basis,
+                 "pages_read": read, "page_count": doc.pages[-1].number}
+                for ref, doc, read in zip(refs, docs, pages_read, strict=True)]
     with ctx.db.connection() as conn:
         conn.execute(
             "INSERT INTO comparisons (id, focus, documents, rows, dropped_cells, model, prompt_version)"
@@ -176,8 +179,8 @@ def _row_to_comparison(row: Mapping[str, Any]) -> Comparison:
     """The database-to-domain boundary for comparisons. Rows are positional: cells[i] belongs to documents[i]."""
     return Comparison(
         id=ComparisonId(row["id"]),
-        documents=tuple(ComparedDocument(DocumentId(UUID(doc["id"])), doc["filename"], PageBasis(doc["page_basis"]),
-                                         doc["pages_read"], doc["page_count"], doc["deleted"])
+        documents=tuple(ComparedDocument(DocumentId(UUID(doc["id"])), doc["filename"], doc.get("version"),
+                                         PageBasis(doc["page_basis"]), doc["pages_read"], doc["page_count"], doc["deleted"])
                         for doc in row["documents"]),
         focus=row["focus"],
         rows=tuple(Row(stored["field"], tuple(None if cell is None else Cell(**cell) for cell in stored["cells"]))

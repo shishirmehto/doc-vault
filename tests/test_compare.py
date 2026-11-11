@@ -366,8 +366,8 @@ def test_a_broker_compares_the_policy_with_its_renewal_quote_and_reads_it_back(c
     assert rows["Each Occurrence Limit"]["differs"] is False
     assert {key: body[key] for key in ("focus", "documents", "dropped_cells", "model", "prompt_version")} == {
         "focus": None, "dropped_cells": 0, "model": "fake-chat", "prompt_version": "compare-v1", "documents": [
-            {"id": str(policy), "filename": POLICY, "deleted": False, "pages_read": 7, "page_count": 7},
-            {"id": str(quote), "filename": QUOTE, "deleted": False, "pages_read": 3, "page_count": 3}]}
+            {"id": str(policy), "filename": POLICY, "version": 1, "deleted": False, "pages_read": 7, "page_count": 7},
+            {"id": str(quote), "filename": QUOTE, "version": 1, "deleted": False, "pages_read": 3, "page_count": 3}]}
     assert (body["usage"]["calls"], body["usage"]["cost_usd"]) == (1, 0.0)
     assert (focused.json()["focus"], [row["field"] for row in focused.json()["rows"]]) == (
         "deductible", ["Property Damage Deductible"])
@@ -403,8 +403,8 @@ def test_a_document_deleted_after_the_comparison_keeps_its_column_and_page_label
 
     assert after["rows"] == created["rows"]
     assert after["documents"] == [
-        {"id": str(policy), "filename": POLICY, "deleted": False, "pages_read": 7, "page_count": 7},
-        {"id": str(quote), "filename": QUOTE, "deleted": True, "pages_read": 3, "page_count": 3}]
+        {"id": str(policy), "filename": POLICY, "version": 1, "deleted": False, "pages_read": 7, "page_count": 7},
+        {"id": str(quote), "filename": QUOTE, "version": 1, "deleted": True, "pages_read": 3, "page_count": 3}]
     assert {cell["page_label"] for row in after["rows"] for cell in row["cells"]} == {"p. 1", "p. 2"}
 
 
