@@ -238,14 +238,26 @@ If the text stops before the last page, do not guess what the other pages say.""
 
 
 def insights(filename: str, basis: PageBasis, pages: Sequence[Page], *, budget_chars: int) -> tuple[Prompt, int]:
-    """One user message: the filename, then <page n="3">...</page> per non-empty page.
+    """One user message: the filename, then <page n="3">...</page> per non-empty page of the _page_prefix.
 
-    Pages go in order while their text totals at most budget_chars; the first
-    non-empty page always goes in, cut to the budget when it alone is longer.
     The declarations and schedules that hold most key facts sit at the front of
     policies, so a prefix is the useful cut. Returns (prompt, pages_read), the
     number of the last page included, which is stored as coverage and shown to
     the user. Map-reduce over the rest is a stretch item.
+    """
+    included, lines = _page_prefix(basis, pages, budget_chars)
+    prompt = Prompt(name="insights", version=INSIGHTS_VERSION, purpose=Purpose.INSIGHTS, tier="main",
+                    system=INSIGHTS_SYSTEM, messages=(Msg("user", "\n".join([f"Document: {filename}", *lines])),),
+                    inputs={"filename": filename, "pages": included})
+    return prompt, included[-1].number
+
+
+def _page_prefix(basis: PageBasis, pages: Sequence[Page], budget_chars: int) -> tuple[tuple[Page, ...], list[str]]:
+    """The pages a prompt includes, and their lines: <page n="3">...</page> each, then "The text above stops at
+    p. N of M." when the prefix is partial.
+
+    Pages go in order while their text totals at most budget_chars; the first
+    non-empty page always goes in, cut to the budget when it alone is longer.
     """
     filled = [page for page in pages if page.text]
     included = [Page(filled[0].number, filled[0].text[:budget_chars])]
@@ -255,11 +267,7 @@ def insights(filename: str, basis: PageBasis, pages: Sequence[Page], *, budget_c
         if used > budget_chars:
             break
         included.append(page)
-    pages_read = included[-1].number
-    lines = [f"Document: {filename}", *(f'<page n="{page.number}">{page.text}</page>' for page in included)]
+    lines = [f'<page n="{page.number}">{page.text}</page>' for page in included]
     if sum(len(page.text) for page in included) < sum(len(page.text) for page in filled):
-        lines.append(f"The text above stops at {page_label(basis, pages_read)} of {pages[-1].number}.")
-    prompt = Prompt(name="insights", version=INSIGHTS_VERSION, purpose=Purpose.INSIGHTS, tier="main",
-                    system=INSIGHTS_SYSTEM, messages=(Msg("user", "\n".join(lines)),),
-                    inputs={"filename": filename, "pages": tuple(included)})
-    return prompt, pages_read
+        lines.append(f"The text above stops at {page_label(basis, included[-1].number)} of {pages[-1].number}.")
+    return tuple(included), lines
