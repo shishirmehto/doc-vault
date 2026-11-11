@@ -95,7 +95,7 @@ Read that margin as a warning, not a result. The fake embedder hashes words, so 
 **Reading the retrieval number.** Every retrieval miss in the results below is a gate refusal: the case table marks each one `gate`. When a question passes the gate, the expected fact is among the answer step's sources every time (21 of 21 on this run). So under the fake provider the weak step is the gate, which hashes words and cannot match a broker's wording to the document's, not retrieval or ranking. Citation misses are a separate step: the fake answer quotes the sentence that shares the most words with the question, which is often not the planted fact.
 
 <!-- results:start -->
-Run 2026-11-11 at commit 033ba80: `uv run python -m docvault.evals --out docs/evals.md`
+Run 2026-11-11 at commit bb6c159: `uv run python -m docvault.evals --out docs/evals.md`
 
 Provider: chat fake (main fake-chat, small fake-chat); embeddings fake fake-hash-1536; gate min_similarity 0.184.
 
@@ -114,14 +114,14 @@ Provider: chat fake (main fake-chat, small fake-chat); embeddings fake fake-hash
 | Equal fields kept equal (planted unchanged fields found as a row that does not differ) | 1/1 (100%) |
 | Gate at 0.184: answerable passed, out-of-scope refused | 18/28 (64%) passed, 15/16 (94%) refused |
 | Best gate threshold on this set | 0.184, 33/44 turns on the right side; nearest similarity passed 0.187 (+0.003), nearest refused 0.181 (-0.003) |
-| p95 turn latency | 7 ms |
+| p95 turn latency | 21 ms |
 
 | Purpose | Model | Calls | Errors | Input tokens | Output tokens | Cost (USD) | p95 latency |
 |---|---|---|---|---|---|---|---|
-| answer | fake-chat | 127 | 0 | 246532 | 3457 | 0.000000 | 3 ms |
+| answer | fake-chat | 127 | 0 | 246532 | 3457 | 0.000000 | 5 ms |
 | compare | fake-chat | 1 | 0 | 2292 | 169 | 0.000000 | 1 ms |
 | condense | fake-chat | 116 | 0 | 15151 | 670 | 0.000000 | 0 ms |
-| embed_chunks | fake-hash | 3 | 0 | 2731 | 0 | 0.000000 | 1 ms |
+| embed_chunks | fake-hash | 3 | 0 | 2731 | 0 | 0.000000 | 2 ms |
 | embed_query | fake-hash | 152 | 0 | 993 | 0 | 0.000000 | 0 ms |
 | insights | fake-chat | 3 | 0 | 3096 | 296 | 0.000000 | 1 ms |
 
