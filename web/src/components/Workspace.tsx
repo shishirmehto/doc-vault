@@ -6,6 +6,7 @@ import type { ApiError, Doc, DocumentId } from "@/api/domain";
 import { useSelection } from "@/hooks/useSelection";
 import { usePolled } from "@/hooks/usePolled";
 import { useUploads } from "@/hooks/useUploads";
+import { useHealth } from "@/hooks/useHealth";
 import { isSettled } from "@/lib/lifecycle";
 import { threads } from "@/hooks/useThread";
 import { Rail } from "./Rail";
@@ -35,6 +36,8 @@ export function Workspace() {
   const documents = usePolled(api.documents, (list) => (isSettled(list.docs) ? null : POLL_MS));
   const { patch, refresh } = documents;
   const uploads = useUploads((doc) => patch(upsert(doc)));
+  const health = useHealth();
+  const uploadLimit = health?.ok ? health.value.maxUploadBytes : null;
 
   const retry = useCallback(
     async (id: DocumentId): Promise<ApiError | null> => {
@@ -71,7 +74,7 @@ export function Workspace() {
         connection={documents.error}
         uploads={uploads.uploads}
         selected={selectedDoc}
-        onFiles={uploads.add}
+        onFiles={(files) => uploads.add(files, uploadLimit)}
         onDismiss={uploads.dismiss}
         onOpen={(id) => push({ kind: "doc", doc: id, pane: null })}
         onRetry={retry}

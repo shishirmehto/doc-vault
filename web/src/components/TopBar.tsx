@@ -1,25 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { api } from "@/api/client";
-import type { Health, Result } from "@/api/domain";
-
-const HEALTH_MS = 30_000;
+import { useHealth } from "@/hooks/useHealth";
 
 function ServiceNote() {
-  const [health, setHealth] = useState<Result<Health> | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const check = () => void api.health().then((r) => alive && setHealth(r));
-    check();
-    const timer = setInterval(check, HEALTH_MS);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
-
+  const health = useHealth();
   if (health === null) return null;
   if (!health.ok) return <span className="service" data-tone="failed">Vault service unreachable</span>;
   if (health.value.unreachable.length > 0) {

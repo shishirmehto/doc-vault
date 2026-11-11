@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { api } from "@/api/client";
 import type { Doc } from "@/api/domain";
-import { nextToSend, type Upload } from "@/lib/uploads";
+import { admit, nextToSend, type Upload } from "@/lib/uploads";
 
 /** The queue outlives renders, so it is a small store rather than component state. */
 class UploadQueue {
@@ -24,11 +24,11 @@ class UploadQueue {
 
   snapshot = () => this.items;
 
-  add(files: Iterable<File>): void {
+  add(files: Iterable<File>, limitBytes: number | null): void {
     for (const file of files) {
-      const key = `u${++this.seq}`;
-      this.files.set(key, file);
-      this.items = [...this.items, { key, filename: file.name, phase: "waiting" }];
+      const upload = admit(`u${++this.seq}`, file.name, file.size, limitBytes);
+      if (upload.phase === "waiting") this.files.set(upload.key, file);
+      this.items = [...this.items, upload];
     }
     this.pump();
   }
@@ -65,10 +65,10 @@ class UploadQueue {
 
 export function useUploads(onDocument: (doc: Doc) => void): {
   uploads: readonly Upload[];
-  add(files: Iterable<File>): void;
+  add(files: Iterable<File>, limitBytes: number | null): void;
   dismiss(key: string): void;
 } {
   const [queue] = useState(() => new UploadQueue(onDocument));
   const uploads = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot);
-  return { uploads, add: (files) => queue.add(files), dismiss: (key) => queue.dismiss(key) };
+  return { uploads, add: (files, limitBytes) => queue.add(files, limitBytes), dismiss: (key) => queue.dismiss(key) };
 }

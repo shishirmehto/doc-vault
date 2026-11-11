@@ -4,7 +4,7 @@ import { useRef, useState, type DragEvent } from "react";
 import type { ApiError, Doc, DocumentId, Failure } from "@/api/domain";
 import { selectionQuery } from "@/api/parse";
 import type { Upload } from "@/lib/uploads";
-import { docMeta, explain, statusLine } from "@/copy";
+import { docMeta, explain, formatBytes, statusLine } from "@/copy";
 import { StageBar } from "./StageBar";
 
 type Props = {
@@ -125,6 +125,17 @@ function UploadRow({ upload, onDismiss, onOpen }: { upload: Upload; onDismiss():
           <span className="row-name">{upload.filename}</span>
           <span className="row-status" data-tone="failed">Not uploaded</span>
           <p className="row-message">{explain(upload.error)}</p>
+          <button type="button" className="text-button" onClick={onDismiss}>Dismiss</button>
+        </li>
+      );
+    case "too_large":
+      return (
+        <li className="row">
+          <span className="row-name">{upload.filename}</span>
+          <span className="row-status" data-tone="failed">Not uploaded</span>
+          <p className="row-message">
+            The file is {formatBytes(upload.sizeBytes)}, over the vault&apos;s {formatBytes(upload.limitBytes)} limit, so it was not sent.
+          </p>
           <button type="button" className="text-button" onClick={onDismiss}>Dismiss</button>
         </li>
       );
