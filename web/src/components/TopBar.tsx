@@ -31,37 +31,41 @@ function ServiceNote() {
 }
 
 /**
- * "page" when the link leads to exactly this screen, "true" when this screen sits inside the section, as a
- * chat sits inside Ask.
+ * The section this screen sits in. `at` is "page" when the section's link leads to exactly this screen, and "true"
+ * when the screen sits inside the section, as a chat sits inside Ask.
  */
-type Current = { ask: "page" | "true" | undefined; metrics: "page" | undefined };
+type Current = { section: "ask" | "compare" | "metrics"; at: "page" | "true" } | null;
 
 function Sections({ current }: { current: Current }) {
+  const at = (section: NonNullable<Current>["section"]) => (current?.section === section ? current.at : undefined);
   return (
     <nav className="sections" aria-label="Sections">
-      <Link href="/" aria-current={current.ask}>Ask</Link>
-      <Link href="/?view=metrics" aria-current={current.metrics}>Metrics</Link>
+      <Link href="/" aria-current={at("ask")}>Ask</Link>
+      <Link href="/?view=compare" aria-current={at("compare")}>Compare</Link>
+      <Link href="/?view=metrics" aria-current={at("metrics")}>Metrics</Link>
     </nav>
   );
 }
 
-const NONE: Current = { ask: undefined, metrics: undefined };
-
 function CurrentSections() {
   const path = usePathname();
   const params = useSearchParams();
-  if (path !== "/") return <Sections current={NONE} />;
+  if (path !== "/") return <Sections current={null} />;
   const selection = parseSelection(new URLSearchParams(params.toString()));
   switch (selection.kind) {
     case "none":
-      return <Sections current={{ ask: "page", metrics: undefined }} />;
+      return <Sections current={{ section: "ask", at: "page" }} />;
     case "chat":
-      return <Sections current={{ ask: "true", metrics: undefined }} />;
+      return <Sections current={{ section: "ask", at: "true" }} />;
+    case "compare":
+      return <Sections current={{ section: "compare", at: "page" }} />;
+    case "comparison":
+      return <Sections current={{ section: "compare", at: "true" }} />;
     case "metrics":
-      return <Sections current={{ ask: undefined, metrics: "page" }} />;
+      return <Sections current={{ section: "metrics", at: "page" }} />;
     case "doc":
     case "missing":
-      return <Sections current={NONE} />;
+      return <Sections current={null} />;
     default: {
       const unknown: never = selection;
       return unknown;
@@ -73,7 +77,7 @@ export function TopBar() {
   return (
     <header className="topbar">
       <Link className="wordmark" href="/">Doc Vault</Link>
-      <Suspense fallback={<Sections current={NONE} />}>
+      <Suspense fallback={<Sections current={null} />}>
         <CurrentSections />
       </Suspense>
       <ServiceNote />

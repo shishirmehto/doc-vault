@@ -6,7 +6,7 @@ import {
   parseChat, parseChatPage, parseComparison, parseComparisonPage, parseDoc, parseDocumentMetrics, parseDocumentPage,
   parseHealth, parseHistory, parseInsights, parsePage, parseProcessingMetrics, parseSelection, parseTurn, selectionQuery,
 } from "./parse.ts";
-import type { ChatId, DocumentId, TurnId } from "./domain.ts";
+import type { ChatId, ComparisonId, DocumentId, Selection, TurnId } from "./domain.ts";
 
 /** A captured response: the API's real status, headers and JSON body. */
 function replay<T>(name: string, parse: (w: never) => T, dataStatuses: readonly number[] = []) {
@@ -680,4 +680,57 @@ test("a row that does not line up with the columns is a body in the wrong shape"
     ok: false,
     error: { kind: "unexpected", detail: "not a cell value" },
   });
+});
+
+const COMPARISON = "d7f2d3b9-38cf-4933-b031-6dd597edd899" as ComparisonId;
+
+test("the URL selects the compare screen, with a document to tick; a malformed one is dropped", () => {
+  const sel = (q: string) => parseSelection(new URLSearchParams(q));
+  assert.deepEqual(sel("view=compare"), { kind: "compare", with: null });
+  assert.deepEqual(sel(`view=compare&with=${POLICY}`), { kind: "compare", with: POLICY });
+  assert.deepEqual(sel("view=compare&with=not-an-id"), { kind: "compare", with: null });
+  assert.equal(selectionQuery({ kind: "compare", with: null }), "?view=compare");
+  assert.equal(selectionQuery({ kind: "compare", with: POLICY }), `?view=compare&with=${POLICY}`);
+});
+
+test("the URL selects a comparison, then one cell's page, a page away from it, and only the differences", () => {
+  const sel = (q: string) => parseSelection(new URLSearchParams(q));
+  assert.deepEqual(sel(`compare=${COMPARISON}&cite=cmp.9.1&p=3&only=differences`), {
+    kind: "comparison",
+    comparison: COMPARISON,
+    pane: { cite: { row: 9, col: 1 }, page: 3 },
+    only: true,
+  });
+  assert.deepEqual(sel(`compare=${COMPARISON}&cite=cmp.0.0`), {
+    kind: "comparison", comparison: COMPARISON, pane: { cite: { row: 0, col: 0 }, page: null }, only: false,
+  });
+  for (const bad of ["cmp.1", "cmp.1.5", "cmp.01.0", "cmp.-1.0", "fact.1", `turn.${DEDUCTIBLE_TURN}.1`]) {
+    assert.deepEqual(sel(`compare=${COMPARISON}&cite=${bad}&p=2&only=yes`), {
+      kind: "comparison", comparison: COMPARISON, pane: null, only: false,
+    }, bad);
+  }
+  assert.deepEqual(sel("compare=d7f2d3b9"), { kind: "missing", what: "comparison" });
+  assert.deepEqual(sel("compare="), { kind: "missing", what: "comparison" });
+});
+
+test("every selection a link can carry reads back from the query it writes", () => {
+  const forms: Selection[] = [
+    { kind: "none" },
+    { kind: "metrics", window: "7d" },
+    { kind: "doc", doc: POLICY, pane: { kind: "cite", cite: { kind: "fact", index: 2 }, page: 4 } },
+    { kind: "chat", chat: CHAT, pane: { cite: { turn: DEDUCTIBLE_TURN, ref: 1 }, page: null } },
+    { kind: "compare", with: null },
+    { kind: "compare", with: RENEWAL },
+    { kind: "comparison", comparison: COMPARISON, pane: null, only: false },
+    { kind: "comparison", comparison: COMPARISON, pane: null, only: true },
+    { kind: "comparison", comparison: COMPARISON, pane: { cite: { row: 12, col: 4 }, page: null }, only: false },
+    { kind: "comparison", comparison: COMPARISON, pane: { cite: { row: 0, col: 1 }, page: 7 }, only: true },
+  ];
+  for (const form of forms) {
+    assert.deepEqual(parseSelection(new URLSearchParams(selectionQuery(form))), form, selectionQuery(form));
+  }
+  assert.equal(
+    selectionQuery(forms[9]!),
+    `?compare=${COMPARISON}&cite=cmp.0.1&p=7&only=differences`,
+  );
 });

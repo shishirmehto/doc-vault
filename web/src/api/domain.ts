@@ -165,6 +165,12 @@ export type PaneRequest =
 /** The chat's pane: always a citation, so it always knows its document. `page` is set after paging. */
 export type ChatPane = { cite: TurnCite; page: number | null };
 
+/** A comparison's cell, by its index in `rows` and its column, both from 0. */
+export type CellCite = { row: number; col: number };
+
+/** The comparison's pane: always a cell, so it always knows its document. `page` is set after paging. */
+export type ComparisonPane = { cite: CellCite; page: number | null };
+
 export type MetricsWindow = "24h" | "7d";
 
 /** Everything the URL selects. Nothing selected is the screen that starts a chat. */
@@ -173,8 +179,12 @@ export type Selection =
   | { kind: "metrics"; window: MetricsWindow }
   | { kind: "doc"; doc: DocumentId; pane: PaneRequest | null }
   | { kind: "chat"; chat: ChatId; pane: ChatPane | null }
-  /** The URL names a document or chat by something that cannot be an id. */
-  | { kind: "missing"; what: "doc" | "chat" };
+  /** The screen that starts a comparison. `with` is ticked in its picker when it is ready. */
+  | { kind: "compare"; with: DocumentId | null }
+  /** `only`: the table shows only the fields that differ. */
+  | { kind: "comparison"; comparison: ComparisonId; pane: ComparisonPane | null; only: boolean }
+  /** The URL names a document, chat or comparison by something that cannot be an id. */
+  | { kind: "missing"; what: "doc" | "chat" | "comparison" };
 
 export type ApiError =
   /** The backend's error envelope: 404, 409, 413, 415, 422, and 429 and 503 with Retry-After. */

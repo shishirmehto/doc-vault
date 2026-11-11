@@ -16,7 +16,7 @@ import { ChatScreen } from "./ChatScreen";
 import { DocumentScreen } from "./DocumentScreen";
 import { NewChat } from "./NewChat";
 import { Metrics } from "./Metrics";
-import { MissingChat, MissingDocument } from "./Missing";
+import { MissingChat, MissingComparison, MissingDocument } from "./Missing";
 
 /**
  * Three columns: your documents; a chat, or what the system says about one document; and what the
@@ -117,7 +117,7 @@ export function Workspace() {
           onFiles={(files) => uploads.add(files, uploadLimit)} onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
       )}
       {selection.kind === "missing" && (
-        <main className="centre">{selection.what === "doc" ? <MissingDocument /> : <MissingChat />}</main>
+        <main className="centre">{{ doc: <MissingDocument />, chat: <MissingChat />, comparison: <MissingComparison /> }[selection.what]}</main>
       )}
       {selection.kind === "metrics" && (
         <Metrics window={selection.window} onWindow={(window) => replace({ kind: "metrics", window })} />

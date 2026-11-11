@@ -3,9 +3,10 @@
 
 import type * as W from "./wire.ts";
 import type {
-  AnswerPart, ApiError, AskProgress, AskStage, Chat, ChatId, Citation, CodeCount, CompareCell, ComparedDoc, Comparison,
-  ComparisonId, Doc, DocEvent, DocumentId, DocumentMetrics, FactCite, Failure, Health, Insights, Lifecycle, Outcome, Page,
-  PaneRequest, ProcessingMetrics, RefusedDocument, Selection, Spread, Step, Turn, TurnCite, TurnId, TurnOutcome, Usage,
+  AnswerPart, ApiError, AskProgress, AskStage, CellCite, Chat, ChatId, Citation, CodeCount, CompareCell, ComparedDoc,
+  Comparison, ComparisonId, Doc, DocEvent, DocumentId, DocumentMetrics, FactCite, Failure, Health, Insights, Lifecycle,
+  Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument, Selection, Spread, Step, Turn, TurnCite, TurnId,
+  TurnOutcome, Usage,
 } from "./domain.ts";
 import type { SseMessage } from "./sse.ts";
 
@@ -409,13 +410,27 @@ function turnCite(raw: string | null): TurnCite | null {
   return m && turn ? { turn, ref: Number(m[2]) } : null;
 }
 
+/** A comparison has at most 5 columns. No leading zeros, so the query written back is the one read. */
+function cellCite(raw: string | null): CellCite | null {
+  const m = raw === null ? null : /^cmp\.(0|[1-9]\d{0,3})\.([0-4])$/.exec(raw);
+  return m ? { row: Number(m[1]), col: Number(m[2]) } : null;
+}
+
 /**
- * `?chat=<uuid>&cite=turn.<turn uuid>.<n>&p=<n>`, `?doc=<uuid>&cite=fact.<i>&p=<n>`, or `?view=metrics&window=7d`.
+ * `?chat=<uuid>&cite=turn.<turn uuid>.<n>&p=<n>`, `?doc=<uuid>&cite=fact.<i>&p=<n>`, `?view=metrics&window=7d`,
+ * `?view=compare&with=<doc uuid>`, or `?compare=<uuid>&cite=cmp.<row>.<col>&p=<n>&only=differences`.
  * Anything malformed is dropped, never an error page.
  */
 export function parseSelection(params: URLSearchParams): Selection {
   if (params.get("view") === "metrics") return { kind: "metrics", window: params.get("window") === "7d" ? "7d" : "24h" };
+  if (params.get("view") === "compare") return { kind: "compare", with: asDocumentId(params.get("with") ?? "") };
   const page = positiveInt(params.get("p"));
+  const comparison = asComparisonId(params.get("compare") ?? "");
+  if (comparison === null && params.has("compare")) return { kind: "missing", what: "comparison" };
+  if (comparison !== null) {
+    const cite = cellCite(params.get("cite"));
+    return { kind: "comparison", comparison, pane: cite ? { cite, page } : null, only: params.get("only") === "differences" };
+  }
   const chat = asChatId(params.get("chat") ?? "");
   if (chat === null && params.has("chat")) return { kind: "missing", what: "chat" };
   if (chat !== null) {
@@ -449,6 +464,16 @@ export function selectionQuery(s: Selection): string {
       params.set("chat", s.chat);
       if (s.pane) params.set("cite", `turn.${s.pane.cite.turn}.${s.pane.cite.ref}`);
       if (s.pane?.page) params.set("p", String(s.pane.page));
+      break;
+    case "compare":
+      params.set("view", "compare");
+      if (s.with) params.set("with", s.with);
+      break;
+    case "comparison":
+      params.set("compare", s.comparison);
+      if (s.pane) params.set("cite", `cmp.${s.pane.cite.row}.${s.pane.cite.col}`);
+      if (s.pane?.page) params.set("p", String(s.pane.page));
+      if (s.only) params.set("only", "differences");
       break;
     default: {
       const unknown: never = s;
