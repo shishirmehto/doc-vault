@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     history_turns: int = 4
     insights_max_chars: int = 240_000    # about 60k tokens of page-tagged text
     chat_timeout_s: float = 30.0
+    fake_stream_delay_ms: int = Field(0, ge=0)    # the fake chat's pause between streamed words, to simulate pacing
     uploads_per_minute: int = Field(30, ge=1)     # per client, per API process
     questions_per_minute: int = Field(20, ge=1)
     insights_timeout_s: float = 120.0

@@ -356,6 +356,110 @@ def test_fake_chat_answers_from_its_handler_and_counts_words_as_tokens(db):
         fake.complete(dataclasses.replace(PROMPT, name="condense"), Limit, owner=OWNER)
 
 
+
+# ------------------------------------------------------------------ streaming
+
+
+@dataclass
+class RecordingSink:
+    """A TextSink that keeps every attempt mark and every piece of text, in order."""
+
+    events: list[str] = field(default_factory=list)
+
+    def attempt(self) -> None:
+        self.events.append("<attempt>")
+
+    def text(self, chunk: str) -> None:
+        self.events.append(chunk)
+
+
+USAGE = {"prompt_tokens": 2000, "completion_tokens": 300, "total_tokens": 2300,
+         "prompt_tokens_details": {"cached_tokens": 1000}}
+
+
+def chunk(content: str | None = None, *, usage: dict | None = None, finish: str | None = None) -> dict:
+    """One chat.completion.chunk. The final usage chunk that include_usage adds has no choices."""
+    choices = [] if usage else [{"index": 0, "delta": {} if content is None else {"content": content},
+                                 "finish_reason": finish, "logprobs": None}]
+    return {"id": "chatcmpl-a1", "object": "chat.completion.chunk", "created": 1762819200, "model": "gpt-6.1-sol",
+            "choices": choices, "usage": usage}
+
+
+def event_stream(*events: dict, done: bool = True) -> httpx2.Response:
+    body = "".join(f"data: {json.dumps(event)}\n\n" for event in events) + ("data: [DONE]\n\n" if done else "")
+    return httpx2.Response(200, headers={"content-type": "text/event-stream"}, content=body.encode())
+
+
+GOOD_STREAM = (chunk(""), chunk('{"amount": 1000'), chunk('000, "currency": "USD"}'), chunk(finish="stop"),
+               chunk(usage=USAGE))
+
+
+def test_openai_streams_each_piece_to_the_sink_and_bills_the_usage_of_the_last_chunk(db):
+    sent: list[tuple[str, dict]] = []
+    sink = RecordingSink()
+    client = openai_client(event_stream(*GOOD_STREAM), sent=sent)
+
+    assert gateway(db, openai_chat(client)).complete(PROMPT, Limit, owner=OWNER, stream=sink) == LIMIT
+    assert sink.events == ["<attempt>", '{"amount": 1000', '000, "currency": "USD"}']
+    [(path, body)] = sent
+    assert (path, body["stream"], body["stream_options"], body["model"], body["reasoning_effort"]) == (
+        "/v1/chat/completions", True, {"include_usage": True}, "gpt-6.1-sol", "low")
+    assert rows(db, "provider, model, input_tokens, output_tokens, cost_usd, ok") == [
+        ("openai", "gpt-6.1-sol", 2000, 300, Decimal("0.005100"), True)]
+
+
+def test_an_error_inside_a_stream_is_retried_and_the_sink_hears_the_new_attempt(db):
+    sink = RecordingSink()
+    broken = event_stream(chunk('{"amount": '), {"error": {"message": "The server had an error.",
+                                                           "type": "server_error", "code": "server_error"}})
+    client = openai_client(broken, event_stream(*GOOD_STREAM))
+
+    assert gateway(db, openai_chat(client), ai_max_attempts=2).complete(PROMPT, Limit, owner=OWNER, stream=sink) == LIMIT
+    assert sink.events == ["<attempt>", '{"amount": ', "<attempt>", '{"amount": 1000', '000, "currency": "USD"}']
+    assert rows(db, "ok, error_code") == [(False, "server_error"), (True, None)]
+
+
+def test_the_repair_turn_streams_too_and_the_sink_hears_it_start(db):
+    sent: list[tuple[str, dict]] = []
+    sink = RecordingSink()
+    client = openai_client(event_stream(chunk(BAD), chunk(usage=USAGE)), event_stream(*GOOD_STREAM), sent=sent)
+
+    assert gateway(db, openai_chat(client)).complete(PROMPT, Limit, owner=OWNER, stream=sink) == LIMIT
+    assert sink.events == ["<attempt>", BAD, "<attempt>", '{"amount": 1000', '000, "currency": "USD"}']
+    assert sent[1][1]["messages"][-2] == {"role": "assistant", "content": BAD}
+
+
+@pytest.mark.parametrize("events", [
+    pytest.param((chunk(GOOD), chunk(finish="stop")), id="no usage chunk"),
+    pytest.param((chunk(usage=USAGE),), id="usage but no choices"),
+])
+def test_a_stream_without_usage_or_choices_is_a_malformed_response(db, events):
+    sink = RecordingSink()
+    client = openai_client(event_stream(*events))
+
+    assert failure_of(lambda: gateway(db, openai_chat(client), ai_max_attempts=1).complete(
+        PROMPT, Limit, owner=OWNER, stream=sink)) == unavailable("malformed_response", True)
+    assert rows(db, "ok, error_code") == [(False, "malformed_response")]
+
+
+class Note(BaseModel):
+    text: str
+
+
+def test_fake_chat_streams_its_json_in_word_sized_pieces_at_its_pace(db, monkeypatch):
+    class NoteChat(FakeChat):
+        handlers = {"answer": lambda prompt: Note(text="Each Occurrence Limit $1,000,000")}
+
+    slept: list[float] = []
+    monkeypatch.setattr(ai.time, "sleep", slept.append)
+    sink = RecordingSink()
+
+    note = gateway(db, NoteChat(stream_delay_ms=25)).complete(PROMPT, Note, owner=OWNER, stream=sink)
+
+    assert note == Note(text="Each Occurrence Limit $1,000,000")
+    assert sink.events == ["<attempt>", '{"text":"Each ', "Occurrence ", "Limit ", '$1,000,000"}']
+    assert slept == [0.025] * 4
+
 def test_the_embedding_space_names_the_dimension(db):
     small = gateway(db, ScriptedChat([]), embedder=FakeEmbedder(dimensions=8))
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import itertools
+import json
 import math
 import re
 import time
@@ -22,8 +23,17 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal, NamedTuple, Protocol
 
-from openai import APIConnectionError, APIStatusError, APITimeoutError, InternalServerError, OpenAI, RateLimitError
+from openai import (
+    APIConnectionError,
+    APIError,
+    APIStatusError,
+    APITimeoutError,
+    InternalServerError,
+    OpenAI,
+    RateLimitError,
+)
 from openai.lib import type_to_response_format_param
+from openai.types import CompletionUsage
 from pydantic import BaseModel, ValidationError
 
 from . import prompts
@@ -113,15 +123,29 @@ class ProviderError(Exception):
         self.retry_after_s = retry_after_s
 
 
+class TextSink(Protocol):
+    """Receives a completion's raw output while the provider generates it."""
+
+    def attempt(self) -> None:
+        """A provider attempt starts: the first, a retry or the repair turn. Text from earlier attempts is void."""
+        ...
+
+    def text(self, chunk: str) -> None:
+        """The next piece of this attempt's raw output (JSON text), in order."""
+        ...
+
+
 class ChatBackend(Protocol):
     provider: str
     models: Mapping[Tier, str]     # the backend owns its model ids; the ledger records models[prompt.tier]
 
-    def complete_json(self, prompt: Prompt, output: type[BaseModel], *,
-                      timeout_s: float) -> tuple[RawCompletion, Tokens]:
+    def complete_json(self, prompt: Prompt, output: type[BaseModel], *, timeout_s: float,
+                      on_text: Callable[[str], None] | None = None) -> tuple[RawCompletion, Tokens]:
         """One provider round trip that must return JSON matching `output`'s schema.
 
-        Raises ProviderError on a provider failure. Retrying is the gateway's job.
+        With on_text, the backend streams and passes each piece of output to it as it arrives; the
+        RawCompletion still holds the whole text. Raises ProviderError on a provider failure. Retrying
+        is the gateway's job.
         """
         ...
 
@@ -190,29 +214,39 @@ class AI:
                                   billing)
         return vectors
 
-    def complete[T: BaseModel](self, prompt: Prompt, output: type[T], *, owner: Owner) -> T:
+    def complete[T: BaseModel](self, prompt: Prompt, output: type[T], *, owner: Owner,
+                               stream: TextSink | None = None) -> T:
         """Run a prompt and return its validated output model.
 
         Output that fails validation gets one repair turn, which shows the model
         its JSON and the errors. A refusal or a second failure raises
         VaultError(AI_BAD_OUTPUT). A provider failure raises
         VaultError(AI_UNAVAILABLE), after the gateway's retries for interactive purposes.
-        The LLM is never called inside a database transaction: callers commit first.
+        With a stream, every attempt streams its raw output into it, each one announced by
+        stream.attempt(). The LLM is never called inside a database transaction: callers commit first.
         """
-        raw = self._complete_once(prompt, output, owner)
+        raw = self._complete_once(prompt, output, owner, stream)
         try:
             return _validated(output, raw)
         except ValidationError as exc:
             repair = prompts.repair(prompt, raw.text, _describe(exc))
         try:
-            return _validated(output, self._complete_once(repair, output, owner))
+            return _validated(output, self._complete_once(repair, output, owner, stream))
         except ValidationError as exc:
             raise VaultError(ErrorCode.AI_BAD_OUTPUT, "The model returned invalid output twice.",
                              retryable=False) from exc
 
-    def _complete_once(self, prompt: Prompt, output: type[BaseModel], owner: Owner) -> RawCompletion:
+    def _complete_once(self, prompt: Prompt, output: type[BaseModel], owner: Owner,
+                       stream: TextSink | None) -> RawCompletion:
         billing = _Billing(prompt.purpose, owner, self.chat.provider, self.chat.models[prompt.tier], prompt)
-        return self._call(lambda timeout_s: self.chat.complete_json(prompt, output, timeout_s=timeout_s), billing)
+
+        def attempt(timeout_s: float) -> tuple[RawCompletion, Tokens]:
+            if stream is None:
+                return self.chat.complete_json(prompt, output, timeout_s=timeout_s)
+            stream.attempt()
+            return self.chat.complete_json(prompt, output, timeout_s=timeout_s, on_text=stream.text)
+
+        return self._call(attempt, billing)
 
     def _call[R](self, call: Callable[[float], tuple[R, Tokens]], billing: _Billing) -> R:
         """Call the provider with the purpose's timeout, writing one ledger row per attempt.
@@ -290,7 +324,7 @@ def build(settings: Settings, ledger: Db) -> AI:
     chat: ChatBackend = OpenAIChat(
         client(), {"main": settings.openai_chat_model, "small": settings.openai_small_model},
         {"main": settings.openai_chat_reasoning_effort, "small": settings.openai_small_reasoning_effort},
-    ) if settings.chat_provider == "openai" else FakeChat()
+    ) if settings.chat_provider == "openai" else FakeChat(settings.fake_stream_delay_ms)
     embedder: EmbedBackend = OpenAIEmbedder(
         client(), settings.openai_embed_model, settings.embed_dimensions,
     ) if settings.embed_provider == "openai" else FakeEmbedder(settings.embed_dimensions)
@@ -309,25 +343,63 @@ class OpenAIChat:
         self.models = models
         self._client, self._efforts = client, efforts
 
-    def complete_json(self, prompt: Prompt, output: type[BaseModel], *,
-                      timeout_s: float) -> tuple[RawCompletion, Tokens]:
+    def complete_json(self, prompt: Prompt, output: type[BaseModel], *, timeout_s: float,
+                      on_text: Callable[[str], None] | None = None) -> tuple[RawCompletion, Tokens]:
         # create() rather than parse(): the raw text feeds the repair turn and the usage feeds the ledger.
+        request = {
+            "model": self.models[prompt.tier],
+            "messages": [{"role": "developer", "content": prompt.system},
+                         *({"role": m.role, "content": m.content} for m in prompt.messages)],
+            "response_format": type_to_response_format_param(output),
+            "reasoning_effort": self._efforts[prompt.tier],
+            "timeout": timeout_s,
+        }
+        if on_text is not None:
+            return self._streamed(request, on_text)
         try:
-            response = self._client.chat.completions.create(
-                model=self.models[prompt.tier],
-                messages=[{"role": "developer", "content": prompt.system},
-                          *({"role": m.role, "content": m.content} for m in prompt.messages)],
-                response_format=type_to_response_format_param(output),
-                reasoning_effort=self._efforts[prompt.tier],
-                timeout=timeout_s)
+            response = self._client.chat.completions.create(**request)
         except (APIConnectionError, APIStatusError) as exc:
             raise _provider_error(exc) from exc
         if not response.choices or response.usage is None:
             raise ProviderError("malformed_response", retryable=True)
-        message, usage = response.choices[0].message, response.usage
-        cached = usage.prompt_tokens_details and usage.prompt_tokens_details.cached_tokens
-        return (RawCompletion(message.content or "", message.refusal),
-                Tokens(usage.prompt_tokens, cached or 0, usage.completion_tokens))
+        message = response.choices[0].message
+        return RawCompletion(message.content or "", message.refusal), _usage_tokens(response.usage)
+
+    def _streamed(self, request: dict, on_text: Callable[[str], None]) -> tuple[RawCompletion, Tokens]:
+        """The same request with stream=True. The text is collected for validation and repair, and usage
+        comes from the final chunk, which include_usage adds with no choices."""
+        text: list[str] = []
+        refusal: list[str] = []
+        usage: CompletionUsage | None = None
+        answered = False
+        try:
+            with self._client.chat.completions.create(
+                    **request, stream=True, stream_options={"include_usage": True}) as chunks:
+                for chunk in chunks:
+                    usage = chunk.usage or usage
+                    if not chunk.choices:
+                        continue
+                    answered = True
+                    delta = chunk.choices[0].delta
+                    if delta.refusal:
+                        refusal.append(delta.refusal)
+                    if delta.content:
+                        text.append(delta.content)
+                        on_text(delta.content)
+        except (APIConnectionError, APIStatusError) as exc:
+            raise _provider_error(exc) from exc
+        except APIError as exc:   # an error event inside a 200 stream
+            raise ProviderError(exc.code or "stream_error", retryable=True) from exc
+        except json.JSONDecodeError as exc:
+            raise ProviderError("malformed_response", retryable=True) from exc
+        if not answered or usage is None:
+            raise ProviderError("malformed_response", retryable=True)
+        return RawCompletion("".join(text), "".join(refusal) or None), _usage_tokens(usage)
+
+
+def _usage_tokens(usage: CompletionUsage) -> Tokens:
+    cached = usage.prompt_tokens_details and usage.prompt_tokens_details.cached_tokens
+    return Tokens(usage.prompt_tokens, cached or 0, usage.completion_tokens)
 
 
 class OpenAIEmbedder:
@@ -545,7 +617,9 @@ class FakeChat:
     Handlers: insights (_fake_insights), condense (_fake_condense), answer (_fake_answer).
 
     Token counts are whitespace word counts (system and messages in, JSON out),
-    so ledger and metrics tests have real numbers.
+    so ledger and metrics tests have real numbers. Asked to stream, it sends the
+    finished JSON in word-sized pieces, stream_delay_ms apart, to simulate a
+    model's pacing.
     """
 
     provider = "fake"
@@ -553,11 +627,22 @@ class FakeChat:
     handlers: Mapping[str, Callable[[Prompt], BaseModel]] = {
         "insights": _fake_insights, "condense": _fake_condense, "answer": _fake_answer}
 
-    def complete_json(self, prompt: Prompt, output: type[BaseModel], *,
-                      timeout_s: float) -> tuple[RawCompletion, Tokens]:
+    def __init__(self, stream_delay_ms: int = 0) -> None:
+        self.stream_delay_ms = stream_delay_ms
+
+    def complete_json(self, prompt: Prompt, output: type[BaseModel], *, timeout_s: float,
+                      on_text: Callable[[str], None] | None = None) -> tuple[RawCompletion, Tokens]:
         handler = self.handlers.get(prompt.name)
         if handler is None:
             raise NotImplementedError(f"FakeChat has no handler for the {prompt.name!r} prompt")
         text = handler(prompt).model_dump_json()
+        if on_text is not None:
+            for word in _WORD_PIECES.split(text):
+                if self.stream_delay_ms:
+                    time.sleep(self.stream_delay_ms / 1000)
+                on_text(word)
         sent = [prompt.system, *(message.content for message in prompt.messages)]
         return RawCompletion(text), Tokens(sum(len(part.split()) for part in sent), 0, len(text.split()))
+
+
+_WORD_PIECES = re.compile(r"(?<=\s)(?=\S)")   # cut before each word, so every piece keeps its trailing spaces

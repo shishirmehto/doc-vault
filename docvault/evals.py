@@ -276,11 +276,11 @@ class _SourceTap:
         self.provider, self.models = inner.provider, inner.models
         self.sources: tuple[Source, ...] | None = None
 
-    def complete_json(self, prompt: Prompt, output: type[BaseModel], *,
-                      timeout_s: float) -> tuple[RawCompletion, Tokens]:
+    def complete_json(self, prompt: Prompt, output: type[BaseModel], *, timeout_s: float,
+                      on_text: Callable[[str], None] | None = None) -> tuple[RawCompletion, Tokens]:
         if prompt.name == "answer":
             self.sources = prompt.inputs["sources"]
-        return self.inner.complete_json(prompt, output, timeout_s=timeout_s)
+        return self.inner.complete_json(prompt, output, timeout_s=timeout_s, on_text=on_text)
 
 
 class _QueryTap:
