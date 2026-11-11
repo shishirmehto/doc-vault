@@ -86,4 +86,5 @@ def step_rows(db: dbmod.Db, doc_id: DocumentId) -> list[tuple]:
 
 
 def advisory_locks(db: dbmod.Db) -> int:
-    return scalar(db, "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'")
+    return scalar(db, "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
+                      " AND database = (SELECT oid FROM pg_database WHERE datname = current_database())")

@@ -27,8 +27,9 @@ def test_check_lists_match_the_enums(db):
 
 
 def test_migrate_again_applies_nothing_and_takes_no_table_locks(db, database_url):
+    applied = scalar(db, "SELECT count(*) FROM schema_version")
     with db.connection() as writer, writer.transaction():
         writer.execute("LOCK TABLE documents IN ACCESS EXCLUSIVE MODE")
         dbmod.migrate(database_url)   # would block forever if it re-ran the DDL
-    assert scalar(db, "SELECT count(*) FROM schema_version") == 1
+    assert scalar(db, "SELECT count(*) FROM schema_version") == applied
     assert scalar(db, "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'") == 10
