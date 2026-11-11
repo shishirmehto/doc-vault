@@ -1,0 +1,20 @@
+{
+  "status": 409,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "documents_not_ready",
+      "message": "1 of 2 documents are not ready.",
+      "retryable": false,
+      "details": {
+        "not_ready": [
+          {
+            "id": "41474e86-1b59-46ad-980b-c0355948cd08",
+            "filename": "phase-c-large-86f623.txt",
+            "status": "queued"
+          }
+        ]
+      }
+    }
+  }
+}

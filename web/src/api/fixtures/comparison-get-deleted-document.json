@@ -1,0 +1,76 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "id": "f083878a-0197-4bcf-8533-d1d085d5beb8",
+    "documents": [
+      {
+        "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+        "filename": "sample-cgl-policy.pdf",
+        "deleted": false,
+        "pages_read": 7,
+        "page_count": 7
+      },
+      {
+        "id": "31bcc18c-c6e7-48d2-b436-82c7e3dfe2ec",
+        "filename": "phase-c-shared-86f623.txt",
+        "deleted": true,
+        "pages_read": 1,
+        "page_count": 1
+      }
+    ],
+    "focus": null,
+    "rows": [
+      {
+        "field": "Policy Number",
+        "cells": [
+          {
+            "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "value": "SAMPLE-CGL-2026-0001",
+            "page": 1,
+            "page_label": "p. 1",
+            "quote": "Policy Number: SAMPLE-CGL-2026-0001"
+          },
+          {
+            "document_id": "31bcc18c-c6e7-48d2-b436-82c7e3dfe2ec",
+            "value": "PHASE-C-1",
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Policy Number: PHASE-C-1"
+          }
+        ],
+        "differs": true
+      },
+      {
+        "field": "Named Insured",
+        "cells": [
+          {
+            "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "value": "Example Contractors LLC",
+            "page": 1,
+            "page_label": "p. 1",
+            "quote": "Named Insured: Example Contractors LLC"
+          },
+          {
+            "document_id": "31bcc18c-c6e7-48d2-b436-82c7e3dfe2ec",
+            "value": "Example Contractors LLC",
+            "page": 1,
+            "page_label": "section 1",
+            "quote": "Named Insured: Example Contractors LLC"
+          }
+        ],
+        "differs": false
+      }
+    ],
+    "dropped_cells": 0,
+    "model": "fake-chat",
+    "prompt_version": "compare-v1",
+    "usage": {
+      "calls": 1,
+      "input_tokens": 1811,
+      "output_tokens": 19,
+      "cost_usd": 0.0
+    },
+    "created_at": "2026-11-11T16:23:06.688840Z"
+  }
+}

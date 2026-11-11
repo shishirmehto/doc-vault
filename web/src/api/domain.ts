@@ -123,6 +123,33 @@ export type AskStage = "condensing" | "searching" | "answering";
  */
 export type AskProgress = { kind: "stage"; stage: AskStage } | { kind: "text"; text: string } | { kind: "reset" };
 
+// ------------------------------------------------------------------ comparison
+
+export type ComparisonId = Brand<string, "ComparisonId">;
+
+/** A column. A deleted document keeps its filename, and its cells keep their values and page labels. */
+export type ComparedDoc = { id: DocumentId; filename: string; deleted: boolean; pagesRead: number; pageCount: number };
+
+/** A value found on the page it cites. pageLabel is the backend's ("p. 2" or "section 1"). */
+export type CompareCell = { source: SourceRef; value: string; pageLabel: string };
+
+/** `cells[i]` belongs to the comparison's `documents[i]`; null where that document does not state the field. */
+export type CompareRow = { field: string; cells: readonly (CompareCell | null)[]; differs: boolean };
+
+export type Comparison = {
+  id: ComparisonId;
+  documents: readonly ComparedDoc[];
+  /** What the comparison was asked to look at; null for the fields a broker compares. */
+  focus: string | null;
+  rows: readonly CompareRow[];
+  /** Values the model cited whose quote was not on the cited page. The backend drops them. */
+  droppedCells: number;
+  model: string;
+  promptVersion: string;
+  usage: Usage;
+  createdAt: Date;
+};
+
 // ------------------------------------------------------------------ the URL
 
 /** A key fact's passage, by its index in the document's insights. */
@@ -191,7 +218,7 @@ export type DocumentMetrics = {
 };
 
 export type Step = "parse" | "embed" | "analyze";
-export type Purpose = "embed_chunks" | "embed_query" | "insights" | "condense" | "answer";
+export type Purpose = "embed_chunks" | "embed_query" | "insights" | "condense" | "answer" | "compare";
 export type TurnOutcome = "answered" | NotFoundReason;
 
 /** Runs, not documents: a retried document counts once per run. */

@@ -27,6 +27,7 @@ const PURPOSE: Record<Purpose, string> = {
   insights: "Summaries and key facts",
   condense: "Rewrite follow-ups",
   answer: "Answers",
+  compare: "Comparisons",
 };
 
 const OUTCOME: Record<TurnOutcome, string> = {

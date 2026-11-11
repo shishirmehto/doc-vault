@@ -1,0 +1,1812 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "items": [
+      {
+        "id": "f083878a-0197-4bcf-8533-d1d085d5beb8",
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false,
+            "pages_read": 7,
+            "page_count": 7
+          },
+          {
+            "id": "31bcc18c-c6e7-48d2-b436-82c7e3dfe2ec",
+            "filename": "phase-c-shared-86f623.txt",
+            "deleted": true,
+            "pages_read": 1,
+            "page_count": 1
+          }
+        ],
+        "focus": null,
+        "rows": [
+          {
+            "field": "Policy Number",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "SAMPLE-CGL-2026-0001",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Policy Number: SAMPLE-CGL-2026-0001"
+              },
+              {
+                "document_id": "31bcc18c-c6e7-48d2-b436-82c7e3dfe2ec",
+                "value": "PHASE-C-1",
+                "page": 1,
+                "page_label": "section 1",
+                "quote": "Policy Number: PHASE-C-1"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Named Insured",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              },
+              {
+                "document_id": "31bcc18c-c6e7-48d2-b436-82c7e3dfe2ec",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "section 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              }
+            ],
+            "differs": false
+          }
+        ],
+        "dropped_cells": 0,
+        "model": "fake-chat",
+        "prompt_version": "compare-v1",
+        "usage": {
+          "calls": 1,
+          "input_tokens": 1811,
+          "output_tokens": 19,
+          "cost_usd": 0.0
+        },
+        "created_at": "2026-11-11T16:23:06.688840Z"
+      },
+      {
+        "id": "0ebe9ecd-db9f-4835-beef-6c78e579de9a",
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false,
+            "pages_read": 7,
+            "page_count": 7
+          },
+          {
+            "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+            "filename": "sample-renewal-quote.pdf",
+            "deleted": false,
+            "pages_read": 3,
+            "page_count": 3
+          },
+          {
+            "id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+            "filename": "sample-endorsement-additional-insured.docx",
+            "deleted": false,
+            "pages_read": 2,
+            "page_count": 2
+          }
+        ],
+        "focus": null,
+        "rows": [
+          {
+            "field": "Insurer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Policy Number",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "SAMPLE-CGL-2026-0001",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Policy Number: SAMPLE-CGL-2026-0001"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": "SAMPLE-CGL-2026-0001",
+                "page": 1,
+                "page_label": "section 1",
+                "quote": "Policy Number | SAMPLE-CGL-2026-0001"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Named Insured",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "section 1",
+                "quote": "Named Insured | Example Contractors LLC"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Producer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Each Occurrence Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Damage to Premises Rented to You Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Medical Expense Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$5,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $5,000 any one person"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$10,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $10,000 any one person"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Personal and Advertising Injury Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "General Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$3,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $3,000,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Products-Completed Operations Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Property Damage Deductible",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,500 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $2,500 per occurrence"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$5,000 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $5,000 per occurrence"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Estimated Annual Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$640,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $640,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$710,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $710,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Rate per $1,000 of Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$28.83",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $28.83"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$30.85",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $30.85"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          }
+        ],
+        "dropped_cells": 0,
+        "model": "fake-chat",
+        "prompt_version": "compare-v1",
+        "usage": {
+          "calls": 1,
+          "input_tokens": 2965,
+          "output_tokens": 182,
+          "cost_usd": 0.0
+        },
+        "created_at": "2026-11-11T16:23:06.343219Z"
+      },
+      {
+        "id": "35741edd-c098-41aa-aaaf-482c2c978290",
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false,
+            "pages_read": 7,
+            "page_count": 7
+          },
+          {
+            "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+            "filename": "sample-renewal-quote.pdf",
+            "deleted": false,
+            "pages_read": 3,
+            "page_count": 3
+          }
+        ],
+        "focus": "deductible",
+        "rows": [
+          {
+            "field": "Property Damage Deductible",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,500 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $2,500 per occurrence"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$5,000 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $5,000 per occurrence"
+              }
+            ],
+            "differs": true
+          }
+        ],
+        "dropped_cells": 0,
+        "model": "fake-chat",
+        "prompt_version": "compare-v1",
+        "usage": {
+          "calls": 1,
+          "input_tokens": 2286,
+          "output_tokens": 17,
+          "cost_usd": 0.0
+        },
+        "created_at": "2026-11-11T16:23:06.329640Z"
+      },
+      {
+        "id": "d7f2d3b9-38cf-4933-b031-6dd597edd899",
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false,
+            "pages_read": 7,
+            "page_count": 7
+          },
+          {
+            "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+            "filename": "sample-renewal-quote.pdf",
+            "deleted": false,
+            "pages_read": 3,
+            "page_count": 3
+          }
+        ],
+        "focus": null,
+        "rows": [
+          {
+            "field": "Insurer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Named Insured",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Producer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Each Occurrence Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Damage to Premises Rented to You Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Medical Expense Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$5,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $5,000 any one person"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$10,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $10,000 any one person"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Personal and Advertising Injury Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "General Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$3,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $3,000,000"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Products-Completed Operations Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Property Damage Deductible",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,500 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $2,500 per occurrence"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$5,000 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $5,000 per occurrence"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Estimated Annual Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$640,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $640,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$710,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $710,000"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Rate per $1,000 of Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$28.83",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $28.83"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$30.85",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $30.85"
+              }
+            ],
+            "differs": true
+          }
+        ],
+        "dropped_cells": 0,
+        "model": "fake-chat",
+        "prompt_version": "compare-v1",
+        "usage": {
+          "calls": 1,
+          "input_tokens": 2292,
+          "output_tokens": 169,
+          "cost_usd": 0.0
+        },
+        "created_at": "2026-11-11T16:23:06.321210Z"
+      },
+      {
+        "id": "30ab1b9f-12bf-4793-aafb-242221818319",
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false,
+            "pages_read": 7,
+            "page_count": 7
+          },
+          {
+            "id": "b5dc9a41-0b86-4926-bbcc-43b5a8c20793",
+            "filename": "phase-c-shared-b7300b.txt",
+            "deleted": true,
+            "pages_read": 1,
+            "page_count": 1
+          }
+        ],
+        "focus": null,
+        "rows": [],
+        "dropped_cells": 0,
+        "model": "fake-chat",
+        "prompt_version": "compare-v1",
+        "usage": {
+          "calls": 1,
+          "input_tokens": 1795,
+          "output_tokens": 1,
+          "cost_usd": 0.0
+        },
+        "created_at": "2026-11-11T16:22:55.254908Z"
+      },
+      {
+        "id": "cd8ad5dc-d42f-4d7d-9619-9c07b8402c12",
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false,
+            "pages_read": 7,
+            "page_count": 7
+          },
+          {
+            "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+            "filename": "sample-renewal-quote.pdf",
+            "deleted": false,
+            "pages_read": 3,
+            "page_count": 3
+          },
+          {
+            "id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+            "filename": "sample-endorsement-additional-insured.docx",
+            "deleted": false,
+            "pages_read": 2,
+            "page_count": 2
+          }
+        ],
+        "focus": null,
+        "rows": [
+          {
+            "field": "Insurer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Policy Number",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "SAMPLE-CGL-2026-0001",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Policy Number: SAMPLE-CGL-2026-0001"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": "SAMPLE-CGL-2026-0001",
+                "page": 1,
+                "page_label": "section 1",
+                "quote": "Policy Number | SAMPLE-CGL-2026-0001"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Named Insured",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "section 1",
+                "quote": "Named Insured | Example Contractors LLC"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Producer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Each Occurrence Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Damage to Premises Rented to You Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Medical Expense Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$5,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $5,000 any one person"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$10,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $10,000 any one person"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Personal and Advertising Injury Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "General Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$3,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $3,000,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Products-Completed Operations Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Property Damage Deductible",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,500 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $2,500 per occurrence"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$5,000 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $5,000 per occurrence"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Estimated Annual Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$640,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $640,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$710,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $710,000"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Rate per $1,000 of Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$28.83",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $28.83"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$30.85",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $30.85"
+              },
+              {
+                "document_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+                "value": null,
+                "page": null,
+                "page_label": null,
+                "quote": null
+              }
+            ],
+            "differs": true
+          }
+        ],
+        "dropped_cells": 0,
+        "model": "fake-chat",
+        "prompt_version": "compare-v1",
+        "usage": {
+          "calls": 1,
+          "input_tokens": 2965,
+          "output_tokens": 182,
+          "cost_usd": 0.0
+        },
+        "created_at": "2026-11-11T16:22:54.884030Z"
+      },
+      {
+        "id": "fe1a63e3-500a-4fcc-adcc-8c26e5e120fa",
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false,
+            "pages_read": 7,
+            "page_count": 7
+          },
+          {
+            "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+            "filename": "sample-renewal-quote.pdf",
+            "deleted": false,
+            "pages_read": 3,
+            "page_count": 3
+          }
+        ],
+        "focus": "deductible",
+        "rows": [
+          {
+            "field": "Property Damage Deductible",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,500 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $2,500 per occurrence"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$5,000 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $5,000 per occurrence"
+              }
+            ],
+            "differs": true
+          }
+        ],
+        "dropped_cells": 0,
+        "model": "fake-chat",
+        "prompt_version": "compare-v1",
+        "usage": {
+          "calls": 1,
+          "input_tokens": 2286,
+          "output_tokens": 17,
+          "cost_usd": 0.0
+        },
+        "created_at": "2026-11-11T16:22:54.867260Z"
+      },
+      {
+        "id": "2f9a7bc0-3cd7-43fc-a3bd-7c3714073de1",
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false,
+            "pages_read": 7,
+            "page_count": 7
+          },
+          {
+            "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+            "filename": "sample-renewal-quote.pdf",
+            "deleted": false,
+            "pages_read": 3,
+            "page_count": 3
+          }
+        ],
+        "focus": null,
+        "rows": [
+          {
+            "field": "Insurer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Named Insured",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Producer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Each Occurrence Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Damage to Premises Rented to You Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Medical Expense Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$5,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $5,000 any one person"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$10,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $10,000 any one person"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Personal and Advertising Injury Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "General Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$3,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $3,000,000"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Products-Completed Operations Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Property Damage Deductible",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,500 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $2,500 per occurrence"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$5,000 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $5,000 per occurrence"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Estimated Annual Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$640,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $640,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$710,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $710,000"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Rate per $1,000 of Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$28.83",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $28.83"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$30.85",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $30.85"
+              }
+            ],
+            "differs": true
+          }
+        ],
+        "dropped_cells": 0,
+        "model": "fake-chat",
+        "prompt_version": "compare-v1",
+        "usage": {
+          "calls": 1,
+          "input_tokens": 2292,
+          "output_tokens": 169,
+          "cost_usd": 0.0
+        },
+        "created_at": "2026-11-11T16:22:54.857636Z"
+      },
+      {
+        "id": "d0777542-eeed-499d-97bc-b8092c406c25",
+        "documents": [
+          {
+            "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+            "filename": "sample-cgl-policy.pdf",
+            "deleted": false,
+            "pages_read": 7,
+            "page_count": 7
+          },
+          {
+            "id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+            "filename": "sample-renewal-quote.pdf",
+            "deleted": false,
+            "pages_read": 3,
+            "page_count": 3
+          }
+        ],
+        "focus": null,
+        "rows": [
+          {
+            "field": "Insurer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Sample Mutual Insurance Company",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Insurer: Sample Mutual Insurance Company"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Named Insured",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Contractors LLC",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Named Insured: Example Contractors LLC"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Producer",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "Example Brokerage Services",
+                "page": 1,
+                "page_label": "p. 1",
+                "quote": "Producer: Example Brokerage Services"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Each Occurrence Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Each Occurrence Limit $1,000,000"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Damage to Premises Rented to You Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$100,000 any one premises",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Damage to Premises Rented to You Limit $100,000 any one premises"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Medical Expense Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$5,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $5,000 any one person"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$10,000 any one person",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Medical Expense Limit $10,000 any one person"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Personal and Advertising Injury Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$1,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Personal and Advertising Injury Limit $1,000,000"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "General Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$3,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "General Aggregate Limit $3,000,000"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Products-Completed Operations Aggregate Limit",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$2,000,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Products-Completed Operations Aggregate Limit $2,000,000"
+              }
+            ],
+            "differs": false
+          },
+          {
+            "field": "Property Damage Deductible",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$2,500 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $2,500 per occurrence"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$5,000 per occurrence",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Property Damage Deductible $5,000 per occurrence"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Estimated Annual Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$640,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $640,000"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$710,000",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Estimated Annual Payroll $710,000"
+              }
+            ],
+            "differs": true
+          },
+          {
+            "field": "Rate per $1,000 of Payroll",
+            "cells": [
+              {
+                "document_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+                "value": "$28.83",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $28.83"
+              },
+              {
+                "document_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+                "value": "$30.85",
+                "page": 2,
+                "page_label": "p. 2",
+                "quote": "Rate per $1,000 of Payroll $30.85"
+              }
+            ],
+            "differs": true
+          }
+        ],
+        "dropped_cells": 0,
+        "model": "fake-chat",
+        "prompt_version": "compare-v1",
+        "usage": {
+          "calls": 1,
+          "input_tokens": 2292,
+          "output_tokens": 169,
+          "cost_usd": 0.0
+        },
+        "created_at": "2026-11-11T16:13:14.308524Z"
+      }
+    ],
+    "next_cursor": null
+  }
+}

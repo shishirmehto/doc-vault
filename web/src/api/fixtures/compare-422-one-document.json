@@ -1,0 +1,19 @@
+{
+  "status": 422,
+  "headers": {},
+  "body": {
+    "error": {
+      "code": "invalid_request",
+      "message": "The request is not valid. body.document_ids: List should have at least 2 items after validation, not 1",
+      "retryable": false,
+      "details": {
+        "errors": [
+          {
+            "field": "body.document_ids",
+            "message": "List should have at least 2 items after validation, not 1"
+          }
+        ]
+      }
+    }
+  }
+}

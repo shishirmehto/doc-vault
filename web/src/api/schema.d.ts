@@ -207,6 +207,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/comparisons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Comparisons
+         * @description Stored comparisons, newest first, a page at a time.
+         */
+        get: operations["list_comparisons_comparisons_get"];
+        put?: never;
+        /**
+         * Create Comparison
+         * @description Compare 2 to 5 ready documents field by field, each cell checked against the page it cites.
+         */
+        post: operations["create_comparison_comparisons_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/comparisons/{comparison_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Comparison
+         * @description One stored comparison. A document deleted since keeps its column, its cells and their page labels.
+         */
+        get: operations["get_comparison_comparisons__comparison_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/documents": {
         parameters: {
             query?: never;
@@ -311,6 +355,22 @@ export interface components {
             /** File */
             file: string;
         };
+        /** CellOut */
+        CellOut: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Value */
+            value: string | null;
+            /** Page */
+            page: number | null;
+            /** Page Label */
+            page_label: string | null;
+            /** Quote */
+            quote: string | null;
+        };
         /** ChatDocumentOut */
         ChatDocumentOut: {
             /**
@@ -381,6 +441,68 @@ export interface components {
             chunk_id: string;
             /** Page Url */
             page_url: string;
+        };
+        /** CompareIn */
+        CompareIn: {
+            /**
+             * Document Ids
+             * @description The documents to compare, 2 to 5, each once. They become the columns, in this order.
+             */
+            document_ids: string[];
+            /**
+             * Focus
+             * @description What to compare, e.g. "deductibles". Absent or blank: the fields a broker compares.
+             */
+            focus?: string | null;
+        };
+        /** ComparedDocumentOut */
+        ComparedDocumentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Filename */
+            filename: string;
+            /** Deleted */
+            deleted: boolean;
+            /** Pages Read */
+            pages_read: number;
+            /** Page Count */
+            page_count: number;
+        };
+        /** ComparisonOut */
+        ComparisonOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Documents */
+            documents: components["schemas"]["ComparedDocumentOut"][];
+            /** Focus */
+            focus: string | null;
+            /** Rows */
+            rows: components["schemas"]["RowOut"][];
+            /** Dropped Cells */
+            dropped_cells: number;
+            /** Model */
+            model: string;
+            /** Prompt Version */
+            prompt_version: string;
+            usage: components["schemas"]["UsageOut"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ComparisonPage */
+        ComparisonPage: {
+            /** Items */
+            items: components["schemas"]["ComparisonOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /** Coverage */
         Coverage: {
@@ -664,7 +786,16 @@ export interface components {
          * Purpose
          * @enum {string}
          */
-        Purpose: "embed_chunks" | "embed_query" | "insights" | "condense" | "answer";
+        Purpose: "embed_chunks" | "embed_query" | "insights" | "condense" | "answer" | "compare";
+        /** RowOut */
+        RowOut: {
+            /** Field */
+            field: string;
+            /** Cells */
+            cells: components["schemas"]["CellOut"][];
+            /** Differs */
+            differs: boolean;
+        };
         /** StartChatIn */
         StartChatIn: {
             /**
@@ -1411,6 +1542,165 @@ export interface operations {
             };
             /** @description too_many_streams */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    list_comparisons_comparisons_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComparisonPage"];
+                };
+            };
+            /** @description invalid_cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    create_comparison_comparisons_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompareIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComparisonOut"];
+                };
+            };
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description documents_not_ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description rate_limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description ai_bad_output */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description ai_unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    get_comparison_comparisons__comparison_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comparison_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComparisonOut"];
+                };
+            };
+            /** @description comparison_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

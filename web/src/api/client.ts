@@ -2,8 +2,8 @@
 // next.config.ts rewrites to the API. Every call returns Result<T> and never throws.
 
 import type {
-  AskProgress, Chat, ChatId, Doc, DocumentId, DocumentMetrics, Health, Insights, MetricsWindow, NonEmpty, Page,
-  ProcessingMetrics, Result, Turn, UploadReceipt,
+  AskProgress, Chat, ChatId, Comparison, ComparisonId, Doc, DocumentId, DocumentMetrics, Health, Insights, MetricsWindow,
+  NonEmpty, Page, ProcessingMetrics, Result, Turn, UploadReceipt,
 } from "./domain.ts";
 import * as P from "./parse.ts";
 import { createSseReader } from "./sse.ts";
@@ -45,6 +45,22 @@ export const api = {
 
   /** The newest five, for the new-chat screen. */
   recentChats: (): Promise<Result<Chat[]>> => call("GET", "/chats?limit=5", P.parseChatPage),
+
+  /**
+   * Compares 2 to 5 ready documents, which become the columns in this order. A blank focus compares the fields a
+   * broker compares. 409 documents_not_ready names the documents that are not ready; 429 shares the ask budget.
+   */
+  compare: (ids: readonly DocumentId[], focus: string | null): Promise<Result<Comparison>> =>
+    call("POST", "/comparisons", P.parseComparison, {
+      body: { document_ids: [...ids], focus: focus?.trim() || null } satisfies W.CompareIn,
+    }),
+
+  /** One stored comparison, with any document deleted since marked. */
+  comparison: (id: ComparisonId): Promise<Result<Comparison>> => call("GET", `/comparisons/${id}`, P.parseComparison),
+
+  /** The newest `limit`, newest first. */
+  comparisons: (limit: number): Promise<Result<Comparison[]>> =>
+    call("GET", `/comparisons?limit=${limit}`, P.parseComparisonPage),
 
   documentMetrics: (): Promise<Result<DocumentMetrics>> => call("GET", "/metrics/documents", P.parseDocumentMetrics),
 

@@ -3,9 +3,9 @@
 
 import type * as W from "./wire.ts";
 import type {
-  AnswerPart, ApiError, AskProgress, AskStage, Chat, ChatId, Citation, CodeCount, Doc, DocEvent, DocumentId, DocumentMetrics,
-  FactCite, Failure, Health, Insights, Lifecycle, Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument,
-  Selection, Spread, Step, Turn, TurnCite, TurnId, TurnOutcome,
+  AnswerPart, ApiError, AskProgress, AskStage, Chat, ChatId, Citation, CodeCount, CompareCell, ComparedDoc, Comparison,
+  ComparisonId, Doc, DocEvent, DocumentId, DocumentMetrics, FactCite, Failure, Health, Insights, Lifecycle, Outcome, Page,
+  PaneRequest, ProcessingMetrics, RefusedDocument, Selection, Spread, Step, Turn, TurnCite, TurnId, TurnOutcome, Usage,
 } from "./domain.ts";
 import type { SseMessage } from "./sse.ts";
 
@@ -22,6 +22,10 @@ export function asChatId(raw: string): ChatId | null {
 
 function asTurnId(raw: string): TurnId | null {
   return UUID.test(raw) ? (raw as TurnId) : null;
+}
+
+export function asComparisonId(raw: string): ComparisonId | null {
+  return UUID.test(raw) ? (raw as ComparisonId) : null;
 }
 
 function documentId(raw: string): DocumentId {
@@ -160,12 +164,7 @@ export function parseTurn(w: W.TurnOut): Turn {
     question: w.question,
     readAs: sameWords(w.interpreted_as, w.question) ? null : w.interpreted_as,
     outcome: outcome(w, citations),
-    usage: {
-      calls: w.usage.calls,
-      inputTokens: w.usage.input_tokens,
-      outputTokens: w.usage.output_tokens,
-      costUsd: w.usage.cost_usd,
-    },
+    usage: usage(w.usage),
     latencyMs: w.latency_ms,
     suggestions: w.suggestions,
   };
@@ -236,6 +235,53 @@ function answerParts(answer: string, citations: readonly Citation[]): AnswerPart
   }
   if (at < answer.length) parts.push({ kind: "text", text: answer.slice(at) });
   return parts;
+}
+
+function usage(w: W.TurnOut["usage"]): Usage {
+  return { calls: w.calls, inputTokens: w.input_tokens, outputTokens: w.output_tokens, costUsd: w.cost_usd };
+}
+
+// ------------------------------------------------------------------ comparison
+
+/**
+ * Throws when a row does not line up with the columns: a different cell count, a cell for another document, or a
+ * cell that is neither empty (every field null) nor whole (a value with its page, page label and quote).
+ */
+export function parseComparison(w: W.ComparisonOut): Comparison {
+  const documents: ComparedDoc[] = w.documents.map((d) => ({
+    id: documentId(d.id), filename: d.filename, deleted: d.deleted, pagesRead: d.pages_read, pageCount: d.page_count,
+  }));
+  return {
+    id: required(asComparisonId(w.id), "a comparison id"),
+    documents,
+    focus: w.focus,
+    rows: w.rows.map((row) => {
+      if (row.cells.length !== documents.length) {
+        throw new TypeError(`the row ${row.field} has ${row.cells.length} cells for ${documents.length} documents`);
+      }
+      return { field: row.field, differs: row.differs, cells: row.cells.map((cell, i) => compareCell(cell, documents[i]!)) };
+    }),
+    droppedCells: w.dropped_cells,
+    model: w.model,
+    promptVersion: w.prompt_version,
+    usage: usage(w.usage),
+    createdAt: new Date(w.created_at),
+  };
+}
+
+function compareCell(w: W.ComparisonOut["rows"][number]["cells"][number], doc: ComparedDoc): CompareCell | null {
+  if (w.document_id !== doc.id) throw new TypeError(`a cell for ${w.document_id} in the column of ${doc.id}`);
+  if (w.value === null && w.page === null && w.page_label === null && w.quote === null) return null;
+  return {
+    value: required(w.value, "a cell value"),
+    pageLabel: required(w.page_label, "a cell's page label"),
+    source: { documentId: doc.id, page: required(w.page, "a cell's page"), quote: required(w.quote, "a cell's quote") },
+  };
+}
+
+/** Newest first. */
+export function parseComparisonPage(w: W.ComparisonPage): Comparison[] {
+  return w.items.map(parseComparison);
 }
 
 function sameWords(a: string, b: string): boolean {

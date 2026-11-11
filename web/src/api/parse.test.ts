@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { settle } from "./client.ts";
 import {
-  parseChat, parseChatPage, parseDoc, parseDocumentMetrics, parseDocumentPage, parseHealth, parseHistory, parseInsights,
-  parsePage, parseProcessingMetrics, parseSelection, parseTurn, selectionQuery,
+  parseChat, parseChatPage, parseComparison, parseComparisonPage, parseDoc, parseDocumentMetrics, parseDocumentPage,
+  parseHealth, parseHistory, parseInsights, parsePage, parseProcessingMetrics, parseSelection, parseTurn, selectionQuery,
 } from "./parse.ts";
 import type { ChatId, DocumentId, TurnId } from "./domain.ts";
 
@@ -510,4 +510,174 @@ test("the URL selects the metrics view; 24h is the default window", () => {
   assert.deepEqual(sel("view=metrics&window=1h"), { kind: "metrics", window: "24h" });
   assert.equal(selectionQuery({ kind: "metrics", window: "24h" }), "?view=metrics");
   assert.equal(selectionQuery({ kind: "metrics", window: "7d" }), "?view=metrics&window=7d");
+});
+
+// ------------------------------------------------------------------ comparison
+
+const ENDORSEMENT = "054b85f0-6107-4030-8274-f72b9ae7a80b" as DocumentId;
+const DEDUCTIBLE_ROW = {
+  field: "Property Damage Deductible",
+  differs: true,
+  cells: [
+    {
+      value: "$2,500 per occurrence",
+      pageLabel: "p. 2",
+      source: { documentId: POLICY, page: 2, quote: "Property Damage Deductible $2,500 per occurrence" },
+    },
+    {
+      value: "$5,000 per occurrence",
+      pageLabel: "p. 2",
+      source: { documentId: RENEWAL, page: 2, quote: "Property Damage Deductible $5,000 per occurrence" },
+    },
+  ],
+};
+
+test("a comparison lines up each field across its documents and says which differ", () => {
+  const r = replay("compare-201-policy-quote", parseComparison);
+  assert.ok(r.ok);
+  const { rows, ...rest } = r.value;
+  assert.deepEqual(rest, {
+    id: "d7f2d3b9-38cf-4933-b031-6dd597edd899",
+    documents: [
+      { id: POLICY, filename: "sample-cgl-policy.pdf", deleted: false, pagesRead: 7, pageCount: 7 },
+      { id: RENEWAL, filename: "sample-renewal-quote.pdf", deleted: false, pagesRead: 3, pageCount: 3 },
+    ],
+    focus: null,
+    droppedCells: 0,
+    model: "fake-chat",
+    promptVersion: "compare-v1",
+    usage: { calls: 1, inputTokens: 2292, outputTokens: 169, costUsd: 0 },
+    createdAt: new Date("2026-11-11T16:23:06.321Z"),
+  });
+  assert.equal(rows.length, 12);
+  assert.deepEqual(rows.filter((row) => row.differs).map((row) => row.field), [
+    "Medical Expense Limit",
+    "General Aggregate Limit",
+    "Property Damage Deductible",
+    "Estimated Annual Payroll",
+    "Rate per $1,000 of Payroll",
+  ]);
+  assert.deepEqual(rows[9], DEDUCTIBLE_ROW);
+});
+
+test("a focus keeps only the fields it names", () => {
+  const r = replay("compare-201-focus-deductible", parseComparison);
+  assert.ok(r.ok);
+  assert.equal(r.value.focus, "deductible");
+  assert.deepEqual(r.value.rows, [DEDUCTIBLE_ROW]);
+});
+
+test("a document that does not state a field has an empty cell in its column", () => {
+  const r = replay("compare-201-three-documents", parseComparison);
+  assert.ok(r.ok);
+  assert.equal(r.value.rows.length, 13);
+  assert.deepEqual(r.value.rows[1], {
+    field: "Policy Number",
+    differs: true,
+    cells: [
+      {
+        value: "SAMPLE-CGL-2026-0001",
+        pageLabel: "p. 1",
+        source: { documentId: POLICY, page: 1, quote: "Policy Number: SAMPLE-CGL-2026-0001" },
+      },
+      null,
+      {
+        value: "SAMPLE-CGL-2026-0001",
+        pageLabel: "section 1",
+        source: { documentId: ENDORSEMENT, page: 1, quote: "Policy Number | SAMPLE-CGL-2026-0001" },
+      },
+    ],
+  });
+});
+
+test("a comparison read back after a delete marks the document and keeps its cells and page labels", () => {
+  const r = replay("comparison-get-deleted-document", parseComparison);
+  assert.ok(r.ok);
+  const gone = "31bcc18c-c6e7-48d2-b436-82c7e3dfe2ec" as DocumentId;
+  assert.deepEqual(r.value.documents[1], { id: gone, filename: "phase-c-shared-86f623.txt", deleted: true, pagesRead: 1, pageCount: 1 });
+  assert.deepEqual(r.value.rows.map((row) => [row.field, row.differs, row.cells[1]]), [
+    ["Policy Number", true, { value: "PHASE-C-1", pageLabel: "section 1", source: { documentId: gone, page: 1, quote: "Policy Number: PHASE-C-1" } }],
+    [
+      "Named Insured",
+      false,
+      { value: "Example Contractors LLC", pageLabel: "section 1", source: { documentId: gone, page: 1, quote: "Named Insured: Example Contractors LLC" } },
+    ],
+  ]);
+});
+
+test("recent comparisons come newest first with their documents, focus and differing fields", () => {
+  const r = replay("comparisons-page", parseComparisonPage);
+  assert.ok(r.ok);
+  assert.deepEqual(
+    r.value.slice(0, 5).map((c) => [
+      c.id,
+      c.documents.map((d) => (d.deleted ? `${d.filename} (deleted)` : d.filename)).join(" + "),
+      c.focus,
+      `${c.rows.filter((row) => row.differs).length} of ${c.rows.length}`,
+    ]),
+    [
+      ["f083878a-0197-4bcf-8533-d1d085d5beb8", "sample-cgl-policy.pdf + phase-c-shared-86f623.txt (deleted)", null, "1 of 2"],
+      [
+        "0ebe9ecd-db9f-4835-beef-6c78e579de9a",
+        "sample-cgl-policy.pdf + sample-renewal-quote.pdf + sample-endorsement-additional-insured.docx",
+        null,
+        "12 of 13",
+      ],
+      ["35741edd-c098-41aa-aaaf-482c2c978290", "sample-cgl-policy.pdf + sample-renewal-quote.pdf", "deductible", "1 of 1"],
+      ["d7f2d3b9-38cf-4933-b031-6dd597edd899", "sample-cgl-policy.pdf + sample-renewal-quote.pdf", null, "5 of 12"],
+      ["30ab1b9f-12bf-4793-aafb-242221818319", "sample-cgl-policy.pdf + phase-c-shared-b7300b.txt (deleted)", null, "0 of 0"],
+    ],
+  );
+  assert.equal(r.value.length, 9);
+});
+
+test("comparing refuses one document, a document that is not ready, and an unknown comparison", () => {
+  const one = replay("compare-422-one-document", parseComparison);
+  assert.deepEqual(one.ok ? null : one.error, {
+    kind: "refused", status: 422, code: "invalid_request",
+    message: "The request is not valid. body.document_ids: List should have at least 2 items after validation, not 1",
+    retryable: false, retryAfterS: null, documents: [],
+  });
+  const busy = replay("compare-409-not-ready", parseComparison);
+  assert.deepEqual(busy.ok ? null : busy.error, {
+    kind: "refused", status: 409, code: "documents_not_ready", message: "1 of 2 documents are not ready.",
+    retryable: false, retryAfterS: null,
+    documents: [{ id: "41474e86-1b59-46ad-980b-c0355948cd08", filename: "phase-c-large-86f623.txt" }],
+  });
+  const missing = replay("comparison-404-not-found", parseComparison);
+  assert.deepEqual(missing.ok ? null : missing.error, {
+    kind: "refused", status: 404, code: "comparison_not_found",
+    message: "No comparison has the id 00000000-0000-4000-8000-000000000000.",
+    retryable: false, retryAfterS: null, documents: [],
+  });
+});
+
+test("a row that does not line up with the columns is a body in the wrong shape", () => {
+  const captured = JSON.parse(readFileSync(new URL("./fixtures/compare-201-policy-quote.json", import.meta.url), "utf8")).body;
+  const broken = (edit: (row: { cells: Record<string, unknown>[] }) => void) => {
+    const body = structuredClone(captured);
+    edit(body.rows[9]);
+    return settle(201, JSON.stringify(body), null, parseComparison);
+  };
+  assert.equal(broken(() => {}).ok, true);
+  assert.deepEqual(broken((row) => row.cells.pop()), {
+    ok: false,
+    error: { kind: "unexpected", detail: "the row Property Damage Deductible has 1 cells for 2 documents" },
+  });
+  assert.deepEqual(broken((row) => row.cells.reverse()), {
+    ok: false,
+    error: { kind: "unexpected", detail: `a cell for ${RENEWAL} in the column of ${POLICY}` },
+  });
+  assert.deepEqual(broken((row) => { row.cells[1]!.page = null; }), {
+    ok: false,
+    error: { kind: "unexpected", detail: "not a cell's page" },
+  });
+  assert.deepEqual(broken((row) => { row.cells[0]!.quote = null; }), {
+    ok: false,
+    error: { kind: "unexpected", detail: "not a cell's quote" },
+  });
+  assert.deepEqual(broken((row) => { row.cells[0]!.value = null; }), {
+    ok: false,
+    error: { kind: "unexpected", detail: "not a cell value" },
+  });
 });
