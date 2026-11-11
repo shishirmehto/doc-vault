@@ -1,0 +1,8 @@
+.git
+.venv
+.env
+.claude
+tests
+samples
+decisions.tsv
+**/__pycache__
