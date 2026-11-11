@@ -81,7 +81,7 @@ test("recent comparisons say how many of their fields differ", () => {
 });
 
 test("the notes under a comparison: dropped values, documents read in part, deleted columns", () => {
-  const memo = { id: "70eebfea-0db0-468f-b3e3-58c67c2f6d5f" as DocumentId, filename: "ui-renewal-memo-2.txt", deleted: false, pagesRead: 40, pageCount: 254 };
+  const memo = { id: "70eebfea-0db0-468f-b3e3-58c67c2f6d5f" as DocumentId, filename: "ui-renewal-memo-2.txt", version: 1, deleted: false, pagesRead: 40, pageCount: 254 };
   assert.deepEqual(
     [droppedCells(1), droppedCells(3), partlyRead(memo, "section"), partlyRead({ ...memo, pagesRead: 1, pageCount: 2 }, "page"),
       deletedColumns(["a.txt"]), deletedColumns(["a.txt", "b.pdf"])],

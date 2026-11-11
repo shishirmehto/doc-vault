@@ -61,7 +61,7 @@ test("only the differing rows are left, each still named by its index among all 
 test("a cell's URL resolves to its field, its document and its page; an empty or absent cell to nothing", () => {
   assert.deepEqual(cellAt(captured("compare-201-policy-quote"), { row: 9, col: 1 }), {
     field: "Property Damage Deductible",
-    doc: { id: RENEWAL, filename: "sample-renewal-quote.pdf", deleted: false, pagesRead: 3, pageCount: 3 },
+    doc: { id: RENEWAL, filename: "sample-renewal-quote.pdf", version: null, deleted: false, pagesRead: 3, pageCount: 3 },
     cell: {
       value: "$5,000 per occurrence",
       pageLabel: "p. 2",

@@ -5,7 +5,7 @@ import { settle } from "./client.ts";
 import {
   parseChat, parseChatPage, parseComparison, parseComparisonPage, parseDoc, parseDocumentMetrics, parseDocumentPage,
   parseHealth, parseHistory, parseInsights, parsePage, parseProcessingMetrics, parseSelection, parseSummary,
-  parseSummaryPage, parseTurn, selectionQuery,
+  parseSummaryPage, parseTurn, parseVersionList, selectionQuery,
 } from "./parse.ts";
 import type { ChatId, ComparisonId, DocumentId, Selection, SummaryId, TurnId } from "./domain.ts";
 
@@ -42,8 +42,46 @@ test("a failed document keeps the backend's reason and the stage that failed", (
       layout: null,
       processingMs: null,
       createdAt: new Date("2026-11-11T03:06:52.288Z"),
+      version: { family: "723645a0-5244-4242-b8d0-84140e7a7dd0", number: 1, latest: 1 },
     },
   });
+});
+
+const TERMS_V1 = "3a70e0b8-be92-4f6d-94d1-ff08557ab241";
+const TERMS_V2 = "ec435dda-9e95-402f-a719-453bc0beded1";
+
+test("new bytes under a stored name arrive as version 2 of the first upload's family", () => {
+  const r = replay("upload-202-version-2", parseDoc);
+  assert.deepEqual(r.ok && [r.value.id, r.value.filename, r.value.version], [
+    TERMS_V2, "phase-e-fixture-terms.txt", { family: TERMS_V1, number: 2, latest: 2 },
+  ]);
+});
+
+test("version 1 read after version 2 arrived says the family's latest is 2", () => {
+  const r = replay("document-version-1-of-2", parseDoc);
+  assert.deepEqual(r.ok && r.value.version, { family: TERMS_V1, number: 1, latest: 2 });
+});
+
+test("the versions list is the family oldest first; an unknown id or an unknown replaces is a 404", () => {
+  const r = replay("versions-two", parseVersionList);
+  assert.deepEqual(r.ok && r.value.map((d) => [d.id, d.version.number, d.version.latest, d.lifecycle.status]), [
+    [TERMS_V1, 1, 2, "ready"],
+    [TERMS_V2, 2, 2, "ready"],
+  ]);
+  for (const name of ["versions-404-not-found", "upload-404-replaces-unknown"]) {
+    const missing = replay(name, parseVersionList);
+    assert.deepEqual(missing.ok ? null : missing.error.kind === "refused" && [missing.error.status, missing.error.code], [
+      404, "document_not_found",
+    ]);
+  }
+});
+
+test("a document whose version is past its family's latest, or whose family is no id, is not parsed", () => {
+  const { body } = JSON.parse(readFileSync(new URL("./fixtures/upload-202-version-2.json", import.meta.url), "utf8"));
+  const parsed = (patch: object) => settle(202, JSON.stringify({ ...body, ...patch }), null, parseDoc);
+  assert.deepEqual([parsed({ latest_version: 1 }), parsed({ family_id: "family" }), parsed({ version: 0 })].map((r) => r.ok), [
+    false, false, false,
+  ]);
 });
 
 test("an embedding document carries its chunk counts and its sections", () => {
@@ -540,8 +578,8 @@ test("a comparison lines up each field across its documents and says which diffe
   assert.deepEqual(rest, {
     id: "d7f2d3b9-38cf-4933-b031-6dd597edd899",
     documents: [
-      { id: POLICY, filename: "sample-cgl-policy.pdf", deleted: false, pagesRead: 7, pageCount: 7 },
-      { id: RENEWAL, filename: "sample-renewal-quote.pdf", deleted: false, pagesRead: 3, pageCount: 3 },
+      { id: POLICY, filename: "sample-cgl-policy.pdf", version: null, deleted: false, pagesRead: 7, pageCount: 7 },
+      { id: RENEWAL, filename: "sample-renewal-quote.pdf", version: null, deleted: false, pagesRead: 3, pageCount: 3 },
     ],
     focus: null,
     droppedCells: 0,
@@ -591,11 +629,20 @@ test("a document that does not state a field has an empty cell in its column", (
   });
 });
 
+test("a compared document carries its version, or null when the comparison predates versions", () => {
+  const { body } = JSON.parse(readFileSync(new URL("./fixtures/compare-201-policy-quote.json", import.meta.url), "utf8"));
+  const versioned = { ...body, documents: body.documents.map((d: object, i: number) => ({ ...d, version: i + 1 })) };
+  const r = settle(201, JSON.stringify(versioned), null, parseComparison);
+  const stored = replay("compare-201-policy-quote", parseComparison);
+  assert.deepEqual(r.ok && r.value.documents.map((d) => d.version), [1, 2]);
+  assert.deepEqual(stored.ok && stored.value.documents.map((d) => d.version), [null, null]);
+});
+
 test("a comparison read back after a delete marks the document and keeps its cells and page labels", () => {
   const r = replay("comparison-get-deleted-document", parseComparison);
   assert.ok(r.ok);
   const gone = "31bcc18c-c6e7-48d2-b436-82c7e3dfe2ec" as DocumentId;
-  assert.deepEqual(r.value.documents[1], { id: gone, filename: "phase-c-shared-86f623.txt", deleted: true, pagesRead: 1, pageCount: 1 });
+  assert.deepEqual(r.value.documents[1], { id: gone, filename: "phase-c-shared-86f623.txt", version: null, deleted: true, pagesRead: 1, pageCount: 1 });
   assert.deepEqual(r.value.rows.map((row) => [row.field, row.differs, row.cells[1]]), [
     ["Policy Number", true, { value: "PHASE-C-1", pageLabel: "section 1", source: { documentId: gone, page: 1, quote: "Policy Number: PHASE-C-1" } }],
     [

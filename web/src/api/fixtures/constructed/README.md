@@ -21,3 +21,11 @@ At bonus phase A, after `TurnOut` gained `suggestions`, a capture script asked t
 documents again and recaptured `turn-*` and `history-policy-four-turns.json`. It also captured
 `ask-stream-deductible.txt`, the raw body of a streamed ask. `turn-answered-zero-citations.json` and
 `turn-not-found-unverified.json` were rebuilt from the new `turn-answered-one-citation.json` as described above.
+
+At bonus phase E, after `DocumentOut` gained `family_id`, `version` and `latest_version` and a compared document gained
+`version`, a script added those fields to every captured body that holds a document or a compared document, as the
+migrated API returns them: each stored document is its own family at version 1 of 1, and each stored comparison
+predates versions, so its compared documents read `version: null`. The same script captured the new ones from the
+running API: `upload-202-version-2.json` (new bytes under a stored name), `document-version-1-of-2.json`,
+`versions-two.json`, `versions-404-not-found.json` and `upload-404-replaces-unknown.json`. It deleted both documents
+it uploaded afterwards.

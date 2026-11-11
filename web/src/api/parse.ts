@@ -4,7 +4,8 @@
 import type * as W from "./wire.ts";
 import type {
   AnswerPart, ApiError, AskProgress, AskStage, CellCite, Chat, ChatId, Citation, CodeCount, CompareCell, ComparedDoc,
-  Comparison, ComparisonId, Doc, DocEvent, DocumentId, DocumentMetrics, FactCite, Failure, Health, Insights, Lifecycle,
+  Comparison, ComparisonId, Doc, DocEvent, DocumentId, DocumentMetrics, DocVersion, FactCite, Failure, FamilyId, Health,
+  Insights, Lifecycle,
   Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument, Selection, Spread, Step, Summary, SummaryCite,
   SummaryId, SummaryLength, SummaryList, SummaryTone, Turn, TurnCite, TurnId, TurnOutcome, Usage,
 } from "./domain.ts";
@@ -83,7 +84,21 @@ export function parseDoc(w: W.DocumentOut): Doc {
       : { pageCount: w.pages, unit: w.page_basis === "synthetic" ? "section" : "page", emptyPages: w.empty_pages },
     processingMs: w.processing_ms,
     createdAt: new Date(w.created_at),
+    version: versionOf(w),
   };
+}
+
+function versionOf(w: W.DocumentOut): DocVersion {
+  const family = UUID.test(w.family_id) ? (w.family_id as FamilyId) : null;
+  if (!Number.isInteger(w.version) || w.version < 1 || w.latest_version < w.version) {
+    throw new TypeError(`not a version: ${w.version} of ${w.latest_version}`);
+  }
+  return { family: required(family, "a family id"), number: w.version, latest: w.latest_version };
+}
+
+/** GET /documents/{id}/versions: the family, oldest first. */
+export function parseVersionList(w: W.VersionList): Doc[] {
+  return w.items.map(parseDoc);
 }
 
 /** An event of GET /events/documents. Throws on an event or data the contract does not name. */
@@ -254,7 +269,8 @@ function usage(w: W.TurnOut["usage"]): Usage {
  */
 export function parseComparison(w: W.ComparisonOut): Comparison {
   const documents: ComparedDoc[] = w.documents.map((d) => ({
-    id: documentId(d.id), filename: d.filename, deleted: d.deleted, pagesRead: d.pages_read, pageCount: d.page_count,
+    id: documentId(d.id), filename: d.filename, version: d.version, deleted: d.deleted, pagesRead: d.pages_read,
+    pageCount: d.page_count,
   }));
   return {
     id: required(asComparisonId(w.id), "a comparison id"),

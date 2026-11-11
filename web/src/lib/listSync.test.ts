@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Doc, DocEvent, DocumentId, Lifecycle } from "../api/domain.ts";
+import type { Doc, DocEvent, DocumentId, FamilyId, Lifecycle } from "../api/domain.ts";
 import { applyDocEvent, type DocList } from "./docList.ts";
 import { ListSync } from "./listSync.ts";
 
@@ -16,6 +16,7 @@ function doc(n: number, lifecycle: Lifecycle = { status: "ready" }): Doc {
     layout: null,
     processingMs: null,
     createdAt: new Date(Date.UTC(2026, 10, 11, 12, 0, n)),
+    version: { family: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}` as FamilyId, number: 1, latest: 1 },
   };
 }
 

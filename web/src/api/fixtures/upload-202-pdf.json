@@ -18,10 +18,14 @@
     "error": null,
     "processing_ms": null,
     "created_at": "2026-11-11T03:06:52.288386Z",
+    "family_id": "723645a0-5244-4242-b8d0-84140e7a7dd0",
+    "version": 1,
+    "latest_version": 1,
     "links": {
       "self": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0",
       "insights": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0/insights",
-      "pages": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0/pages/{n}"
+      "pages": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0/pages/{n}",
+      "versions": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0/versions"
     }
   }
 }

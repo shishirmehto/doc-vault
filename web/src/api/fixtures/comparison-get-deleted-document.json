@@ -7,6 +7,7 @@
       {
         "id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
         "filename": "sample-cgl-policy.pdf",
+        "version": null,
         "deleted": false,
         "pages_read": 7,
         "page_count": 7
@@ -14,6 +15,7 @@
       {
         "id": "31bcc18c-c6e7-48d2-b436-82c7e3dfe2ec",
         "filename": "phase-c-shared-86f623.txt",
+        "version": null,
         "deleted": true,
         "pages_read": 1,
         "page_count": 1

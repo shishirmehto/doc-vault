@@ -53,6 +53,7 @@ test("the captured stream is six document updates, a resync and a delete, and it
       layout: { pageCount: 866, unit: "section", emptyPages: [] },
       processingMs: 1051,
       createdAt: new Date("2026-11-11T14:14:42.021Z"),
+      version: { family: "e84608c0-522b-44af-a62f-427e7b5b7784", number: 1, latest: 1 },
     },
   });
   assert.deepEqual(createSseReader().push(": connected\n\n: keepalive\n\n"), []);

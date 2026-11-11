@@ -1,0 +1,32 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": {
+    "id": "3a70e0b8-be92-4f6d-94d1-ff08557ab241",
+    "filename": "phase-e-fixture-terms.txt",
+    "kind": "txt",
+    "size_bytes": 102,
+    "status": "ready",
+    "progress": null,
+    "pages": 1,
+    "page_basis": "synthetic",
+    "empty_pages": [],
+    "insights_status": "ready",
+    "document_type": "other",
+    "error": null,
+    "failed_stage": null,
+    "processing_ms": 123,
+    "created_at": "2026-11-11T20:45:04.311316Z",
+    "family_id": "3a70e0b8-be92-4f6d-94d1-ff08557ab241",
+    "version": 1,
+    "latest_version": 2,
+    "links": {
+      "self": "/documents/3a70e0b8-be92-4f6d-94d1-ff08557ab241",
+      "insights": "/documents/3a70e0b8-be92-4f6d-94d1-ff08557ab241/insights",
+      "pages": "/documents/3a70e0b8-be92-4f6d-94d1-ff08557ab241/pages/{n}",
+      "versions": "/documents/3a70e0b8-be92-4f6d-94d1-ff08557ab241/versions"
+    }
+  }
+}

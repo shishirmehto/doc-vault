@@ -5,6 +5,8 @@ declare const brand: unique symbol;
 type Brand<T, B extends string> = T & { readonly [brand]: B };
 
 export type DocumentId = Brand<string, "DocumentId">;
+/** The versions of one document share it: the first version's id, which may since have been deleted. */
+export type FamilyId = Brand<string, "FamilyId">;
 export type ChatId = Brand<string, "ChatId">;
 export type TurnId = Brand<string, "TurnId">;
 
@@ -30,6 +32,12 @@ export type PageUnit = "page" | "section";
 
 export type Layout = { pageCount: number; unit: PageUnit; emptyPages: readonly number[] };
 
+/**
+ * Where a document sits among the uploads of one file: version `number`, numbered from 1 in upload order, of a
+ * family whose highest number is now `latest`. A deleted version leaves a gap, so `latest` is not a count.
+ */
+export type DocVersion = { family: FamilyId; number: number; latest: number };
+
 export type Doc = {
   id: DocumentId;
   filename: string;
@@ -43,6 +51,7 @@ export type Doc = {
   layout: Layout | null;
   processingMs: number | null;
   createdAt: Date;
+  version: DocVersion;
 };
 
 export type UploadReceipt = { doc: Doc; duplicate: boolean };
@@ -128,7 +137,15 @@ export type AskProgress = { kind: "stage"; stage: AskStage } | { kind: "text"; t
 export type ComparisonId = Brand<string, "ComparisonId">;
 
 /** A column. A deleted document keeps its filename, and its cells keep their values and page labels. */
-export type ComparedDoc = { id: DocumentId; filename: string; deleted: boolean; pagesRead: number; pageCount: number };
+/** `version` is the document's version when it was compared; null for a comparison stored before versions. */
+export type ComparedDoc = {
+  id: DocumentId;
+  filename: string;
+  version: number | null;
+  deleted: boolean;
+  pagesRead: number;
+  pageCount: number;
+};
 
 /** A value found on the page it cites. pageLabel is the backend's ("p. 2" or "section 1"). */
 export type CompareCell = { source: SourceRef; value: string; pageLabel: string };

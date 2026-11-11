@@ -6,6 +6,7 @@ type S = components["schemas"];
 
 export type DocumentOut = S["DocumentOut"];
 export type DocumentPage = S["DocumentPage"];
+export type VersionList = S["VersionList"];
 export type PageOut = S["PageOut"];
 export type ErrorBody = S["ErrorBody"];
 export type InsightsOut =

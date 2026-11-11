@@ -40,6 +40,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{doc_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Versions
+         * @description Every version of this document, oldest first. Deleting one leaves the others and their numbers.
+         */
+        get: operations["get_versions_documents__doc_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/{doc_id}/insights": {
         parameters: {
             query?: never;
@@ -488,6 +508,8 @@ export interface components {
             id: string;
             /** Filename */
             filename: string;
+            /** Version */
+            version: number | null;
             /** Deleted */
             deleted: boolean;
             /** Pages Read */
@@ -608,6 +630,15 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Family Id
+             * Format: uuid
+             */
+            family_id: string;
+            /** Version */
+            version: number;
+            /** Latest Version */
+            latest_version: number;
             /** Links */
             links: {
                 [key: string]: string;
@@ -980,6 +1011,11 @@ export interface components {
             /** Cost Usd */
             cost_usd: number | null;
         };
+        /** VersionList */
+        VersionList: {
+            /** Items */
+            items: components["schemas"]["DocumentOut"][];
+        };
     };
     responses: never;
     parameters: never;
@@ -993,6 +1029,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["DocStatus"] | null;
+                /** @description Only the latest version of each document */
+                latest?: boolean;
                 limit?: number;
                 cursor?: string | null;
             };
@@ -1033,7 +1071,10 @@ export interface operations {
     };
     upload_documents_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A document id. New bytes become the next version of its family, whatever their name. Without it, new bytes whose name matches a stored document's become the next version of that document's family. */
+                replaces?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1060,6 +1101,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description file_too_large */
@@ -1157,6 +1207,46 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description document_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    get_versions_documents__doc_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionList"];
+                };
             };
             /** @description document_not_found */
             404: {

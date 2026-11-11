@@ -24,10 +24,14 @@
         "failed_stage": "parse",
         "processing_ms": null,
         "created_at": "2026-11-11T03:47:42.506857Z",
+        "family_id": "3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7",
           "insights": "/documents/3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7/insights",
-          "pages": "/documents/3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7/pages/{n}"
+          "pages": "/documents/3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7/pages/{n}",
+          "versions": "/documents/3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7/versions"
         }
       },
       {
@@ -46,10 +50,14 @@
         "failed_stage": null,
         "processing_ms": 111,
         "created_at": "2026-11-11T03:28:27.859987Z",
+        "family_id": "84ad86a0-1f07-4a74-bbbb-f21b00d924b3",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/84ad86a0-1f07-4a74-bbbb-f21b00d924b3",
           "insights": "/documents/84ad86a0-1f07-4a74-bbbb-f21b00d924b3/insights",
-          "pages": "/documents/84ad86a0-1f07-4a74-bbbb-f21b00d924b3/pages/{n}"
+          "pages": "/documents/84ad86a0-1f07-4a74-bbbb-f21b00d924b3/pages/{n}",
+          "versions": "/documents/84ad86a0-1f07-4a74-bbbb-f21b00d924b3/versions"
         }
       },
       {
@@ -68,10 +76,14 @@
         "failed_stage": null,
         "processing_ms": 360,
         "created_at": "2026-11-11T03:17:25.521358Z",
+        "family_id": "7a63c943-d3c1-433d-91b2-223c47149d6d",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/7a63c943-d3c1-433d-91b2-223c47149d6d",
           "insights": "/documents/7a63c943-d3c1-433d-91b2-223c47149d6d/insights",
-          "pages": "/documents/7a63c943-d3c1-433d-91b2-223c47149d6d/pages/{n}"
+          "pages": "/documents/7a63c943-d3c1-433d-91b2-223c47149d6d/pages/{n}",
+          "versions": "/documents/7a63c943-d3c1-433d-91b2-223c47149d6d/versions"
         }
       },
       {
@@ -90,10 +102,14 @@
         "failed_stage": null,
         "processing_ms": 438,
         "created_at": "2026-11-11T03:17:25.467894Z",
+        "family_id": "70eebfea-0db0-468f-b3e3-58c67c2f6d5f",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/70eebfea-0db0-468f-b3e3-58c67c2f6d5f",
           "insights": "/documents/70eebfea-0db0-468f-b3e3-58c67c2f6d5f/insights",
-          "pages": "/documents/70eebfea-0db0-468f-b3e3-58c67c2f6d5f/pages/{n}"
+          "pages": "/documents/70eebfea-0db0-468f-b3e3-58c67c2f6d5f/pages/{n}",
+          "versions": "/documents/70eebfea-0db0-468f-b3e3-58c67c2f6d5f/versions"
         }
       },
       {
@@ -112,10 +128,14 @@
         "failed_stage": null,
         "processing_ms": 396,
         "created_at": "2026-11-11T03:17:25.467637Z",
+        "family_id": "d05c5033-4d51-49e7-92db-048b060e62eb",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/d05c5033-4d51-49e7-92db-048b060e62eb",
           "insights": "/documents/d05c5033-4d51-49e7-92db-048b060e62eb/insights",
-          "pages": "/documents/d05c5033-4d51-49e7-92db-048b060e62eb/pages/{n}"
+          "pages": "/documents/d05c5033-4d51-49e7-92db-048b060e62eb/pages/{n}",
+          "versions": "/documents/d05c5033-4d51-49e7-92db-048b060e62eb/versions"
         }
       },
       {
@@ -139,10 +159,14 @@
         "failed_stage": "parse",
         "processing_ms": null,
         "created_at": "2026-11-11T03:06:52.288386Z",
+        "family_id": "723645a0-5244-4242-b8d0-84140e7a7dd0",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0",
           "insights": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0/insights",
-          "pages": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0/pages/{n}"
+          "pages": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0/pages/{n}",
+          "versions": "/documents/723645a0-5244-4242-b8d0-84140e7a7dd0/versions"
         }
       },
       {
@@ -161,10 +185,14 @@
         "failed_stage": null,
         "processing_ms": 242,
         "created_at": "2026-11-11T03:06:51.941850Z",
+        "family_id": "5958a67a-0fe6-4c0a-92fb-231c5fa72b87",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/5958a67a-0fe6-4c0a-92fb-231c5fa72b87",
           "insights": "/documents/5958a67a-0fe6-4c0a-92fb-231c5fa72b87/insights",
-          "pages": "/documents/5958a67a-0fe6-4c0a-92fb-231c5fa72b87/pages/{n}"
+          "pages": "/documents/5958a67a-0fe6-4c0a-92fb-231c5fa72b87/pages/{n}",
+          "versions": "/documents/5958a67a-0fe6-4c0a-92fb-231c5fa72b87/versions"
         }
       },
       {
@@ -183,10 +211,14 @@
         "failed_stage": null,
         "processing_ms": 624,
         "created_at": "2026-11-11T02:23:18.641346Z",
+        "family_id": "d3833d56-a0a2-4d58-9d4f-b1600710fe86",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/d3833d56-a0a2-4d58-9d4f-b1600710fe86",
           "insights": "/documents/d3833d56-a0a2-4d58-9d4f-b1600710fe86/insights",
-          "pages": "/documents/d3833d56-a0a2-4d58-9d4f-b1600710fe86/pages/{n}"
+          "pages": "/documents/d3833d56-a0a2-4d58-9d4f-b1600710fe86/pages/{n}",
+          "versions": "/documents/d3833d56-a0a2-4d58-9d4f-b1600710fe86/versions"
         }
       },
       {
@@ -205,10 +237,14 @@
         "failed_stage": null,
         "processing_ms": 592,
         "created_at": "2026-11-11T01:43:48.660840Z",
+        "family_id": "054b85f0-6107-4030-8274-f72b9ae7a80b",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/054b85f0-6107-4030-8274-f72b9ae7a80b",
           "insights": "/documents/054b85f0-6107-4030-8274-f72b9ae7a80b/insights",
-          "pages": "/documents/054b85f0-6107-4030-8274-f72b9ae7a80b/pages/{n}"
+          "pages": "/documents/054b85f0-6107-4030-8274-f72b9ae7a80b/pages/{n}",
+          "versions": "/documents/054b85f0-6107-4030-8274-f72b9ae7a80b/versions"
         }
       },
       {
@@ -227,10 +263,14 @@
         "failed_stage": null,
         "processing_ms": 595,
         "created_at": "2026-11-11T01:43:48.660206Z",
+        "family_id": "23b7e49c-b644-4ccf-8768-5716b69cb9cc",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/23b7e49c-b644-4ccf-8768-5716b69cb9cc",
           "insights": "/documents/23b7e49c-b644-4ccf-8768-5716b69cb9cc/insights",
-          "pages": "/documents/23b7e49c-b644-4ccf-8768-5716b69cb9cc/pages/{n}"
+          "pages": "/documents/23b7e49c-b644-4ccf-8768-5716b69cb9cc/pages/{n}",
+          "versions": "/documents/23b7e49c-b644-4ccf-8768-5716b69cb9cc/versions"
         }
       },
       {
@@ -249,10 +289,14 @@
         "failed_stage": null,
         "processing_ms": 607,
         "created_at": "2026-11-11T01:43:48.657505Z",
+        "family_id": "6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
+        "version": 1,
+        "latest_version": 1,
         "links": {
           "self": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29",
           "insights": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/insights",
-          "pages": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/{n}"
+          "pages": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/{n}",
+          "versions": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/versions"
         }
       }
     ],
