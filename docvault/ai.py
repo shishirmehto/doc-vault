@@ -29,9 +29,19 @@ from pydantic import BaseModel, ValidationError
 
 from .config import ReasoningEffort, Settings
 from .db import Db
-from .domain import DocumentId, ErrorCode, Page, Purpose, TurnId, VaultError
+from .domain import DocumentId, ErrorCode, Page, Purpose, Source, Turn, TurnId, VaultError
 from .pages import SENTENCE_OR_PARAGRAPH_END, TABLE_CELL, collapse_whitespace
-from .prompts import DOCUMENT_TYPES, InsightsDraft, KeyFactDraft, Msg, Prompt, Tier
+from .prompts import (
+    DOCUMENT_TYPES,
+    AnswerDraft,
+    CondensedQuery,
+    EvidenceDraft,
+    InsightsDraft,
+    KeyFactDraft,
+    Msg,
+    Prompt,
+    Tier,
+)
 
 type Vector = list[float]
 
@@ -379,7 +389,8 @@ class FakeEmbedder:
 
     provider = "fake"
     model = "fake-hash"
-    min_similarity = 0.30   # with bag-of-words vectors only real word overlap passes
+    # Measured on the sample chunks: answerable questions score 0.205-0.252, absent topics 0.080-0.189.
+    min_similarity = 0.20
 
     def __init__(self, dimensions: int = 1536) -> None:
         self.dimensions = dimensions
@@ -388,7 +399,7 @@ class FakeEmbedder:
         return [self._vector(text) for text in texts], Tokens(sum(len(text.split()) for text in texts), 0, 0)
 
     def _vector(self, text: str) -> Vector:
-        counts = Counter(_stem(word) for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in _STOPWORDS)
+        counts = Counter(_tokens(text))
         vector = [0.0] * self.dimensions
         # A text with no content words still needs a non-zero vector: cosine distance to zero is undefined.
         for token, count in (counts or {"": 1}).items():
@@ -401,6 +412,10 @@ class FakeEmbedder:
 _STOPWORDS = frozenset(
     "a an and are as at be by for from has have if in is it its of on or that the this to was we were what "
     "when which will with you your our us not no any all does do".split())
+
+
+def _tokens(text: str) -> list[str]:
+    return [_stem(word) for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in _STOPWORDS]
 
 
 def _stem(word: str) -> str:
@@ -477,6 +492,42 @@ def _fake_insights(prompt: Prompt) -> InsightsDraft:
         tags=list(dict.fromkeys(word for word in words if len(word) > 3))[:6])
 
 
+_REFERENCE_WORD = re.compile(r"\b(?:it|its|that|this|these|those|they|them|one|same|other)\b", re.IGNORECASE)
+
+
+def _fake_condense(prompt: Prompt) -> CondensedQuery:
+    """A question with a reference word ("does it", "that limit") is appended to the previous turn's standalone
+    query, so it carries the earlier topic's words; any other question already stands alone."""
+    history: tuple[Turn, ...] = prompt.inputs["history"]
+    question: str = prompt.inputs["question"]
+    if _REFERENCE_WORD.search(question):
+        return CondensedQuery(standalone=f"{history[-1].standalone_query} {question}")
+    return CondensedQuery(standalone=question)
+
+
+def _fake_answer(prompt: Prompt) -> AnswerDraft:
+    """Per document, the segment sharing the most content words with the standalone query. Ties go to the
+    segment with fewer distinct content words (the tighter match), then the earlier source, then the earlier
+    segment. Every document whose best segment shares at least two words is cited, with that segment as both
+    the sentence and the quote; with none, the draft is unsupported."""
+    query = set(_tokens(prompt.inputs["standalone"]))
+    sources: tuple[Source, ...] = prompt.inputs["sources"]
+    best: dict[DocumentId, tuple[tuple[int, int, int, int], Source, str]] = {}
+    for at, source in enumerate(sources):
+        for position, segment in enumerate(_segments(source.text)):
+            words = set(_tokens(segment))
+            rank = (-len(words & query), len(words), at, position)
+            if source.doc.id not in best or rank < best[source.doc.id][0]:
+                best[source.doc.id] = (rank, source, segment)
+    cited = sorted((rank, source, segment) for rank, source, segment in best.values() if -rank[0] >= 2)
+    if not cited:
+        return AnswerDraft(supported=False, answer="The selected documents do not say.", evidence=[])
+    return AnswerDraft(
+        supported=True,
+        answer=" ".join(f"{collapse_whitespace(segment)} [{source.label}]" for _, source, segment in cited),
+        evidence=[EvidenceDraft(source=source.label, quote=segment) for _, source, segment in cited])
+
+
 class FakeChat:
     """Deterministic stand-in that reads Prompt.inputs, never the rendered text.
 
@@ -485,7 +536,7 @@ class FakeChat:
     handler raises NotImplementedError. Tests subclass FakeChat and replace
     `handlers` to script other output or a provider failure.
 
-    Handlers: insights (_fake_insights).
+    Handlers: insights (_fake_insights), condense (_fake_condense), answer (_fake_answer).
 
     Token counts are whitespace word counts (system and messages in, JSON out),
     so ledger and metrics tests have real numbers.
@@ -493,7 +544,8 @@ class FakeChat:
 
     provider = "fake"
     models: Mapping[Tier, str] = {"main": "fake-chat", "small": "fake-chat"}
-    handlers: Mapping[str, Callable[[Prompt], BaseModel]] = {"insights": _fake_insights}
+    handlers: Mapping[str, Callable[[Prompt], BaseModel]] = {
+        "insights": _fake_insights, "condense": _fake_condense, "answer": _fake_answer}
 
     def complete_json(self, prompt: Prompt, output: type[BaseModel], *,
                       timeout_s: float) -> tuple[RawCompletion, Tokens]:

@@ -33,12 +33,13 @@ def with_chat(ctx, chat):
     return dataclasses.replace(ctx, ai=dataclasses.replace(ctx.ai, chat=chat))
 
 
-def provider_down(code: str, *, retryable: bool) -> FakeChat:
-    def raise_error(prompt):
+def provider_down(code: str, *, retryable: bool, prompt: str = "insights") -> FakeChat:
+    """A FakeChat whose `prompt` handler fails the way a provider does; the other prompts still work."""
+    def raise_error(_prompt):
         raise ProviderError(code, retryable=retryable)
 
     class DownChat(FakeChat):
-        handlers = {"insights": raise_error}
+        handlers = {**FakeChat.handlers, prompt: raise_error}
 
     return DownChat()
 

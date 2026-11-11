@@ -135,7 +135,7 @@ def retry(ctx: Ctx, doc_id: DocumentId) -> Document:
 
 
 def delete(ctx: Ctx, doc_id: DocumentId) -> None:
-    """DELETE the row (pages, chunks, insights, chat_documents cascade), then remove the blob.
+    """DELETE the row (pages, chunks and insights cascade), then remove the blob.
 
     A pipeline task in flight finds its compare-and-swap matches no row and exits.
     step_runs and llm_calls keep their rows, so history and spend outlive the

@@ -40,6 +40,16 @@ curl -s -F file=@sample-cgl-policy.pdf localhost:8000/documents        # 200, th
 curl -s localhost:8000/documents/<id>/pages/2                          # the text a citation on page 2 points at
 ```
 
+## Chat with the documents
+
+```bash
+CHAT=$(curl -s localhost:8000/chats -H 'content-type: application/json' \
+  -d '{"document_ids": ["<policy id>", "<quote id>"]}' | jq -r .id)
+curl -s localhost:8000/chats/$CHAT/messages -H 'content-type: application/json' \
+  -d '{"question": "Compare the general aggregate limit in the two documents."}'
+curl -s localhost:8000/chats/$CHAT/messages      # history, oldest first
+```
+
 ## Status
 
 This section lists what works at the current commit.
@@ -57,14 +67,16 @@ Built:
 - `GET /documents`, `GET /documents/{id}`, `GET /documents/{id}/pages/{n}`, `POST /documents/{id}/retry`, and `DELETE /documents/{id}`.
 - `documents.reconcile` on Celery beat every 60 seconds. It re-enqueues documents that stalled for two minutes, re-embeds ready documents after the embedding model changes, and enqueues insights for parsed documents that have none.
 - The AI gateway (`docvault/ai.py`): `embed()` and `complete()`, with OpenAI (Chat Completions with strict JSON-schema output, and embeddings) and the deterministic fake. Every provider attempt, retries and failures included, writes one `llm_calls` row priced from `ai.PRICES` (cached input at its own rate). Chat calls retry 429, 5xx and timeouts in the gateway with doubling backoff. Background embedding and insights calls get one attempt each, and Celery retries the task, which frees the worker and the document lease between tries. Output that fails validation gets one repair turn. Model ids, reasoning effort and the embedding dimension come from the environment (`.env.example`). `GET /health` reports `ai_mode` as `fake`, `live` or `mixed`.
-- Insights (`insights.run_analyze` on the `llm` queue, `GET /documents/{id}/insights`). Analysis starts after the parse checkpoint, beside embedding. It returns a title, a document type, a summary, tags, and key facts, each with a page and a quote. A key fact is kept only when its quote is on the page it cites; the rest are dropped and counted (`dropped_key_facts`). `coverage` reports the pages read when a document exceeds the prompt budget. The endpoint reads `pending`, `ready`, `failed` or `unavailable`. An insights failure leaves the document searchable, and `POST /documents/{id}/retry` reruns only the insights. The insights prompt in `docvault/prompts.py` carries a note on why it is worded the way it is.
+- Insights (`insights.run_analyze` on the `llm` queue, `GET /documents/{id}/insights`). Analysis starts after the parse checkpoint, beside embedding. It returns a title, a document type, a summary, tags, and key facts, each with a page and a quote. A key fact is kept only when its quote is on the page it cites; the rest are dropped and counted (`dropped_key_facts`). `coverage` reports the pages read when a document exceeds the prompt budget. The endpoint reads `pending`, `ready`, `failed` or `unavailable`. An insights failure leaves the document searchable, and `POST /documents/{id}/retry` reruns only the insights. Every prompt lives in `docvault/prompts.py` with a note on why it is worded the way it is.
+- Chat (`docvault/chat.py`): `POST /chats` with an explicit, non-empty list of ready documents (404 for unknown ids, 409 listing documents not ready), `POST /chats/{id}/messages`, and `GET /chats/{id}/messages`. A follow-up is rewritten into a standalone query, returned as `interpreted_as`. Retrieval is one SQL statement: an exact vector scan and full-text ranking fused by reciprocal rank, with a per-document quota so a multi-document chat sees every document. A relevance gate refuses with `no_evidence` before any answer call. Each citation quote is checked against its source chunk and takes its page from where the quote sits; unverified citations are dropped, and a refusal says why (`no_evidence`, `model_declined` or `unverified`). Each turn's `usage` is read from `llm_calls`. A chat whose documents were deleted keeps its history and refuses new questions with 409 `documents_deleted`.
 
 Not built yet (the functions raise `NotImplementedError`):
 
-- Chat, metrics, and evals.
+- Metrics and evals.
 
 Known limits:
 
+- The relevance gate's similarity threshold is 0.20 for the fake embedder, set from the sample set (answerable questions scored 0.205 to 0.252, absent topics 0.08 to 0.19). The OpenAI threshold (0.25) is a starting value until the evals calibrate it.
 - Insights read a page prefix that fits the prompt budget (240,000 characters, roughly 60,000 tokens). Longer documents report partial coverage; map-reduce over the rest is not built.
 - A key fact is checked only for its quote being on the cited page, not for its value appearing in the quote.
 - The OpenAI backends are tested against canned HTTP responses only. They have not run against the live API yet.

@@ -129,10 +129,13 @@ CREATE TABLE IF NOT EXISTS chats (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- The document scope is fixed when the chat starts.
+-- The document scope is fixed when the chat starts. No FK to documents: a deleted
+-- document stays in the scope, so its chats refuse new questions instead of quietly
+-- answering from fewer documents. filename is a snapshot for that refusal.
 CREATE TABLE IF NOT EXISTS chat_documents (
   chat_id     uuid NOT NULL REFERENCES chats (id) ON DELETE CASCADE,
-  document_id uuid NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
+  document_id uuid NOT NULL,
+  filename    text NOT NULL,
   PRIMARY KEY (chat_id, document_id)
 );
 
@@ -195,3 +198,8 @@ BEGIN
 END $$;
 
 ALTER TABLE document_insights ADD COLUMN IF NOT EXISTS error_message text;
+
+ALTER TABLE chat_documents DROP CONSTRAINT IF EXISTS chat_documents_document_id_fkey;
+ALTER TABLE chat_documents ADD COLUMN IF NOT EXISTS filename text;
+UPDATE chat_documents cd SET filename = d.filename FROM documents d WHERE cd.filename IS NULL AND d.id = cd.document_id;
+ALTER TABLE chat_documents ALTER COLUMN filename SET NOT NULL;

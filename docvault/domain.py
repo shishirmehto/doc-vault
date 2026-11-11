@@ -98,7 +98,7 @@ class ErrorCode(StrEnum):
     PAGE_NOT_FOUND = "page_not_found"
     CHAT_NOT_FOUND = "chat_not_found"
     DOCUMENTS_NOT_READY = "documents_not_ready"
-    NO_READY_DOCUMENTS = "no_ready_documents"
+    DOCUMENTS_DELETED = "documents_deleted"
     NOTHING_TO_RETRY = "nothing_to_retry"
     INVALID_CURSOR = "invalid_cursor"
 
@@ -335,11 +335,23 @@ class Answered:
     text: str           # markers [1]..[n] index citations, 1-based
     citations: tuple[Citation, *tuple[Citation, ...]]   # at least one, by construction
 
+    @property
+    def outcome(self) -> TurnOutcome:
+        return TurnOutcome.ANSWERED
+
 
 @dataclass(frozen=True, slots=True)
 class NotFound:
     reason: Literal[TurnOutcome.NO_EVIDENCE, TurnOutcome.MODEL_DECLINED, TurnOutcome.UNVERIFIED]
     text: str           # user-facing: what was searched and what is missing
+
+    @property
+    def outcome(self) -> TurnOutcome:
+        return self.reason
+
+    @property
+    def citations(self) -> tuple[Citation, ...]:
+        return ()
 
 
 type Answer = Answered | NotFound
