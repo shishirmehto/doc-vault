@@ -15,6 +15,7 @@
 --   chats, chat_documents, chat_turns    -> chat.py
 --   llm_calls                            -> ai.py
 --   (metrics.py reads all, writes none)
+--   *_notify triggers (live events)      -> NOTIFY documents, heard by events.py
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -186,6 +187,54 @@ CREATE TABLE IF NOT EXISTS llm_calls (
 CREATE INDEX IF NOT EXISTS llm_calls_window ON llm_calls (at);
 CREATE INDEX IF NOT EXISTS llm_calls_turn   ON llm_calls (turn_id) WHERE turn_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS llm_calls_doc    ON llm_calls (document_id) WHERE document_id IS NOT NULL;
+
+-- ------------------------------------------------------------------ live events
+-- GET /events/documents (events.py) listens on channel 'documents'. Each payload is the id of a document whose
+-- GET /documents/{id} body may have changed. Postgres delivers a NOTIFY when its transaction commits and never
+-- after a rollback, and delivers identical payloads from one transaction once, so a checkpoint that writes many
+-- rows of a document sends its id once.
+
+CREATE OR REPLACE FUNCTION notify_document() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM pg_notify('documents', OLD.id::text);
+  ELSE
+    PERFORM pg_notify('documents', NEW.id::text);
+  END IF;
+  RETURN NULL;
+END $$;
+
+CREATE OR REPLACE FUNCTION notify_document_ref() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM pg_notify('documents', OLD.document_id::text);
+  ELSE
+    PERFORM pg_notify('documents', NEW.document_id::text);
+  END IF;
+  RETURN NULL;
+END $$;
+
+CREATE OR REPLACE FUNCTION notify_changed_chunks() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM pg_notify('documents', document_id::text) FROM (SELECT DISTINCT document_id FROM changed) AS docs;
+  RETURN NULL;
+END $$;
+
+CREATE OR REPLACE TRIGGER documents_notify AFTER INSERT OR UPDATE OR DELETE ON documents
+  FOR EACH ROW EXECUTE FUNCTION notify_document();
+
+CREATE OR REPLACE TRIGGER document_insights_notify AFTER INSERT OR UPDATE OR DELETE ON document_insights
+  FOR EACH ROW EXECUTE FUNCTION notify_document_ref();
+
+-- Embedding progress. A trigger with a transition table takes one event and no column list, so UPDATE only.
+-- Chunk inserts and cascade deletes always share a transaction with a documents write, which notifies.
+CREATE OR REPLACE TRIGGER chunks_notify AFTER UPDATE ON chunks REFERENCING NEW TABLE AS changed
+  FOR EACH STATEMENT EXECUTE FUNCTION notify_changed_chunks();
+
+-- processing_ms reads the closed embed row, and run_index commits 'ready' before that row closes. Without this
+-- the last event for a document could carry processing_ms null for good.
+CREATE OR REPLACE TRIGGER step_runs_notify AFTER UPDATE ON step_runs
+  FOR EACH ROW WHEN (NEW.step = 'embed' AND NEW.outcome = 'ok') EXECUTE FUNCTION notify_document_ref();
 
 -- ------------------------------------------------------------------ upgrades
 -- For databases created by an earlier version of this file. The whole file runs
