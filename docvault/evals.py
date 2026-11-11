@@ -11,6 +11,8 @@ through chat.start and chat.ask. Each number is scored apart, so it shows where 
   citation accuracy    a citation of the expected document has the expected page and quotes the fact
   not-found accuracy   an out-of-scope question comes back not_found
   key-fact grounding   insights facts kept / (kept + dropped), and the planted facts they recall
+  suggestions answered every suggestion under a case's last turn, asked in that chat after the case, comes back
+                       answered (a click on a suggestion should never end in a refusal)
   cost and latency     metrics.processing_stats over the run: llm_calls by purpose and model, chat_turns p95
 
 --calibrate prints each turn's best vector similarity and all-terms match instead, then the relevance-gate
@@ -192,10 +194,21 @@ def _ratio(flags: Iterable[bool]) -> Ratio:
 
 
 @dataclass(frozen=True, slots=True)
+class Suggested:
+    """One suggestion asked as a question. Kept out of Report.turns: it has no expected facts, so it would count
+    as out of scope there and move the gate fit."""
+
+    case: str
+    question: str
+    outcome: TurnOutcome
+
+
+@dataclass(frozen=True, slots=True)
 class Report:
     setup: str
     threshold: float            # the gate threshold the run used
     turns: tuple[TurnResult, ...]
+    suggested: tuple[Suggested, ...]
     grounding: Ratio            # insights key facts kept / (kept + dropped)
     recall: Ratio               # planted facts found in a kept key fact's quote, same document and page
     spend: tuple[metrics.AIUsage, ...]
@@ -212,6 +225,10 @@ class Report:
     @property
     def not_found(self) -> Ratio:
         return _ratio(t.outcome is not TurnOutcome.ANSWERED for t in self.turns if not t.answerable)
+
+    @property
+    def suggestions(self) -> Ratio:
+        return _ratio(s.outcome is TurnOutcome.ANSWERED for s in self.suggested)
 
 
 # ------------------------------------------------------------------ the gate fit
@@ -328,7 +345,7 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
 
         answers, queries = _SourceTap(ctx.ai.chat), _QueryTap(ctx.ai.embedder)
         asking = dataclasses.replace(ctx, ai=dataclasses.replace(ctx.ai, chat=answers, embedder=queries))
-        turns = []
+        turns, suggested = [], []
         for case in case_set.cases:
             started = chat.start(pool, [ids[name] for name in case.scope], title=case.id)
             for question in case.questions:
@@ -345,13 +362,16 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
                     tuple(Scored(fact, retrieval_miss(fact, answers.sources), is_cited(fact, turn.answer.citations))
                           for fact in question.expected),
                     tuple(candidates)))
+            # Asked after the case's own turns, so they change no condense call the case is scored on.
+            suggested += [Suggested(case.id, ask, chat.ask(asking, started.id, ask).answer.outcome)
+                          for ask in turn.suggestions]
 
         grounding, recall = _insights(pool, ids, case_set.planted)
         stats = metrics.processing_stats(pool, timedelta(days=1))   # the database holds this run only
         chat_models = ", ".join(f"{tier} {model}" for tier, model in ctx.ai.chat.models.items())
         setup = (f"chat {ctx.ai.chat.provider} ({chat_models}); embeddings {ctx.ai.embedder.provider} "
                  f"{ctx.ai.embed_model}")
-        return Report(setup, ctx.ai.min_similarity, tuple(turns), grounding, recall,
+        return Report(setup, ctx.ai.min_similarity, tuple(turns), tuple(suggested), grounding, recall,
                       tuple(stats.ai.by_purpose_and_model), stats.chat.latency_ms.p95)
 
 
@@ -390,6 +410,7 @@ def render(report: Report, command: str) -> str:
         f"| Not-found accuracy (out-of-scope turns not answered) | {report.not_found} |",
         f"| Key-fact grounding (insights facts kept / kept + dropped) | {report.grounding} |",
         f"| Key-fact recall (planted facts in a kept key fact) | {report.recall} |",
+        f"| Suggestions answered (each one under a case's last turn, asked in that chat) | {report.suggestions} |",
         f"| Gate at {report.threshold}: answerable passed, out-of-scope refused | {_gate_at(turns, report.threshold)} |",
         f"| Best gate threshold on this set | {_fit_line(fit_gate(turns))} |",
         f"| p95 turn latency | {report.turn_p95_ms} ms |",
@@ -406,6 +427,10 @@ def render(report: Report, command: str) -> str:
           f"{_score(t, [f'{s.fact.id}: {s.retrieval}' for s in t.scored if s.retrieval])} | "
           f"{_score(t, [f'missed {s.fact.id}' for s in t.scored if not s.cited])} |" for t in turns),
     ]
+    missed = [s for s in report.suggested if s.outcome is not TurnOutcome.ANSWERED]
+    lines += ["", "| Case | Suggestion not answered | Outcome |", "|---|---|---|",
+              *(f"| {s.case} | {_cell(s.question)} | {s.outcome} |" for s in missed)] if missed else [
+        "", f"All {len(report.suggested)} suggestions came back answered."]
     return "\n".join(lines)
 
 

@@ -587,7 +587,7 @@ def _fake_answer(prompt: Prompt) -> AnswerDraft:
     """Per document, the segment sharing the most content words with the standalone query. Ties go to the
     segment with fewer distinct content words (the tighter match), then the earlier source, then the earlier
     segment. Every document whose best segment shares at least two words is cited, with that segment as both
-    the sentence and the quote; with none, the draft is unsupported."""
+    the sentence and the quote; with none, the draft is unsupported. Follow-ups come from _fake_follow_ups."""
     query = set(_tokens(prompt.inputs["standalone"]))
     sources: tuple[Source, ...] = prompt.inputs["sources"]
     best: dict[DocumentId, tuple[tuple[int, int, int, int], Source, str]] = {}
@@ -598,12 +598,25 @@ def _fake_answer(prompt: Prompt) -> AnswerDraft:
             if source.doc.id not in best or rank < best[source.doc.id][0]:
                 best[source.doc.id] = (rank, source, segment)
     cited = sorted((rank, source, segment) for rank, source, segment in best.values() if -rank[0] >= 2)
+    follow_ups = _fake_follow_ups(sources, query)
     if not cited:
-        return AnswerDraft(supported=False, answer="The selected documents do not say.", evidence=[])
+        return AnswerDraft(supported=False, answer="The selected documents do not say.", evidence=[],
+                           follow_ups=follow_ups)
     return AnswerDraft(
         supported=True,
         answer=" ".join(f"{collapse_whitespace(segment)} [{source.label}]" for _, source, segment in cited),
-        evidence=[EvidenceDraft(source=source.label, quote=segment) for _, source, segment in cited])
+        evidence=[EvidenceDraft(source=source.label, quote=segment) for _, source, segment in cited],
+        follow_ups=follow_ups)
+
+
+def _fake_follow_ups(sources: Sequence[Source], query: set[str]) -> list[str]:
+    """"What is the <label>?" for the first three labels of label-and-value passages in the sources, in source
+    order. A label needs two content words, because _fake_answer cites only a segment sharing two words with
+    the question, and a label whose words the query already holds would ask the same question again."""
+    labels = (fact.label for source in sources for segment in _segments(source.text)
+              if (fact := _key_fact(0, segment)) and len(words := set(_tokens(fact.label))) >= 2
+              and not words <= query)
+    return [f"What is the {label}?" for label in list(dict.fromkeys(labels))[:3]]
 
 
 class FakeChat:

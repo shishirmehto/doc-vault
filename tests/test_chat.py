@@ -249,7 +249,7 @@ def source(label: str, doc: DocRef, text: str, page_map: PageMap, chunk: int) ->
 
 def draft(answer: str, *evidence: tuple[str, str], supported: bool = True) -> AnswerDraft:
     return AnswerDraft(supported=supported, answer=answer,
-                       evidence=[EvidenceDraft(source=label, quote=quote) for label, quote in evidence])
+                       evidence=[EvidenceDraft(source=label, quote=quote) for label, quote in evidence], follow_ups=[])
 
 
 def limits() -> list[Source]:

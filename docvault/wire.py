@@ -214,6 +214,7 @@ class TurnOut(BaseModel):
     reason: Literal["no_evidence", "model_declined", "unverified"] | None   # only when not_found
     answer: str
     citations: list[CitationOut]
+    suggestions: list[str]             # follow-up questions to offer, at most 3, each ending in "?"
     usage: UsageOut
     latency_ms: int
     created_at: datetime
@@ -382,6 +383,7 @@ def turn_out(turn: Turn) -> TurnOut:
                                page_label=pages.page_label(c.page_basis, c.page), quote=c.quote, chunk_id=c.chunk_id,
                                page_url=_page_url(c.document_id, c.page))
                    for ref, c in enumerate(answer.citations, start=1)],
+        suggestions=list(turn.suggestions),
         usage=UsageOut.model_validate(turn.usage, from_attributes=True),
         latency_ms=round((turn.finished_at - turn.started_at).total_seconds() * 1000), created_at=turn.started_at)
 

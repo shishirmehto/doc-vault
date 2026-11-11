@@ -26,7 +26,7 @@ from .pages import page_label
 type Tier = Literal["main", "small"]
 
 CONDENSE_VERSION = "condense-v1"
-ANSWER_VERSION = "answer-v1"
+ANSWER_VERSION = "answer-v2"
 INSIGHTS_VERSION = "insights-v1"
 
 DocumentType = Literal["policy", "quote", "endorsement", "certificate", "schedule", "contract",
@@ -73,6 +73,10 @@ class AnswerDraft(BaseModel):
                                     "do not cover.")
     evidence: list[EvidenceDraft] = Field(description="One item for every marker used in answer. Empty when "
                                                       "supported is false.")
+    # After evidence, so the answer streams first. No max_length: a fourth question or a missing "?" must not cost
+    # a repair call. chat.suggestions keeps at most three well-formed ones.
+    follow_ups: list[str] = Field(description="Up to 3 short questions the user could ask next that these sources "
+                                              "answer, each ending in '?'. Empty when there are none.")
 
 
 class KeyFactDraft(BaseModel):
@@ -149,6 +153,8 @@ def _conversation(history: Sequence[Turn]) -> str:
 # - Answer the part the sources cover and name the part they do not, so a missing deductible does not hide the limit.
 # - supported: false instead of a guess: a refusal costs the user a follow-up question, a guess can cost a claim.
 # - The conversation only says what the user means. An earlier answer is not a source, so facts come from <source>.
+# - follow_ups are offered as one-click questions under the answer. They must be questions these sources answer,
+#   so a click leads to a cited answer rather than a refusal, and they must not repeat the question just asked.
 ANSWER_SYSTEM = """\
 You answer questions about documents in a user's vault. The users are insurance brokers and their clients. \
 A wrong limit, date or exclusion causes real harm, so precision matters more than being helpful.
@@ -171,7 +177,9 @@ documents do not cover, and leave evidence empty. Do not guess.
 when the text says so.
 9. Lead with the direct answer (yes, no, the figure), then the conditions. Plain text, no markdown. At most 120 \
 words unless the user asks for detail.
-10. When an "Interpreted as" line follows the question, answer the question as that line reads it."""
+10. When an "Interpreted as" line follows the question, answer the question as that line reads it.
+11. In follow_ups, suggest up to 3 short questions the user could ask next, each ending in "?". Suggest only \
+questions that the text inside <source> tags answers, and never the question just asked."""
 
 
 def answer(question: str, standalone: str, history: Sequence[Turn], sources: Sequence[Source]) -> Prompt:

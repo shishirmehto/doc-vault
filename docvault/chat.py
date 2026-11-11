@@ -4,9 +4,9 @@ Owns chats, chat_documents and chat_turns. ask() is the whole RAG path in
 one function a reader can follow top to bottom:
 
   question -> condense with history -> retrieve (hybrid, scoped, per-document quota)
-           -> gate -> answer prompt -> ground (verify quotes, resolve pages) -> persist turn
+           -> gate -> answer prompt -> ground (verify quotes, resolve pages) -> suggest -> persist turn
 
-Pure decisions (select_sources, gate, ground) are separate functions with
+Pure decisions (select_sources, gate, ground, suggestions) are separate functions with
 no I/O, so the grounding and refusal rules are unit-tested without a model
 or a database. A caller that shows progress (the stream route) passes sinks
 to ask(); the pipeline is the same with or without them.
@@ -14,6 +14,7 @@ to ask(); the pipeline is the same with or without them.
 
 from __future__ import annotations
 
+import itertools
 import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
@@ -60,6 +61,8 @@ type Stage = Literal["condensing", "searching", "answering"]
 
 RRF_K = 60
 CANDIDATES = 50
+MAX_SUGGESTIONS = 3
+MAX_SUGGESTION_CHARS = 160
 UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify an answer against their text, "
                    "so I am not giving one.")
 
@@ -170,15 +173,19 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
         draft = ctx.ai.complete(prompts.answer(question, standalone, past, sources), AnswerDraft, owner=owner,
                                 stream=None if on_text is None else _ProvisionalAnswer(on_text, on_reset or _ignore))
         answer = ground(draft, sources)
+        suggested = suggestions(draft.follow_ups, question)
     else:
         answer = NotFound(TurnOutcome.NO_EVIDENCE, prompts.no_evidence_text(documents))
+        with ctx.db.connection() as conn:
+            suggested = fact_suggestions(_key_fact_labels(conn, documents), question)
 
     with ctx.db.connection() as conn:
         conn.execute(
             "INSERT INTO chat_turns (id, chat_id, question, standalone_query, outcome, answer, citations,"
-            " started_at, finished_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            " suggestions, started_at, finished_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (turn_id, chat_id, question, standalone, answer.outcome, answer.text,
-             Jsonb([_snapshot(citation) for citation in answer.citations]), started, datetime.now(UTC)))
+             Jsonb([_snapshot(citation) for citation in answer.citations]), Jsonb(list(suggested)), started,
+             datetime.now(UTC)))
         return _row_to_turn(conn.execute(_TURN_SQL + "WHERE t.id = %s GROUP BY t.id", (turn_id,)).fetchone())
 
 
@@ -225,8 +232,8 @@ def history(db: Db, chat_id: ChatId, *, limit: int = 50) -> list[Turn]:
 # Usage is read back from the ledger rather than kept on the turn, so it counts every attempt the gateway made.
 # count(cost_usd) skips NULLs: when it falls short of count(id), some call was unpriced and the total is unknown.
 _TURN_SQL = """
-SELECT t.id, t.chat_id, t.question, t.standalone_query, t.outcome, t.answer, t.citations, t.started_at,
-       t.finished_at, count(l.id) AS calls, coalesce(sum(l.input_tokens), 0) AS input_tokens,
+SELECT t.id, t.chat_id, t.question, t.standalone_query, t.outcome, t.answer, t.citations, t.suggestions,
+       t.started_at, t.finished_at, count(l.id) AS calls, coalesce(sum(l.input_tokens), 0) AS input_tokens,
        coalesce(sum(l.output_tokens), 0) AS output_tokens,
        CASE WHEN count(l.cost_usd) = count(l.id) THEN coalesce(sum(l.cost_usd), 0) END AS cost_usd
 FROM chat_turns t LEFT JOIN llm_calls l ON l.turn_id = t.id
@@ -296,7 +303,16 @@ def _row_to_turn(row: Mapping[str, Any]) -> Turn:
     return Turn(id=TurnId(row["id"]), chat_id=ChatId(row["chat_id"]), question=row["question"],
                 standalone_query=row["standalone_query"], answer=answer, started_at=row["started_at"],
                 finished_at=row["finished_at"],
-                usage=Usage(row["calls"], row["input_tokens"], row["output_tokens"], row["cost_usd"]))
+                usage=Usage(row["calls"], row["input_tokens"], row["output_tokens"], row["cost_usd"]),
+                suggestions=tuple(row["suggestions"]))
+
+
+def _key_fact_labels(conn: Connection, documents: Sequence[DocRef]) -> list[list[str]]:
+    """The labels of each document's verified key facts, in scope order. A document without ready insights has none."""
+    rows = conn.execute("SELECT document_id, body FROM document_insights WHERE document_id = ANY(%s)"
+                        " AND status = 'ready'", ([doc.id for doc in documents],)).fetchall()
+    labels = {row["document_id"]: [fact["label"] for fact in row["body"]["key_facts"]] for row in rows}
+    return [labels.get(doc.id, []) for doc in documents]
 
 
 def _snapshot(citation: Citation) -> dict[str, object]:
@@ -392,6 +408,44 @@ def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int)
     chosen = sorted(at for _, at in sorted(rounds)[:k])
     return [Source(f"S{n}", c.chunk_id, c.doc, c.text, c.page_map, c.similarity, c.rrf)
             for n, c in enumerate((ranked[at] for at in chosen), start=1)]
+
+
+# ------------------------------------------------------------------ suggestions
+
+
+def suggestions(follow_ups: Sequence[str], question: str) -> tuple[str, ...]:
+    """The follow-up questions worth offering under a turn. Pure.
+
+    Keeps, in order, at most MAX_SUGGESTIONS questions that end in "?" and are
+    at most MAX_SUGGESTION_CHARS long. Blanks, repeats and the question just
+    asked (compared without case or extra spaces) are dropped.
+    """
+    seen = {_same_question(question)}
+    kept: list[str] = []
+    for raw in follow_ups:
+        text = " ".join(raw.split())
+        if text.endswith("?") and len(text) <= MAX_SUGGESTION_CHARS and _same_question(text) not in seen:
+            seen.add(_same_question(text))
+            kept.append(text)
+    return tuple(kept[:MAX_SUGGESTIONS])
+
+
+def fact_suggestions(labels: Sequence[Sequence[str]], question: str) -> tuple[str, ...]:
+    """Suggestions for a turn the gate refused, so no model wrote any. Pure and deterministic.
+
+    "What is the <label>?" from each document's verified key-fact labels, taken
+    round by round (every document's first label, then every second one), so a
+    multi-document chat suggests something from each. A label is answerable by
+    construction: its quote was found on the page it cites. Labels of one word
+    ("Insurer") are skipped, because so short a question also matches every
+    passage that mentions the word.
+    """
+    rounds = itertools.zip_longest(*([label for label in doc if len(label.split()) >= 2] for doc in labels))
+    return suggestions([f"What is the {label}?" for row in rounds for label in row if label], question)
+
+
+def _same_question(text: str) -> str:
+    return " ".join(text.split()).casefold()
 
 
 # ------------------------------------------------------------------ grounding

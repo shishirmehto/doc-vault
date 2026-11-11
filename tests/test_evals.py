@@ -20,9 +20,10 @@ def test_the_case_set_scores_retrieval_citations_and_refusals_apart():
     assert report.citation == Ratio(7, 34)
     assert report.not_found == Ratio(15, 16)
     assert (report.grounding, report.recall) == (Ratio(31, 31), Ratio(12, 28))
+    assert report.suggestions == Ratio(108, 108)    # three under each of the 36 cases' last turns
     assert [(spend.purpose, spend.model, spend.calls) for spend in report.spend] == [
-        (Purpose.ANSWER, "fake-chat", 19), (Purpose.CONDENSE, "fake-chat", 8), (Purpose.EMBED_CHUNKS, "fake-hash", 3),
-        (Purpose.EMBED_QUERY, "fake-hash", 44), (Purpose.INSIGHTS, "fake-chat", 3)]
+        (Purpose.ANSWER, "fake-chat", 127), (Purpose.CONDENSE, "fake-chat", 116),
+        (Purpose.EMBED_CHUNKS, "fake-hash", 3), (Purpose.EMBED_QUERY, "fake-hash", 152), (Purpose.INSIGHTS, "fake-chat", 3)]
     explicit = next(turn for turn in report.turns if turn.case == "deductible-differ-explicit")
     assert [(scored.fact.id, scored.retrieval, scored.cited) for scored in explicit.scored] == [
         ("policy-deductible", None, False), ("quote-deductible", None, True)]

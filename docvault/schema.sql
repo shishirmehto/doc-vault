@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS chat_turns (
   outcome          text NOT NULL,
   answer           text NOT NULL,
   citations        jsonb NOT NULL DEFAULT '[]',
+  suggestions      jsonb NOT NULL DEFAULT '[]',     -- follow-up questions offered under the answer, at most 3
   started_at       timestamptz NOT NULL,
   finished_at      timestamptz NOT NULL,
   CONSTRAINT chat_turns_outcome_values CHECK (outcome IN ('answered', 'no_evidence', 'model_declined', 'unverified')),
@@ -208,3 +209,5 @@ UPDATE chat_documents cd SET filename = d.filename FROM documents d WHERE cd.fil
 ALTER TABLE chat_documents ALTER COLUMN filename SET NOT NULL;
 
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS requeued_at timestamptz;
+
+ALTER TABLE chat_turns ADD COLUMN IF NOT EXISTS suggestions jsonb NOT NULL DEFAULT '[]';
