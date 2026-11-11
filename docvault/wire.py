@@ -39,6 +39,9 @@ from .domain import (
     Queued,
     Ready,
     Step,
+    Summary,
+    SummaryLength,
+    SummaryTone,
     Turn,
     TurnOutcome,
 )
@@ -285,6 +288,47 @@ class ComparisonPage(BaseModel):
     next_cursor: str | None
 
 
+# ------------------------------------------------------------------ summary
+
+
+class SummaryIn(BaseModel):
+    length: SummaryLength = Field(SummaryLength.STANDARD, description="brief (about 60 words), standard (about 150) "
+                                                                      "or detailed (about 300).")
+    focus: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200), NoNul] | None = Field(
+        None, description='What the reader cares about, e.g. "deductibles"; the summary leads with it. At most 200 '
+                          "characters after trimming, and compared lowercase with single spaces, so two ways of "
+                          "writing it get the same summary. Absent or blank: what a broker checks first.")
+    tone: SummaryTone = Field(SummaryTone.PLAIN, description="plain (short sentences for a broker), formal (a file "
+                                                             "note) or client (written for the insured client, "
+                                                             "avoiding broker jargon).")
+
+
+class SummarySourceOut(BaseModel):
+    page: int
+    page_label: str                    # "p. 3" or "section 3"
+    quote: str                         # the source text on that page, whitespace collapsed
+
+
+class SummaryOut(BaseModel):
+    id: UUID
+    document_id: UUID
+    length: SummaryLength
+    focus: str | None                  # as compared: lowercase, single spaces; null for none
+    tone: SummaryTone
+    text: str
+    sources: list[SummarySourceOut]    # may be empty: the summary stands without them
+    dropped_sources: int               # sources left out because the quote was not on the page they cite
+    model: str
+    prompt_version: str
+    cached: bool                       # true: a stored summary, served again with no model call
+    created_at: datetime
+
+
+class SummaryPage(BaseModel):
+    items: list[SummaryOut]
+    next_cursor: str | None
+
+
 # ------------------------------------------------------------------ metrics
 
 
@@ -469,6 +513,16 @@ def _cell_out(doc: ComparedDocument, cell: Cell | None) -> CellOut:
         return CellOut(document_id=doc.id, value=None, page=None, page_label=None, quote=None)
     return CellOut(document_id=doc.id, value=cell.value, page=cell.page,
                    page_label=pages.page_label(doc.page_basis, cell.page), quote=cell.quote)
+
+
+def summary_out(summary: Summary) -> SummaryOut:
+    options = summary.options
+    return SummaryOut(
+        id=summary.id, document_id=summary.document_id, length=options.length, focus=options.focus, tone=options.tone,
+        text=summary.text, dropped_sources=summary.dropped_sources, model=summary.model,
+        prompt_version=summary.prompt_version, cached=summary.cached, created_at=summary.created_at,
+        sources=[SummarySourceOut(page=source.page, page_label=pages.page_label(summary.page_basis, source.page),
+                                  quote=source.quote) for source in summary.sources])
 
 
 def _page_url(doc_id: UUID, page: int) -> str:

@@ -253,12 +253,17 @@ CHAT_COMPLETION = {
 }
 
 
-def openai_client(*responses: httpx2.Response | Exception, sent: list[tuple[str, dict]] | None = None) -> OpenAI:
+def openai_client(*responses: httpx2.Response | Exception, sent: list[tuple[str, dict]] | None = None,
+                  timeouts: list[float] | None = None) -> OpenAI:
+    """A client whose transport answers with `responses` in order, keeping each request's path and JSON body in
+    `sent` and its read timeout, which the SDK sends outside the body, in `timeouts`."""
     queue = list(responses)
 
     def handle(request: httpx2.Request) -> httpx2.Response:
         if sent is not None:
             sent.append((request.url.path, json.loads(request.content)))
+        if timeouts is not None:
+            timeouts.append(request.extensions["timeout"]["read"])
         response = queue.pop(0)
         if isinstance(response, Exception):
             raise response

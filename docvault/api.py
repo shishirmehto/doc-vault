@@ -25,10 +25,22 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.types import Receive, Scope, Send
 
-from . import chat, compare, documents, events, metrics, wire
+from . import chat, compare, documents, events, metrics, summaries, wire
 from .config import load_settings
 from .context import Ctx, build_ctx, too_large
-from .domain import ChatId, ComparisonId, Created, DocStatus, DocumentId, ErrorCode, Existing, Failure, Turn, VaultError
+from .domain import (
+    ChatId,
+    ComparisonId,
+    Created,
+    DocStatus,
+    DocumentId,
+    ErrorCode,
+    Existing,
+    Failure,
+    SummaryOptions,
+    Turn,
+    VaultError,
+)
 from .ratelimit import Action
 from .tasks import CeleryJobs
 
@@ -409,6 +421,29 @@ def list_comparisons(ctx: Deps, limit: Annotated[int, Query(ge=1, le=100)] = 20,
 def get_comparison(comparison_id: UUID, ctx: Deps) -> wire.ComparisonOut:
     """One stored comparison. A document deleted since keeps its column, its cells and their page labels."""
     return wire.comparison_out(compare.get(ctx.db, ComparisonId(comparison_id)))
+
+
+@router.post("/documents/{doc_id}/summaries", status_code=201, response_model=wire.SummaryOut,
+             dependencies=[rate_limited("ask")],
+             responses={200: {"model": wire.SummaryOut,
+                              "description": "Summarised before with the same options; the stored summary, cached"},
+                        **errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.DOCUMENTS_NOT_READY, ErrorCode.INVALID_REQUEST,
+                                 ErrorCode.RATE_LIMITED, ErrorCode.AI_UNAVAILABLE, ErrorCode.AI_BAD_OUTPUT)})
+def create_summary(doc_id: UUID, body: wire.SummaryIn, response: Response, ctx: Deps) -> wire.SummaryOut:
+    """Summarise a ready document at the length, focus and tone asked for, each source checked on its page."""
+    summary = summaries.create(ctx, DocumentId(doc_id), SummaryOptions.of(body.length, body.focus, body.tone))
+    if summary.cached:
+        response.status_code = 200
+    return wire.summary_out(summary)
+
+
+@router.get("/documents/{doc_id}/summaries", response_model=wire.SummaryPage,
+            responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
+def list_summaries(doc_id: UUID, ctx: Deps, limit: Annotated[int, Query(ge=1, le=100)] = 20,
+                   cursor: str | None = None) -> wire.SummaryPage:
+    """A document's stored summaries, newest first, a page at a time."""
+    items, next_cursor = summaries.list_summaries(ctx.db, DocumentId(doc_id), limit=limit, cursor=cursor)
+    return wire.SummaryPage(items=[wire.summary_out(summary) for summary in items], next_cursor=next_cursor)
 
 
 @router.get("/metrics/documents", response_model=wire.DocumentMetricsOut)

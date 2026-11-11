@@ -3,10 +3,15 @@ real Postgres."""
 
 from __future__ import annotations
 
+import dataclasses
+from uuid import UUID, uuid4
+
+import httpx2
 import pytest
 
 from docvault import documents, pages, prompts, summaries
 from docvault.ai import FakeChat
+from docvault.api import app
 from docvault.domain import (
     ErrorCode,
     Failure,
@@ -20,9 +25,12 @@ from docvault.domain import (
     VaultError,
 )
 from docvault.prompts import Prompt, SummaryDraft, SummarySourceDraft
+from docvault.ratelimit import RateLimiter
 
-from .conftest import POLICY, SAMPLES, scalar
-from .test_insights import indexed, provider_down, with_chat
+from .conftest import ENDORSEMENT, POLICY, SAMPLES, scalar
+from .test_ai import openai_chat, openai_client
+from .test_compare import completion
+from .test_insights import indexed, post, provider_down, with_chat
 
 BRIEF, STANDARD = SummaryLength.BRIEF, SummaryLength.STANDARD
 PLAIN, FORMAL, CLIENT = SummaryTone.PLAIN, SummaryTone.FORMAL, SummaryTone.CLIENT
@@ -149,11 +157,10 @@ def test_ground_reads_sources_until_it_keeps_six():
 # ------------------------------------------------------------------ the cache and the ledger
 
 
-def ledger(ctx) -> list[tuple]:
+def ledger(ctx, columns: str = "purpose, document_id, turn_id, comparison_id, summary_id, ok") -> list[tuple]:
     with ctx.db.connection() as conn:
         return [tuple(row.values()) for row in conn.execute(
-            "SELECT purpose, document_id, turn_id, comparison_id, summary_id, ok FROM llm_calls"
-            " WHERE purpose = 'summary' ORDER BY id")]
+            f"SELECT {columns} FROM llm_calls WHERE purpose = 'summary' ORDER BY id")]
 
 
 def test_the_same_options_are_served_from_the_store_without_a_model_call(ctx):
@@ -185,7 +192,7 @@ def test_a_summary_stored_by_an_identical_request_during_the_call_is_returned_un
     raced = summaries.create(with_chat(ctx, RacingChat()), policy, options())
 
     assert (raced.id, raced.text, raced.cached) == (stored[0].id, stored[0].text, False)
-    assert [row[4] == stored[0].id for row in ledger(ctx)] == [True, False]
+    assert [summary_id == stored[0].id for summary_id, in ledger(ctx, "summary_id")] == [True, False]
     assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 1
 
 
@@ -231,3 +238,137 @@ def test_a_document_deleted_during_the_model_call_is_not_found_and_nothing_is_st
         Failure(ErrorCode.DOCUMENT_NOT_FOUND, "1 of 1 documents do not exist.", False), {"missing": [str(policy)]})
     assert [(purpose, ok) for purpose, *_, ok in ledger(ctx)] == [("summary", True)]
     assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 0
+
+
+# ------------------------------------------------------------------ over HTTP
+
+
+def summarise(client, doc_id: UUID, **body: object):
+    return client.post(f"/documents/{doc_id}/summaries", json=body)
+
+
+def test_a_broker_summarises_the_policy_gets_the_stored_summary_back_and_lists_both(client, ctx):
+    policy = indexed(ctx, SAMPLES / POLICY)
+
+    created = summarise(client, policy, length="brief", focus="Deductibles")
+    again = summarise(client, policy, length="brief", focus="  DEDUCTIBLES ")
+    other = summarise(client, policy, length="brief", tone="client")
+    body = created.json()
+
+    assert (created.status_code, again.status_code, other.status_code) == (201, 200, 201)
+    assert {key: value for key, value in body.items() if key not in ("id", "created_at")} == {
+        "document_id": str(policy), "length": "brief", "focus": "deductibles", "tone": "plain",
+        "text": f"{OPENING} DEDUCTIBLE Property Damage Deductible $2,500 per occurrence",
+        "sources": [{"page": 2, "page_label": "p. 2", "quote": "DEDUCTIBLE"},
+                    {"page": 2, "page_label": "p. 2", "quote": "Property Damage Deductible $2,500 per occurrence"}],
+        "dropped_sources": 0, "model": "fake-chat", "prompt_version": "summary-v1", "cached": False}
+    assert again.json() == {**body, "cached": True}
+    assert (other.json()["text"], other.json()["cached"]) == (f"Here is what {POLICY} means for you. {COVER}", False)
+    assert ledger(ctx, "summary_id") == [(UUID(body["id"]),), (UUID(other.json()["id"]),)]
+
+    with ctx.db.connection() as conn:   # a minute apart, so the order does not rest on clock resolution
+        conn.execute("UPDATE document_summaries SET created_at = now() - interval '1 minute' WHERE id = %s",
+                     (body["id"],))
+    newest = client.get(f"/documents/{policy}/summaries", params={"limit": 1}).json()
+    rest = client.get(f"/documents/{policy}/summaries", params={"limit": 1, "cursor": newest["next_cursor"]}).json()
+    bad_cursor = client.get(f"/documents/{policy}/summaries", params={"cursor": "nope"})
+
+    assert newest["items"] == [{**other.json(), "cached": True}]
+    assert (rest["items"], rest["next_cursor"]) == ([{**body, "cached": True,
+                                                      "created_at": rest["items"][0]["created_at"]}], None)
+    assert (bad_cursor.status_code, bad_cursor.json()["error"]["code"]) == (400, "invalid_cursor")
+
+
+def test_a_summary_needs_valid_options_and_a_known_ready_document(client, ctx):
+    policy = indexed(ctx, SAMPLES / POLICY)
+    queued, unknown = post(client, SAMPLES / ENDORSEMENT), uuid4()
+
+    refused = [summarise(client, policy, length="short"), summarise(client, policy, tone="casual"),
+               summarise(client, policy, focus=f" {'a' * 201} ")]
+    longest = summarise(client, policy, focus=f"  {'a' * 200}  ")
+    not_ready = summarise(client, queued)
+    missing = summarise(client, unknown)
+    missing_list = client.get(f"/documents/{unknown}/summaries")
+    malformed = [client.post("/documents/not-an-id/summaries", json={}), client.get("/documents/not-an-id/summaries")]
+    queued_list = client.get(f"/documents/{queued}/summaries")
+
+    assert [(response.status_code, [error["field"] for error in response.json()["error"]["details"]["errors"]])
+            for response in refused] == [(422, ["body.length"]), (422, ["body.tone"]), (422, ["body.focus"])]
+    assert (longest.status_code, longest.json()["focus"]) == (201, "a" * 200)
+    assert (not_ready.status_code, not_ready.json()) == (409, {"error": {
+        "code": "documents_not_ready", "message": "1 of 1 documents are not ready.", "retryable": False,
+        "details": {"not_ready": [{"id": str(queued), "filename": ENDORSEMENT, "status": "queued"}]}}})
+    assert (missing.status_code, missing.json()) == (404, {"error": {
+        "code": "document_not_found", "message": "1 of 1 documents do not exist.", "retryable": False,
+        "details": {"missing": [str(unknown)]}}})
+    assert (missing_list.status_code, missing_list.json()) == (404, {"error": {
+        "code": "document_not_found", "message": f"No document has the id {unknown}.", "retryable": False,
+        "details": {}}})
+    assert [(response.status_code, response.json()["error"]["code"]) for response in malformed] == [
+        (422, "invalid_request")] * 2
+    assert (queued_list.status_code, queued_list.json()) == (200, {"items": [], "next_cursor": None})
+    assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 1
+
+
+def test_a_summary_whose_sources_are_not_on_their_pages_is_kept_without_them(client, ctx):
+    policy = indexed(ctx, SAMPLES / POLICY)
+
+    class OffPageChat(FakeChat):
+        handlers = {"summary": lambda prompt: SummaryDraft(summary="The policy  insures a roofer.", sources=[
+            SummarySourceDraft(page=1, quote="Property Damage Deductible $2,500 per occurrence"),
+            SummarySourceDraft(page=9, quote="Insurer: Sample Mutual Insurance Company"),
+            SummarySourceDraft(page=2, quote="Flood sublimit $50,000")])}
+
+    app.state.ctx = with_chat(ctx, OffPageChat())
+    created = summarise(client, policy)
+
+    assert (created.status_code, created.json()["text"], created.json()["sources"],
+            created.json()["dropped_sources"]) == (201, "The policy insures a roofer.", [], 3)
+
+
+def test_a_summary_spends_from_the_same_rate_limit_budget_as_an_ask(client, ctx):
+    policy = indexed(ctx, SAMPLES / POLICY)
+    chat_id = client.post("/chats", json={"document_ids": [str(policy)]}).json()["id"]
+    app.state.ctx = dataclasses.replace(ctx, limiter=RateLimiter(), settings=ctx.settings.model_copy(
+        update={"questions_per_minute": 1}))
+
+    asked = client.post(f"/chats/{chat_id}/messages", json={"question": "What is the each occurrence limit?"})
+    refused = summarise(client, policy)
+
+    assert (asked.status_code, refused.status_code, refused.json()["error"]["code"]) == (200, 429, "rate_limited")
+    assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 0
+
+
+def test_the_openai_path_grounds_each_source_and_a_failed_call_gets_no_retry_and_no_repair(client, ctx):
+    policy = indexed(ctx, SAMPLES / POLICY)
+    sent: list[tuple[str, dict]] = []
+    timeouts: list[float] = []
+    openai = openai_client(
+        httpx2.Response(200, json=completion({
+            "summary": "The policy has a $2,500 property damage deductible.",
+            "sources": [{"page": 2, "quote": "Property Damage Deductible $2,500 per occurrence"},
+                        {"page": 1, "quote": "Each Occurrence Limit $1,000,000"}]})),
+        httpx2.Response(500, json={"error": {"message": "Internal error", "type": "server_error", "code": None}}),
+        httpx2.Response(200, json=completion({"summary": "No sources key."})),
+        sent=sent, timeouts=timeouts)
+    app.state.ctx = with_chat(ctx, openai_chat(openai))
+
+    created = summarise(client, policy)
+    down = summarise(client, policy, length="brief")
+    invalid = summarise(client, policy, length="detailed")
+
+    assert (created.status_code, created.json()["sources"], created.json()["dropped_sources"],
+            created.json()["model"]) == (201, [{"page": 2, "page_label": "p. 2", "quote": (
+                "Property Damage Deductible $2,500 per occurrence")}], 1, "gpt-6.1-sol")
+    assert (down.status_code, down.headers["retry-after"], down.json()["error"]) == (503, "5", {
+        "code": "ai_unavailable", "message": "The AI provider could not complete the request (server_error).",
+        "retryable": True, "details": {}})
+    assert (invalid.status_code, invalid.json()["error"]) == (502, {
+        "code": "ai_bad_output", "message": "The model returned invalid output.", "retryable": True, "details": {}})
+    path, request = sent[0]
+    response_format = request["response_format"]
+    assert (len(sent), timeouts, path, request["model"], response_format["type"],
+            response_format["json_schema"]["name"], response_format["json_schema"]["strict"]) == (
+        3, [90.0] * 3, "/v1/chat/completions", "gpt-6.1-sol", "json_schema", "SummaryDraft", True)
+    assert ledger(ctx, "ok, error_code") == [(True, None), (False, "server_error"), (True, None)]
+    assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 1
