@@ -74,6 +74,7 @@ TRANSITIONS: Mapping[DocStatus, frozenset[DocStatus]] = {
 }
 
 STALE_AFTER = timedelta(minutes=2)
+ANALYZE_BATCH = 50
 
 # A chunk still to embed: never embedded, or embedded by a model that is no longer the current one.
 _PENDING = "embedding_model IS DISTINCT FROM %s"
@@ -134,7 +135,7 @@ def retry(ctx: Ctx, doc_id: DocumentId) -> Document:
 
 
 def delete(ctx: Ctx, doc_id: DocumentId) -> None:
-    """DELETE the row (pages, chunks, insights, chat_documents cascade), then remove the blob.
+    """DELETE the row (pages, chunks and insights cascade), then remove the blob.
 
     A pipeline task in flight finds its compare-and-swap matches no row and exits.
     step_runs and llm_calls keep their rows, so history and spend outlive the
@@ -176,6 +177,7 @@ def run_index(ctx: Ctx, doc_id: DocumentId, *, attempt: int = 1) -> None:
                 return
             with steps.record(Step.PARSE):
                 _parse(ctx, conn, doc_id, DocKind(doc["kind"]), Sha256(doc["sha256"]))
+            ctx.jobs.analyze(doc_id)
         elif not transition(conn, doc_id, DocStatus.EMBEDDING):
             return
 
@@ -245,6 +247,12 @@ def reconcile(ctx: Ctx) -> int:
          A document still being worked on costs one failed lock attempt.
       2. READY documents with chunks from another embedding model (a reviewer
          adds a provider key after a fake run) -> EMBEDDING, jobs.index.
+      3. Parsed documents untouched for STALE_AFTER, with no insights row and
+         no analyze step started within STALE_AFTER -> jobs.analyze, at most
+         ANALYZE_BATCH per tick. Covers an enqueue lost after the parse
+         checkpoint, and documents indexed before insights existed. A job still
+         waiting in the queue has no step row, so the batch bounds the duplicates
+         a backlog collects; a duplicate returns once the insights exist.
     """
     in_flight = [DocStatus.QUEUED, DocStatus.PARSING, DocStatus.EMBEDDING]
     with ctx.db.connection() as conn:
@@ -256,9 +264,18 @@ def reconcile(ctx: Ctx) -> int:
             f" (SELECT 1 FROM chunks c WHERE c.document_id = d.id AND c.{_PENDING})",
             (DocStatus.READY, ctx.ai.embed_model))]
         to_index = stale + [doc_id for doc_id in outdated if transition(conn, doc_id, DocStatus.EMBEDDING)]
+        to_analyze = [row["id"] for row in conn.execute(
+            "SELECT id FROM documents d WHERE page_count IS NOT NULL AND updated_at < now() - %(stale)s"
+            " AND NOT EXISTS (SELECT 1 FROM document_insights i WHERE i.document_id = d.id)"
+            " AND NOT EXISTS (SELECT 1 FROM step_runs s WHERE s.document_id = d.id AND s.step = %(analyze)s"
+            "                 AND s.started_at > now() - %(stale)s)"
+            " ORDER BY updated_at LIMIT %(batch)s",
+            {"stale": STALE_AFTER, "analyze": Step.ANALYZE, "batch": ANALYZE_BATCH})]
     for doc_id in to_index:
         ctx.jobs.index(doc_id)
-    return len(to_index)
+    for doc_id in to_analyze:
+        ctx.jobs.analyze(doc_id)
+    return len(to_index) + len(to_analyze)
 
 
 # ------------------------------------------------------------------ reads
@@ -266,7 +283,7 @@ def reconcile(ctx: Ctx) -> int:
 _DOCUMENT_SQL = """
 SELECT d.id, d.filename, d.kind, d.size_bytes, d.status, d.page_basis, d.page_count, d.chunk_count, d.empty_pages,
        d.error_code, d.error_message, d.error_retryable, d.created_at,
-       i.status AS insights_status,
+       to_jsonb(i) AS insights,
        CASE WHEN d.status = 'embedding' THEN
          (SELECT count(*) FROM chunks c WHERE c.document_id = d.id AND c.embedding IS NOT NULL) END AS embedded_chunks,
        CASE WHEN d.status = 'ready' THEN
@@ -358,7 +375,8 @@ def _row_to_document(row: Mapping[str, object]) -> Document:
 
 
 def _insights_state(row: Mapping[str, object], lifecycle: Lifecycle) -> InsightsState:
-    """An absent document_insights row reads as pending, or as unavailable when the document itself failed."""
-    if row["insights_status"] is None:
-        return InsightsUnavailable() if isinstance(lifecycle, Failed) else InsightsPending()
-    raise NotImplementedError("document_insights rows are not written yet")
+    """An absent document_insights row reads as pending, or as unavailable when the document failed before
+    its pages existed. Parsed is the one test: run_analyze and reconcile use it too."""
+    if row["insights"] is None:
+        return InsightsUnavailable() if row["page_count"] is None and isinstance(lifecycle, Failed) else InsightsPending()
+    return insights.from_row(row["insights"], row["page_count"], PageBasis(row["page_basis"]))

@@ -98,7 +98,7 @@ class ErrorCode(StrEnum):
     PAGE_NOT_FOUND = "page_not_found"
     CHAT_NOT_FOUND = "chat_not_found"
     DOCUMENTS_NOT_READY = "documents_not_ready"
-    NO_READY_DOCUMENTS = "no_ready_documents"
+    DOCUMENTS_DELETED = "documents_deleted"
     NOTHING_TO_RETRY = "nothing_to_retry"
     INVALID_CURSOR = "invalid_cursor"
 
@@ -182,7 +182,6 @@ class InsightsBody:
     summary: str
     key_facts: tuple[KeyFact, ...]  # only facts whose quote was found on the cited page
     tags: tuple[str, ...]
-    suggested_questions: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,8 +192,10 @@ class InsightsPending:
 @dataclass(frozen=True, slots=True)
 class InsightsReady:
     body: InsightsBody
-    pages_read: int     # coverage: pages 1..pages_read fit the prompt budget
+    pages_read: int         # coverage: pages 1..pages_read fit the prompt budget
     page_count: int
+    page_basis: PageBasis   # here because a retried document reads as Queued, which carries no Parsed
+    dropped_key_facts: int  # facts the model cited whose quote was not on the cited page
     model: str
     prompt_version: str
 
@@ -334,11 +335,23 @@ class Answered:
     text: str           # markers [1]..[n] index citations, 1-based
     citations: tuple[Citation, *tuple[Citation, ...]]   # at least one, by construction
 
+    @property
+    def outcome(self) -> TurnOutcome:
+        return TurnOutcome.ANSWERED
+
 
 @dataclass(frozen=True, slots=True)
 class NotFound:
     reason: Literal[TurnOutcome.NO_EVIDENCE, TurnOutcome.MODEL_DECLINED, TurnOutcome.UNVERIFIED]
     text: str           # user-facing: what was searched and what is missing
+
+    @property
+    def outcome(self) -> TurnOutcome:
+        return self.reason
+
+    @property
+    def citations(self) -> tuple[Citation, ...]:
+        return ()
 
 
 type Answer = Answered | NotFound

@@ -8,7 +8,6 @@ OpenAPI schema honest about which fields exist in which state.
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Annotated, Literal, assert_never
 from uuid import UUID
 
@@ -16,11 +15,14 @@ from pydantic import BaseModel, Field
 
 from . import pages
 from .domain import (
+    Answered,
+    Chat,
     DocKind,
     DocStatus,
     Document,
     Embedding,
     Failed,
+    Failure,
     InsightsFailed,
     InsightsPending,
     InsightsReady,
@@ -88,7 +90,9 @@ class KeyFactOut(BaseModel):
     label: str
     value: str
     page: int
-    quote: str
+    page_label: str                    # "p. 3" or "section 3"
+    quote: str                         # the source text on that page, whitespace collapsed
+    page_url: str
 
 
 class Coverage(BaseModel):
@@ -103,8 +107,8 @@ class InsightsReadyOut(BaseModel):
     summary: str
     key_facts: list[KeyFactOut]
     tags: list[str]
-    suggested_questions: list[str]
     coverage: Coverage
+    dropped_key_facts: int             # cited by the model, but the quote was not on the cited page
     model: str
     prompt_version: str
 
@@ -133,7 +137,7 @@ InsightsOut = Annotated[
 
 
 class StartChatIn(BaseModel):
-    document_ids: list[UUID] = Field(default_factory=list, description="Empty means every ready document.")
+    document_ids: list[UUID] = Field(min_length=1, description="The documents the chat answers from, fixed for its life.")
     title: str | None = None
 
 
@@ -163,7 +167,7 @@ class UsageOut(BaseModel):
     calls: int
     input_tokens: int
     output_tokens: int
-    cost_usd: Decimal | None
+    cost_usd: float | None              # null when any call used a model with no price
 
 
 class TurnOut(BaseModel):
@@ -187,6 +191,10 @@ class HistoryOut(BaseModel):
 # ------------------------------------------------------------------ mapping
 
 
+def error_body(failure: Failure, details: dict[str, object] | None = None) -> ErrorBody:
+    return ErrorBody(code=failure.code, message=failure.message, retryable=failure.retryable, details=details or {})
+
+
 def document_out(doc: Document) -> DocumentOut:
     parsed, progress, error = None, None, None
     match doc.lifecycle:
@@ -201,7 +209,7 @@ def document_out(doc: Document) -> DocumentOut:
             status = DocStatus.READY
         case Failed(failure, parsed):
             status = DocStatus.FAILED
-            error = ErrorBody(code=failure.code, message=failure.message, retryable=failure.retryable)
+            error = error_body(failure)
         case _:
             assert_never(doc.lifecycle)
     match doc.insights:
@@ -230,10 +238,47 @@ def page_out(doc_id: UUID, basis: PageBasis, page: Page) -> PageOut:
 
 
 def insights_out(doc: Document) -> InsightsReadyOut | InsightsPendingOut | InsightsFailedOut | InsightsUnavailableOut:
-    raise NotImplementedError
+    match doc.insights:
+        case InsightsReady(body=body) as ready:
+            return InsightsReadyOut(
+                status="ready", title=body.title, document_type=body.document_type, summary=body.summary,
+                key_facts=[KeyFactOut(label=fact.label, value=fact.value, page=fact.page,
+                                      page_label=pages.page_label(ready.page_basis, fact.page), quote=fact.quote,
+                                      page_url=_page_url(doc.id, fact.page)) for fact in body.key_facts],
+                tags=list(body.tags), coverage=Coverage(pages_read=ready.pages_read, page_count=ready.page_count),
+                dropped_key_facts=ready.dropped_key_facts, model=ready.model, prompt_version=ready.prompt_version)
+        case InsightsPending():
+            return InsightsPendingOut(status="pending")
+        case InsightsFailed(failure):
+            return InsightsFailedOut(status="failed", error=error_body(failure))
+        case InsightsUnavailable():
+            return InsightsUnavailableOut(status="unavailable",
+                                          reason="This document failed to process, so it has no insights.")
+        case _:
+            assert_never(doc.insights)
+
+
+def chat_out(chat: Chat) -> ChatOut:
+    return ChatOut(id=chat.id, title=chat.title, created_at=chat.created_at,
+                   documents=[{"id": str(doc.id), "filename": doc.filename} for doc in chat.documents])
 
 
 def turn_out(turn: Turn) -> TurnOut:
-    """Answered -> status answered, citations numbered 1..n in tuple order.
-    NotFound -> status not_found, reason from NotFound.reason, citations []."""
-    raise NotImplementedError
+    """Citations are numbered 1..n in tuple order, matching the [n] markers in the answer."""
+    answer = turn.answer
+    answered = isinstance(answer, Answered)
+    return TurnOut(
+        id=turn.id, question=turn.question, interpreted_as=turn.standalone_query,
+        status="answered" if answered else "not_found", reason=None if answered else answer.reason,
+        answer=answer.text,
+        citations=[CitationOut(ref=ref, document_id=c.document_id, filename=c.filename, page=c.page,
+                               page_label=pages.page_label(c.page_basis, c.page), quote=c.quote, chunk_id=c.chunk_id,
+                               page_url=_page_url(c.document_id, c.page))
+                   for ref, c in enumerate(answer.citations, start=1)],
+        usage=UsageOut.model_validate(turn.usage, from_attributes=True),
+        latency_ms=round((turn.finished_at - turn.started_at).total_seconds() * 1000), created_at=turn.started_at)
+
+
+def _page_url(doc_id: UUID, page: int) -> str:
+    """The GET /documents/{id}/pages/{n} route a citation links to."""
+    return f"/documents/{doc_id}/pages/{page}"

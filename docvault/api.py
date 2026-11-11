@@ -32,7 +32,7 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.PAGE_NOT_FOUND: 404,
     ErrorCode.CHAT_NOT_FOUND: 404,
     ErrorCode.DOCUMENTS_NOT_READY: 409,
-    ErrorCode.NO_READY_DOCUMENTS: 409,
+    ErrorCode.DOCUMENTS_DELETED: 409,
     ErrorCode.NOTHING_TO_RETRY: 409,
     ErrorCode.INVALID_CURSOR: 400,
     ErrorCode.AI_UNAVAILABLE: 503,      # with Retry-After: 5
@@ -59,8 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def vault_error_handler(request: Request, exc: VaultError) -> JSONResponse:
     failure = exc.failure
-    body = wire.ErrorOut(error=wire.ErrorBody(code=failure.code, message=failure.message, retryable=failure.retryable,
-                                              details=exc.details))
+    body = wire.ErrorOut(error=wire.error_body(failure, exc.details))
     headers = {"Retry-After": "5"} if failure.code is ErrorCode.AI_UNAVAILABLE else None
     return JSONResponse(body.model_dump(mode="json"), status_code=ERROR_STATUS.get(failure.code, 500), headers=headers)
 
@@ -131,7 +130,7 @@ def delete_document(doc_id: UUID, ctx: Deps) -> None:
 
 @router.post("/chats", status_code=201, response_model=wire.ChatOut)
 def start_chat(body: wire.StartChatIn, ctx: Deps) -> wire.ChatOut:
-    raise NotImplementedError
+    return wire.chat_out(chat.start(ctx.db, [DocumentId(doc_id) for doc_id in body.document_ids], title=body.title))
 
 
 @router.post("/chats/{chat_id}/messages", response_model=wire.TurnOut)
@@ -141,7 +140,8 @@ def ask(chat_id: UUID, body: wire.AskIn, ctx: Deps) -> wire.TurnOut:
 
 @router.get("/chats/{chat_id}/messages", response_model=wire.HistoryOut)
 def history(chat_id: UUID, ctx: Deps, limit: Annotated[int, Query(ge=1, le=200)] = 50) -> wire.HistoryOut:
-    raise NotImplementedError
+    return wire.HistoryOut(chat_id=chat_id,
+                           turns=[wire.turn_out(turn) for turn in chat.history(ctx.db, ChatId(chat_id), limit=limit)])
 
 
 @router.get("/metrics/documents")

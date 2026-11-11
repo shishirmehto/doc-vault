@@ -23,11 +23,12 @@ from __future__ import annotations
 
 import functools
 import logging
+from collections.abc import Callable
 from uuid import UUID
 
-from celery import Celery
+from celery import Celery, Task
 
-from . import documents
+from . import documents, insights
 from .config import load_settings
 from .context import Ctx, build_ctx
 from .domain import DocumentId, ErrorCode, Failure, VaultError
@@ -70,24 +71,29 @@ def index_document(self, doc_id: str) -> None:
     """A retryable VaultError becomes a Celery retry until the attempts run out.
     Every other failure ends in a FAILED document, so the user sees a terminal
     state and a reason, never a spinner."""
-    ctx, doc = _ctx(), DocumentId(UUID(doc_id))
-    try:
-        documents.run_index(ctx, doc, attempt=self.request.retries + 1)
-    except VaultError as exc:
-        if exc.failure.retryable and self.request.retries < MAX_RETRIES:
-            raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
-        documents.fail(ctx, doc, exc.failure)
-    except Exception:
-        log.exception("indexing document %s failed", doc_id)
-        documents.fail(ctx, doc, Failure(ErrorCode.INTERNAL, "Processing failed unexpectedly. Retry the document.",
-                                         retryable=True))
+    _deliver(self, doc_id, documents.run_index, documents.fail, "Processing failed unexpectedly. Retry the document.")
 
 
 @celery_app.task(bind=True, max_retries=MAX_RETRIES)
 def analyze_document(self, doc_id: str) -> None:
-    """Same shape as index_document around insights.run_analyze; terminal failure
-    upserts a failed document_insights row and leaves the document READY."""
-    raise NotImplementedError
+    """Same shape as index_document. A terminal failure records failed insights
+    and leaves the document as it is, still searchable."""
+    _deliver(self, doc_id, insights.run_analyze, insights.fail,
+             "Insights failed unexpectedly. Retry the document to try again.")
+
+
+def _deliver(task: Task, doc_id: str, run: Callable[..., None], fail: Callable[[Ctx, DocumentId, Failure], None],
+             crash_message: str) -> None:
+    ctx, doc = _ctx(), DocumentId(UUID(doc_id))
+    try:
+        run(ctx, doc, attempt=task.request.retries + 1)
+    except VaultError as exc:
+        if exc.failure.retryable and task.request.retries < MAX_RETRIES:
+            raise task.retry(exc=exc, countdown=2 ** (task.request.retries + 1)) from exc
+        fail(ctx, doc, exc.failure)
+    except Exception:
+        log.exception("%s for document %s failed", task.name, doc_id)
+        fail(ctx, doc, Failure(ErrorCode.INTERNAL, crash_message, retryable=True))
 
 
 @celery_app.task

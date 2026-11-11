@@ -4,20 +4,12 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 
 from docvault import documents
-from docvault.api import app
 from docvault.domain import DocumentId
 
 from .conftest import ENDORSEMENT, POLICY, QUOTE, SAMPLES
-
-
-@pytest.fixture
-def client(ctx) -> TestClient:
-    app.state.ctx = ctx   # the lifespan (which needs Redis) only runs when TestClient is a context manager
-    return TestClient(app)
 
 
 def post(client: TestClient, name: str, content: bytes | None = None):

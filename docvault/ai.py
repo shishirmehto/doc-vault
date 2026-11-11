@@ -29,8 +29,19 @@ from pydantic import BaseModel, ValidationError
 
 from .config import ReasoningEffort, Settings
 from .db import Db
-from .domain import DocumentId, ErrorCode, Purpose, TurnId, VaultError
-from .prompts import Msg, Prompt, Tier
+from .domain import DocumentId, ErrorCode, Page, Purpose, Source, Turn, TurnId, VaultError
+from .pages import SENTENCE_OR_PARAGRAPH_END, TABLE_CELL, collapse_whitespace
+from .prompts import (
+    DOCUMENT_TYPES,
+    AnswerDraft,
+    CondensedQuery,
+    EvidenceDraft,
+    InsightsDraft,
+    KeyFactDraft,
+    Msg,
+    Prompt,
+    Tier,
+)
 
 type Vector = list[float]
 
@@ -378,7 +389,8 @@ class FakeEmbedder:
 
     provider = "fake"
     model = "fake-hash"
-    min_similarity = 0.30   # with bag-of-words vectors only real word overlap passes
+    # Measured on the sample chunks: answerable questions score 0.205-0.252, absent topics 0.080-0.189.
+    min_similarity = 0.20
 
     def __init__(self, dimensions: int = 1536) -> None:
         self.dimensions = dimensions
@@ -387,7 +399,7 @@ class FakeEmbedder:
         return [self._vector(text) for text in texts], Tokens(sum(len(text.split()) for text in texts), 0, 0)
 
     def _vector(self, text: str) -> Vector:
-        counts = Counter(_stem(word) for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in _STOPWORDS)
+        counts = Counter(_tokens(text))
         vector = [0.0] * self.dimensions
         # A text with no content words still needs a non-zero vector: cosine distance to zero is undefined.
         for token, count in (counts or {"": 1}).items():
@@ -402,6 +414,10 @@ _STOPWORDS = frozenset(
     "when which will with you your our us not no any all does do".split())
 
 
+def _tokens(text: str) -> list[str]:
+    return [_stem(word) for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in _STOPWORDS]
+
+
 def _stem(word: str) -> str:
     for suffix in ("ing", "ed", "es", "s"):
         if len(word) > len(suffix) + 3 and word.endswith(suffix):
@@ -409,26 +425,127 @@ def _stem(word: str) -> str:
     return word
 
 
+_ENDS_SENTENCE = re.compile(r"""[.!?]["')]?$""")
+
+
+def _segments(text: str) -> list[str]:
+    """Extracted page text cut into the passages a reader sees, each a verbatim span of `text`.
+
+    PDF extraction ends a line wherever the layout wrapped, and puts a label and its
+    value on separate lines. A line joins the passage before it when it starts with a
+    lowercase letter, '$' or a digit, when the line before ends with ':', or when the
+    line before is 60 characters or longer and does not end a sentence. A DOCX table
+    row stands alone: the long 'Location ... | address' row would otherwise swallow
+    the row after it. Passages are then split at sentence ends.
+    """
+    passages: list[list[str]] = []
+    for line in (raw.strip() for raw in text.split("\n")):
+        previous = passages[-1][-1] if passages and passages[-1] else None
+        if not line:
+            passages.append([])
+        elif previous is not None and _continues(previous, line):
+            passages[-1].append(line)
+        else:
+            passages.append([line])
+    return [part for lines in passages if lines
+            for part in SENTENCE_OR_PARAGRAPH_END.split("\n".join(lines)) if part]
+
+
+def _continues(previous: str, line: str) -> bool:
+    if TABLE_CELL in previous or TABLE_CELL in line:
+        return False
+    return line[0].islower() or line[0] == "$" or line[0].isdigit() or previous.endswith(":") or _wrapped(previous)
+
+
+def _wrapped(line: str) -> bool:
+    """A long line that stops mid-sentence: the layout wrapped it."""
+    return len(line) >= 60 and not _ENDS_SENTENCE.search(line)
+
+
+def _key_fact(page: int, passage: str) -> KeyFactDraft | None:
+    """A short label line ending in ':' over its value, a short label line over a '$' value, or a 'Label | value' row."""
+    first, _, rest = passage.partition("\n")
+    if rest and not _wrapped(first) and not _ENDS_SENTENCE.search(first) and (first.endswith(":") or rest.startswith("$")):
+        label, value = first.removesuffix(":"), rest
+    elif not rest and TABLE_CELL in first:
+        label, _, value = first.partition(TABLE_CELL)
+    else:
+        return None
+    return KeyFactDraft(label=label, value=collapse_whitespace(value), page=page, quote=collapse_whitespace(passage))
+
+
+def _fake_insights(prompt: Prompt) -> InsightsDraft:
+    """Title: the first all-capitals line of three or more words, else the filename. Type: the
+    first document type named in the title, else "other". Summary: the first three passages.
+    Key facts: label-and-value passages in page order, at most 12, each quoting its passage.
+    Tags: up to six title words longer than three letters."""
+    pages: tuple[Page, ...] = prompt.inputs["pages"]
+    lines = [line.strip() for page in pages for line in page.text.split("\n")]
+    title = next((line for line in lines if line.isupper() and len(line.split()) >= 3), prompt.inputs["filename"])
+    words = re.findall(r"[a-z]+", title.lower())
+    passages = [(page.number, passage) for page in pages for passage in _segments(page.text)]
+    return InsightsDraft(
+        title=title,
+        document_type=next((word for word in words if word in DOCUMENT_TYPES), "other"),
+        summary=" ".join(collapse_whitespace(passage) for _, passage in passages[:3]),
+        key_facts=[fact for page, passage in passages if (fact := _key_fact(page, passage))][:12],
+        tags=list(dict.fromkeys(word for word in words if len(word) > 3))[:6])
+
+
+_REFERENCE_WORD = re.compile(r"\b(?:it|its|that|this|these|those|they|them|one|same|other)\b", re.IGNORECASE)
+
+
+def _fake_condense(prompt: Prompt) -> CondensedQuery:
+    """A question with a reference word ("does it", "that limit") is appended to the previous turn's standalone
+    query, so it carries the earlier topic's words; any other question already stands alone."""
+    history: tuple[Turn, ...] = prompt.inputs["history"]
+    question: str = prompt.inputs["question"]
+    if _REFERENCE_WORD.search(question):
+        return CondensedQuery(standalone=f"{history[-1].standalone_query} {question}")
+    return CondensedQuery(standalone=question)
+
+
+def _fake_answer(prompt: Prompt) -> AnswerDraft:
+    """Per document, the segment sharing the most content words with the standalone query. Ties go to the
+    segment with fewer distinct content words (the tighter match), then the earlier source, then the earlier
+    segment. Every document whose best segment shares at least two words is cited, with that segment as both
+    the sentence and the quote; with none, the draft is unsupported."""
+    query = set(_tokens(prompt.inputs["standalone"]))
+    sources: tuple[Source, ...] = prompt.inputs["sources"]
+    best: dict[DocumentId, tuple[tuple[int, int, int, int], Source, str]] = {}
+    for at, source in enumerate(sources):
+        for position, segment in enumerate(_segments(source.text)):
+            words = set(_tokens(segment))
+            rank = (-len(words & query), len(words), at, position)
+            if source.doc.id not in best or rank < best[source.doc.id][0]:
+                best[source.doc.id] = (rank, source, segment)
+    cited = sorted((rank, source, segment) for rank, source, segment in best.values() if -rank[0] >= 2)
+    if not cited:
+        return AnswerDraft(supported=False, answer="The selected documents do not say.", evidence=[])
+    return AnswerDraft(
+        supported=True,
+        answer=" ".join(f"{collapse_whitespace(segment)} [{source.label}]" for _, source, segment in cited),
+        evidence=[EvidenceDraft(source=source.label, quote=segment) for _, source, segment in cited])
+
+
 class FakeChat:
     """Deterministic stand-in that reads Prompt.inputs, never the rendered text.
 
     complete_json looks the prompt's name up in `handlers`. A handler turns the
     prompt into an output model, which goes back as its JSON; a name without a
-    handler raises NotImplementedError. The handlers to add:
-    condense: previous question's content words + the latest question.
-    answer: split every source into sentences, score each by content-word
-      overlap with the *original* question (ties broken by the standalone
-      query), cite the best sentence verbatim as the evidence quote with
-      answer "<sentence> [S#]"; supported=False when the best overlap is < 2 words.
-    insights: title = filename, type "other", summary = first three sentences,
-      key facts = lines matching "<Label> $<amount>" with their page.
-    Token counts = whitespace word counts (system and messages in, JSON out),
+    handler raises NotImplementedError. Tests subclass FakeChat and replace
+    `handlers` to script other output or a provider failure.
+
+    Handlers: insights (_fake_insights), condense (_fake_condense), answer (_fake_answer).
+
+    Token counts are whitespace word counts (system and messages in, JSON out),
     so ledger and metrics tests have real numbers.
     """
 
     provider = "fake"
     models: Mapping[Tier, str] = {"main": "fake-chat", "small": "fake-chat"}
-    handlers: Mapping[str, Callable[[Prompt], BaseModel]] = {}
+    handlers: Mapping[str, Callable[[Prompt], BaseModel]] = {
+        "insights": _fake_insights, "condense": _fake_condense, "answer": _fake_answer}
 
     def complete_json(self, prompt: Prompt, output: type[BaseModel], *,
                       timeout_s: float) -> tuple[RawCompletion, Tokens]:
