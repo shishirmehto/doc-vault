@@ -45,6 +45,11 @@ export function step(run: Run, e: RunEvent): Run {
   }
 }
 
+/** The live list, then a document it does not hold: one older than its newest 100, read on its own. */
+export function withDoc(docs: readonly Doc[], doc: Doc | null): readonly Doc[] {
+  return doc === null || docs.some((d) => d.id === doc.id) ? docs : [...docs, doc];
+}
+
 /** The ticked documents that are ready, in the order they were ticked: the columns of the comparison. */
 export function columns(chosen: ReadonlySet<DocumentId>, docs: readonly Doc[]): Doc[] {
   const ready = new Map(docs.filter((d) => d.lifecycle.status === "ready").map((d) => [d.id, d]));

@@ -7,12 +7,13 @@ import type {
 } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { cellAt, visibleRows } from "@/lib/compare";
+import { cellView } from "@/lib/comparisonPane";
 import {
-  NO_CELL, NONE_DIFFER, cannotOpen, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, partlyRead,
+  NONE_DIFFER, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, partlyRead,
 } from "@/copy";
 import { InAppLink } from "./InAppLink";
 import { MissingComparison } from "./Missing";
-import { SourcePane, type SourceView } from "./SourcePane";
+import { SourcePane } from "./SourcePane";
 
 type Props = {
   id: ComparisonId;
@@ -58,25 +59,13 @@ export function ComparisonScreen({ id, docs, pane, only, push, replace }: Props)
       </main>
       {pane && (
         <SourcePane
-          view={sourceView(comparison, pane, listed ?? (older.result?.ok ? older.result.value : null), docs === null || (lookUp !== null && older.result === null))}
+          view={cellView(result, pane, listed ?? (older.result?.ok ? older.result.value : null), docs === null || (lookUp !== null && older.result === null))}
           onPage={(page) => replace(at({ ...pane, page }))}
           onClose={() => push(at(null))}
         />
       )}
     </>
   );
-}
-
-/** The URL names a cell by row and column; the comparison and the document resolve it to a page and a passage. */
-function sourceView(c: Comparison | null, pane: ComparisonPane, doc: Doc | null, loading: boolean): SourceView {
-  if (c === null) return { kind: "resolving" };
-  const target = cellAt(c, pane.cite);
-  if (!target) return { kind: "unknown", message: NO_CELL };
-  if (target.doc.deleted) return { kind: "unknown", message: cannotOpen(target.doc) };
-  if (doc === null) return loading ? { kind: "resolving" } : { kind: "unknown", message: cannotOpen(target.doc) };
-  const cited = target.cell.source.page;
-  const page = pane.page ?? cited;
-  return { kind: "page", doc, page, mark: page === cited ? { quote: target.cell.source.quote, label: target.field } : null, citedPage: cited };
 }
 
 function LoadFailed({ error, onRetry }: { error: ApiError; onRetry(): void }) {

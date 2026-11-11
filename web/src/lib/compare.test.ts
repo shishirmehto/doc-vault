@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseComparison, parseDocumentPage } from "../api/parse.ts";
-import type { ApiError, Comparison, DocumentId } from "../api/domain.ts";
-import { cellAt, columns, idle, step, visibleRows, worthRetrying, type CompareRequest, type Run } from "./compare.ts";
+import type { ApiError, Comparison, Doc, DocumentId } from "../api/domain.ts";
+import {
+  cellAt, columns, idle, step, visibleRows, withDoc, worthRetrying, type CompareRequest, type Run,
+} from "./compare.ts";
 
 function captured(name: string): Comparison {
   return parseComparison(JSON.parse(readFileSync(new URL(`../api/fixtures/${name}.json`, import.meta.url), "utf8")).body);
@@ -103,4 +105,21 @@ test("the columns are the ticked ready documents in the order they were ticked",
     "sample-renewal-quote.pdf",
     "sample-cgl-policy.pdf",
   ]);
+});
+
+test("a document older than the live list's newest 100 is offered after them, once, and can be a column", () => {
+  const docs = parseDocumentPage(JSON.parse(readFileSync(new URL("../api/fixtures/documents-page.json", import.meta.url), "utf8")).body).docs;
+  const policy = docs.find((d) => d.id === POLICY)!;
+  const older: Doc = { ...policy, id: "0b6f5f1e-6a43-4d55-9b8e-3c2a1d0e9f77" as DocumentId, filename: "older-policy.pdf" };
+  const offered = withDoc(docs, older);
+  assert.deepEqual(offered.map((d) => d.filename), [
+    "live-scan.pdf", "ui-drop-check.txt", "ui-renewal-memo-4.txt", "ui-renewal-memo-2.txt", "ui-renewal-memo-3.txt",
+    "ui-textless.pdf", "ui-renewal-memo-1.txt", "u5-check.txt", "sample-endorsement-additional-insured.docx",
+    "sample-renewal-quote.pdf", "sample-cgl-policy.pdf", "older-policy.pdf",
+  ]);
+  assert.deepEqual(columns(new Set([older.id, RENEWAL]), offered).map((d) => d.filename), [
+    "older-policy.pdf",
+    "sample-renewal-quote.pdf",
+  ]);
+  assert.deepEqual([withDoc(docs, policy).length, withDoc(docs, null).length], [11, 11]);
 });

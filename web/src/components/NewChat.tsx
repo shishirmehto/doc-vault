@@ -94,7 +94,7 @@ export function NewChat({ docs, failed, deleted, onDismiss, onOpen, onFiles, onC
             }
             extra={comparable && (
               <button type="button" className="button secondary" disabled={busy || compareBlock !== null}
-                onClick={() => onCompare({ documents: picked.map((d) => ({ id: d.id, filename: d.filename })), focus: question.trim() || null })}>
+                onClick={() => onCompare({ documents: picked.map((d) => ({ id: d.id, filename: d.filename })), focus: question || null })}>
                 Compare
               </button>
             )}

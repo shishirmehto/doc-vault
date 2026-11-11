@@ -85,8 +85,8 @@ test("the notes under a comparison: dropped values, documents read in part, dele
     [droppedCells(1), droppedCells(3), partlyRead(memo, "section"), partlyRead({ ...memo, pagesRead: 1, pageCount: 2 }, "page"),
       deletedColumns(["a.txt"]), deletedColumns(["a.txt", "b.pdf"])],
     [
-      "1 value was left out because its quote was not on the page the model cited.",
-      "3 values were left out because their quotes were not on the pages the model cited.",
+      "1 value was left out because it could not be checked against the page it cites.",
+      "3 values were left out because they could not be checked against the pages they cite.",
       "Of the 254 sections in ui-renewal-memo-2.txt, only the first 40 were read, so fields on later sections are not compared.",
       "Of the 2 pages in ui-renewal-memo-2.txt, only the first 1 was read, so fields on later pages are not compared.",
       "a.txt was deleted. Its values stay, but its pages can no longer be opened.",

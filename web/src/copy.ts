@@ -229,8 +229,8 @@ export function differCount(rows: readonly CompareRow[]): string {
 
 export function droppedCells(n: number): string {
   return n === 1
-    ? "1 value was left out because its quote was not on the page the model cited."
-    : `${n} values were left out because their quotes were not on the pages the model cited.`;
+    ? "1 value was left out because it could not be checked against the page it cites."
+    : `${n} values were left out because they could not be checked against the pages they cite.`;
 }
 
 /** Shown only for a document the comparison read part of. */

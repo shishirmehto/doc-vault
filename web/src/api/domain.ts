@@ -142,7 +142,10 @@ export type Comparison = {
   /** What the comparison was asked to look at; null for the fields a broker compares. */
   focus: string | null;
   rows: readonly CompareRow[];
-  /** Values the model cited whose quote was not on the cited page. The backend drops them. */
+  /**
+   * Values the backend left out because they could not be checked against the page they cite: an unknown or repeated
+   * document, no page or quote, or a quote not on that page. Rows past the 30 it keeps are not read, so not counted.
+   */
   droppedCells: number;
   model: string;
   promptVersion: string;

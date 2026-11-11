@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
-import type { ApiError, ComparisonId, Doc, DocumentId } from "@/api/domain";
+import type { ApiError, ComparisonId, Doc, DocumentId, Result } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { compareRuns, useCompareRun } from "@/hooks/useCompareRun";
-import { COMPARE_MAX, FOCUS_MAX, columns, worthRetrying, type CompareRequest, type Run } from "@/lib/compare";
+import { COMPARE_MAX, FOCUS_MAX, columns, withDoc, worthRetrying, type CompareRequest, type Run } from "@/lib/compare";
 import {
   COMPARE_FULL, COMPARE_LONG, NO_COMPARISONS, NOTHING_TO_COMPARE, compareBlocked, compareFailed, comparing,
   differCount, documentNames, explain, focusLine, formatWhen, notReadyNames,
@@ -21,7 +21,7 @@ const LONG_AFTER_MS = 5000;
  * The screen that starts a comparison: tick 2 to 5 ready documents, optionally name a focus, and compare. While a run
  * is in flight, or after it failed, the run takes the picker's place. Recent comparisons sit below.
  */
-export function CompareScreen({ docs, failed, initial, onCompare, onOpen }: {
+export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }: {
   docs: readonly Doc[] | null;
   /** The last failed read of the document list, which is retried on its own. */
   failed: ApiError | null;
@@ -38,10 +38,15 @@ export function CompareScreen({ docs, failed, initial, onCompare, onOpen }: {
   const [chosen, setChosen] = useState<ReadonlySet<DocumentId>>(() => new Set(initial ? [initial] : []));
   const [focus, setFocus] = useState("");
 
+  // The live list holds the newest 100. "Compare with..." from an older document reads that one document instead.
+  const lookUp = initial !== null && live !== null && !live.some((d) => d.id === initial) ? initial : null;
+  const older = useFetched(`compare-with:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
+  const docs = live && withDoc(live, older.result?.ok ? older.result.value : null);
+
   const picked = columns(chosen, docs ?? []);
   const blocked = compareBlocked(picked.length, focus);
   const submit = () => {
-    if (blocked === null) onCompare({ documents: picked.map((d) => ({ id: d.id, filename: d.filename })), focus: focus.trim() || null });
+    if (blocked === null) onCompare({ documents: picked.map((d) => ({ id: d.id, filename: d.filename })), focus: focus || null });
   };
   const change = (request: CompareRequest) => {
     setChosen(new Set(request.documents.map((d) => d.id)));

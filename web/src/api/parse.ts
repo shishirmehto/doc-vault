@@ -25,7 +25,7 @@ function asTurnId(raw: string): TurnId | null {
   return UUID.test(raw) ? (raw as TurnId) : null;
 }
 
-export function asComparisonId(raw: string): ComparisonId | null {
+function asComparisonId(raw: string): ComparisonId | null {
   return UUID.test(raw) ? (raw as ComparisonId) : null;
 }
 
