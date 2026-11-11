@@ -112,6 +112,7 @@ class ErrorCode(StrEnum):
     INVALID_CURSOR = "invalid_cursor"
     INVALID_REQUEST = "invalid_request"           # a parameter or body failed validation
     RATE_LIMITED = "rate_limited"                 # the client spent its per-minute budget for this route
+    TOO_MANY_STREAMS = "too_many_streams"         # this API process already has its cap of live event streams
 
 
 @dataclass(frozen=True, slots=True)
