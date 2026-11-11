@@ -12,7 +12,7 @@ This folder is the maintained source for verifying what a doc-vault user sees an
 
 ## Driving conventions
 
-- Use only public routes (`/documents`, `/chats`, `/metrics`, `/health`) and the UI. Never call Python, insert rows, or edit the database to reach a state.
+- Use only public routes (`/documents`, `/chats`, `/comparisons`, `/metrics`, `/health`) and the UI. Never call Python, insert rows, or edit the database to reach a state.
 - Take expected values from `samples/facts.yaml` (document, page, exact text). Never take them from an earlier response.
 - In the browser, find elements by role and accessible name, not position.
 - A fresh upload is a fresh hash. To watch processing again, upload a new file. Do not delete a sample just to re-upload it.
@@ -28,7 +28,7 @@ This folder is the maintained source for verifying what a doc-vault user sees an
 Every UI proof also runs `scripts/visible.js` on each screen it shows, at 1440x785, 1024x768 and 375x812. The script is one JavaScript expression that runs in the page. It returns an array with one finding per problem, and `[]` when the screen is clean:
 
 - `clipped`: an element with text whose content is cut off by `overflow: hidden` or `clip`, `text-overflow: ellipsis` or `line-clamp` (`scrollWidth > clientWidth` or `scrollHeight > clientHeight`). `body` and the centre column count too, so content pushed off the bottom of the window shows up as `clipped body` beside the controls it hid.
-- `unreachable`: a button, link, field or `summary` outside the viewport that no scroll container can bring into view. The check walks out from the control. An `overflow: hidden` ancestor that it falls outside hides it for good. A scroll container can bring it into view if the container is at least the control's size, and then the container itself must be reachable.
+- `unreachable`: a button, link, field or `summary` outside the viewport that no scroll container can bring into view. The check walks out from the control. An `overflow: hidden` ancestor that it falls outside hides it for good. A scroll container can bring it into view if the container is at least the control's size. From there the question is whether a control-sized box inside the container can be seen, so a sideways-scrolling table taller than its column is still reachable row by row.
 - `page-scroll`: the page is wider than the viewport.
 - `side-scroll`: a column or other scroll container scrolls sideways. The page never scrolls in this app, so this is where content too wide for its column ends up. A box meant to scroll sideways, such as a metrics table's, carries `data-scroll-x` and is not reported.
 
@@ -62,5 +62,6 @@ A clean result does not prove that text does not wrap where it should not, or th
 | [insights.md](insights.md) | `insights-ready`, `insights-grounded`, `insights-coverage`, `insights-fail-isolated` |
 | [chat-with-citations.md](chat-with-citations.md) | `chat-start`, `chat-not-ready`, `chat-cited-answer`, `chat-follow-up`, `chat-multi-doc`, `chat-not-found`, `chat-history` |
 | [metrics.md](metrics.md) | `metrics-documents`, `metrics-processing` |
+| [compare.md](compare.md) | `compare-run`, `compare-focus`, `compare-refuse`, `compare-read`, `ui-compare` |
 | [live-status.md](live-status.md) | `live-stream`, `live-cap`, `live-resync`, `live-ui`, `live-paused` |
 | [web-ui.md](web-ui.md) | `ui-upload`, `ui-status`, `ui-insights`, `ui-chat`, `ui-chat-stream`, `ui-suggestions`, `ui-citation-open`, `ui-metrics`, `ui-delete`, `ui-find`, `ui-missing`, `ui-layout` |

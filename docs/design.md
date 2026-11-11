@@ -15,7 +15,8 @@ Postgres 16 with pgvector holds every table. `docvault/schema.sql` is the only s
 | `document_insights` | `insights.py` | One row per document once insights exist or fail. No row means pending. |
 | `chats`, `chat_documents` | `chat.py` | A chat and its fixed document scope, with a filename snapshot. |
 | `chat_turns` | `chat.py` | One row per question: the standalone query, the outcome, the answer, a citation snapshot and up to three follow-up suggestions. |
-| `llm_calls` | `ai.py` | Append-only. One row per provider attempt, failed ones included: purpose, model, prompt version, tokens, cost, latency, and the document or turn it is billed to. |
+| `comparisons` | `compare.py` | One row per comparison: the focus, a snapshot of its documents in column order (filename, page basis, pages read), the rows as jsonb with each cell's value, page and verified quote, and how many cells grounding emptied. |
+| `llm_calls` | `ai.py` | Append-only. One row per provider attempt, failed ones included: purpose, model, prompt version, tokens, cost, latency, and the document, turn or comparison it is billed to (`one_owner` allows exactly one). |
 
 Uploaded files live on disk at a path derived from their SHA-256 (`context.BlobStore`), so the database stores no path and the same bytes are stored once.
 
@@ -49,6 +50,16 @@ No database transaction stays open across a model call.
 
 The response has `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`. `no-transform` matters for the web UI: its Next.js rewrite proxy gzips `text/event-stream` and so delivered every event at once when the answer ended. The proxy's compression skips a response marked `no-transform`.
 
+**Compare.** `compare.create` lines up 2 to 5 ready documents field by field:
+
+1. In one transaction, `chat.ready_documents` checks the documents exist and are ready, with the 404 and 409 that `chat.start` gives. The same transaction reads each document's pages and verified key facts, then commits.
+2. `prompts.compare` labels the documents `D1` to `D5` in request order. Each gets an even share of the insights budget (240,000 characters), filled by the page-prefix rule that insights use, and each lists its key facts before its pages. The prompt returns how many pages of each it read.
+3. One main-model call returns rows, each with one cell per document: value, page and quote. It is billed to the comparison id, which exists before the call. The call has one attempt of at most 90 s, because the request is synchronous and the web proxy gives up at 120 s.
+4. `compare.ground` keeps a cell only when `pages.find_on_page` finds its quote on the page it cites, and stores the source span, not the model's copy. Any other filled cell becomes empty and counts in `dropped_cells`. A row left with no filled cell is removed, and at most 30 rows are kept.
+5. One `comparisons` row is written and read back with its usage from `llm_calls`.
+
+`Row.differs` in `domain.py` decides a difference when the comparison is read, from the values: casefolded, with currency symbols and codes, thousands separators and zero cents removed, whitespace collapsed and outer punctuation stripped. Two distinct values differ, and so does an empty cell beside a filled one. The model is never asked. A comparison is a snapshot: its documents' filenames, page bases and coverage are stored with it, so a deleted document keeps its column and page labels, and `deleted` comes from the `documents` table at read time.
+
 **Live status.** `GET /events/documents` tells clients when a document changes, so the web UI does not poll. The flow has four links:
 
 1. Triggers in `schema.sql` call `pg_notify('documents', <document id>)` on every change that alters what `GET /documents/{id}` returns. Row triggers cover `documents` and `document_insights`. A statement trigger with a transition table covers `chunks`, the embedding progress, and sends each changed document once. A row trigger on `step_runs` fires when the embed step closes `ok`, because `processing_ms` reads that row and `ready` commits just before it closes. Postgres delivers a notification when its transaction commits, never after a rollback, and delivers identical payloads from one transaction once. So an event never announces a state that did not happen, and no Python publish call exists. `documents.py` is unchanged.
@@ -79,9 +90,10 @@ The scan is exact, not approximate, because a chat's scope is a few documents an
 - **condense** (small model) keeps the user's wording, amounts and defined terms, because the rewrite drives both the embedding and the full-text search. It must not answer, because the answer would be searched instead of the question.
 - **answer** (main model, `answer-v2`) treats source text as data, never instructions. It asks for a verbatim quote of at most 40 words per marker, because `chat.ground` drops every quote it cannot find. It asks for figures exactly as written and a refusal (`supported: false`) over a guess, because a wrong limit costs a broker more than a follow-up question. It answers the covered part of a question and names the rest. It suggests up to three follow-up questions that its sources answer, so a click on one leads to a cited answer. The schema puts no limit on their count, so a fourth question costs no repair call. `chat.suggestions` keeps three.
 - **insights** (main model) writes the summary for a broker deciding whether to open the document. It asks for the `<page n>` of each key fact and an exact quote, because `insights.verify` checks the quote on that page.
+- **compare** (main model, `compare-v1`) lines up the fields a broker compares (limits, deductibles or retentions, premium, period, insured, insurer, exclusions and endorsements), or only the fields about the focus when one is given. Each cell names its document's id, because the code places cells by id into one column per document. Values are copied as written and quotes exactly from the cited page, because `compare.ground` empties a cell whose quote is not on its page and `differs` compares the values in code, so a rounded value would show a false difference. A value the document does not state is null, not a guess: an empty cell shows as a difference, and a guessed one would hide it. The schema has no row limit, so an extra row costs no repair call, and the code keeps 30.
 - **repair** shows the model its invalid JSON and the validator's errors once, under the original prompt's name, so the ledger counts repairs against the prompt that needed them.
 
-All three calls use strict JSON-schema output (`response_format`). The schemas are the `*Draft` models in `prompts.py`.
+All four calls use strict JSON-schema output (`response_format`). The schemas are the `*Draft` models in `prompts.py`.
 
 ## Assumptions
 
@@ -123,4 +135,4 @@ The 50,000-document set has 135,000 `step_runs`, 150,000 `llm_calls` and 50,000 
 - With more than one API process, the rate-limit buckets move to Redis, because each process now keeps its own.
 - File storage moves to S3. `BlobStore` is the only code that touches files.
 - `reconcile` rule 2 (re-embed after an embedding-model change) enqueues every outdated document in one tick. Past a few thousand documents it needs the same batch as rule 1.
-- Insights read a prefix of a long document. Past the 240,000-character budget, a map-reduce over the remaining pages is the next step.
+- Insights read a prefix of a long document. Past the 240,000-character budget, a map-reduce over the remaining pages is the next step. A comparison splits the same budget across its documents, so it needs the same step sooner: compare per section, then merge rows by field.
