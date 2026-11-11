@@ -24,7 +24,10 @@ export function TopBar() {
   return (
     <header className="topbar">
       <Link className="wordmark" href="/">Doc Vault</Link>
-      <ServiceNote />
+      <nav className="topbar-end">
+        <ServiceNote />
+        <Link href="/?view=metrics">Metrics</Link>
+      </nav>
     </header>
   );
 }

@@ -13,6 +13,7 @@ import { Rail } from "./Rail";
 import { ChatScreen } from "./ChatScreen";
 import { DocumentScreen } from "./DocumentScreen";
 import { NewChat } from "./NewChat";
+import { Metrics } from "./Metrics";
 
 const POLL_MS = 1000;
 
@@ -81,6 +82,9 @@ export function Workspace() {
       />
       {selection.kind === "none" && (
         <NewChat docs={docs} onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
+      )}
+      {selection.kind === "metrics" && (
+        <Metrics window={selection.window} onWindow={(window) => replace({ kind: "metrics", window })} />
       )}
       {selection.kind === "chat" && (
         <ChatScreen key={selection.chat} id={selection.chat} docs={docs} pane={selection.pane} push={push} replace={replace} />

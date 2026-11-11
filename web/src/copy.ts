@@ -50,6 +50,11 @@ export function formatMs(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
+/** "$0", "$0.0042", "$1.25". */
+export function formatUsd(usd: number): string {
+  return usd === 0 ? "$0" : `$${usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2)}`;
+}
+
 /** One sentence for any failed request. A refusal is the backend's own message. */
 export function explain(error: ApiError): string {
   switch (error.kind) {
@@ -84,8 +89,7 @@ export const NOT_FOUND: Record<NotFoundReason, string> = {
 export function usageLine(turn: Turn): string {
   const { calls, inputTokens, outputTokens, costUsd } = turn.usage;
   const n = (x: number) => x.toLocaleString("en-US");
-  const cost =
-    costUsd === null ? "cost unknown" : costUsd === 0 ? "$0" : `$${costUsd < 0.01 ? costUsd.toFixed(4) : costUsd.toFixed(2)}`;
+  const cost = costUsd === null ? "cost unknown" : formatUsd(costUsd);
   const callWord = calls === 1 ? "call" : "calls";
   return `${calls} model ${callWord}, ${n(inputTokens)} tokens in, ${n(outputTokens)} out, ${cost}, ${formatMs(turn.latencyMs)}`;
 }
