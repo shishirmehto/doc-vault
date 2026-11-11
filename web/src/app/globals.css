@@ -46,6 +46,9 @@
 * { box-sizing: border-box; }
 html { background: var(--desk); color: var(--ink); font: 400 var(--t-ui)/1.5 var(--font-ui); -webkit-font-smoothing: antialiased; }
 body { margin: 0; background: var(--desk); }
+/* On wide screens each column scrolls on its own and the page itself never does, so the question box stays
+   on screen. Below 760px the columns stack and the page scrolls as usual. */
+@media (min-width: 761px) { html, body { height: 100%; overflow: hidden; } }
 h1, h2, h3, p, dl, dd, ul, ol, blockquote, fieldset { margin: 0; }
 ul, ol { padding: 0; list-style: none; }
 a { color: inherit; }
@@ -59,8 +62,9 @@ button { font: inherit; }
   padding: 0 var(--s6); border-bottom: 1px solid var(--rule); background: var(--desk);
 }
 .wordmark { font-weight: 600; font-size: var(--t-body); text-decoration: none; letter-spacing: -0.01em; }
-.topbar-end { display: flex; align-items: baseline; gap: var(--s6); }
-.topbar-end a { color: var(--carbon); font-weight: 600; text-underline-offset: 3px; }
+.topbar-end { display: flex; align-items: center; gap: var(--s6); }
+.topbar-end a:not(.button) { color: var(--carbon); font-weight: 600; text-underline-offset: 3px; }
+.topbar-end .button { text-decoration: none; }
 .service { font-size: var(--t-meta); color: var(--graphite); cursor: help; }
 .service[data-tone="failed"] { color: var(--stamp); cursor: default; }
 
@@ -360,6 +364,10 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .centre { padding: var(--s6); }
 }
 @media (max-width: 760px) {
+  .topbar { padding: 0 var(--s4); }
+  .topbar-end { gap: var(--s4); }
+  .wordmark, .topbar-end a { white-space: nowrap; }
+  .service { display: none; }
   .workspace, .workspace[data-pane="open"] { grid-template-columns: minmax(0, 1fr); height: auto; }
   .rail { border-right: 0; border-bottom: 1px solid var(--rule); }
   .pane { width: 100vw; padding: 0 var(--s8) var(--s8) var(--s4); }

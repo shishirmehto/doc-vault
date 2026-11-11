@@ -27,6 +27,7 @@ export function TopBar() {
       <nav className="topbar-end">
         <ServiceNote />
         <Link href="/?view=metrics">Metrics</Link>
+        <Link className="button" href="/">New chat</Link>
       </nav>
     </header>
   );
