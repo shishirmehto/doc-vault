@@ -7,16 +7,19 @@ import { useFetched } from "@/hooks/useFetched";
 import { locateQuote } from "@/lib/quote";
 import { explain } from "@/copy";
 
-/** What the pane shows, resolved from the URL: a page with an optional passage to mark. */
+/**
+ * What the pane shows, resolved from the URL: a document's page with an optional passage to mark, or
+ * why it cannot (the fact or citation is gone, or its document is no longer in the vault).
+ */
 export type SourceView =
   | { kind: "resolving" }
-  | { kind: "unknown" }
-  | { kind: "page"; page: number; mark: { quote: string; label: string } | null; citedPage?: number };
+  | { kind: "unknown"; message: string }
+  | { kind: "page"; doc: Doc; page: number; mark: { quote: string; label: string } | null; citedPage?: number };
 
-type Props = { doc: Doc; view: SourceView; onPage(page: number): void; onClose(): void };
+type Props = { view: SourceView; onPage(page: number): void; onClose(): void };
 
 /** The document's own words. Only a document page is paper; Esc and Close both close it. */
-export function SourcePane({ doc, view, onPage, onClose }: Props) {
+export function SourcePane({ view, onPage, onClose }: Props) {
   const close = useRef(onClose);
   useEffect(() => {
     close.current = onClose;
@@ -29,14 +32,15 @@ export function SourcePane({ doc, view, onPage, onClose }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const count = doc.layout?.pageCount ?? 0;
-  const unit = doc.layout?.unit === "section" ? "Section" : "Page";
+  const doc = view.kind === "page" ? view.doc : null;
+  const count = doc?.layout?.pageCount ?? 0;
+  const unit = doc?.layout?.unit === "section" ? "Section" : "Page";
   const page = view.kind === "page" ? view.page : null;
 
   return (
     <aside className="pane" aria-label="Source">
       <header className="pane-header">
-        <span className="pane-file">{doc.filename}</span>
+        <span className="pane-file">{doc?.filename}</span>
         {page !== null && count > 0 && (
           <nav className="pager" aria-label="Pages">
             <button type="button" className="text-button" disabled={page <= 1} onClick={() => onPage(page - 1)}
@@ -49,7 +53,7 @@ export function SourcePane({ doc, view, onPage, onClose }: Props) {
         <button type="button" className="text-button" onClick={onClose}>Close</button>
       </header>
       {view.kind === "resolving" && <SheetSkeleton />}
-      {view.kind === "unknown" && <p className="notice">This fact is not in the document&apos;s current summary.</p>}
+      {view.kind === "unknown" && <p className="notice">{view.message}</p>}
       {view.kind === "page" && (
         <>
           {view.mark === null && view.citedPage !== undefined && (
@@ -58,7 +62,7 @@ export function SourcePane({ doc, view, onPage, onClose }: Props) {
               <button type="button" className="text-button" onClick={() => onPage(view.citedPage!)}>Go back to it</button>
             </p>
           )}
-          <PageSheet key={`${doc.id}:${view.page}`} doc={doc} page={view.page} mark={view.mark} />
+          <PageSheet key={`${view.doc.id}:${view.page}`} doc={view.doc} page={view.page} mark={view.mark} />
         </>
       )}
     </aside>

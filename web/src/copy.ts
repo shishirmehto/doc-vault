@@ -1,6 +1,6 @@
 // Every sentence the interface writes about state. The backend's own messages are shown verbatim.
 
-import type { ApiError, Doc, PageUnit } from "./api/domain.ts";
+import type { ApiError, Doc, NotFoundReason, PageUnit, Turn } from "./api/domain.ts";
 
 export type Tone = "quiet" | "working" | "done" | "failed";
 
@@ -68,4 +68,29 @@ export function explain(error: ApiError): string {
       return unknown;
     }
   }
+}
+
+/** What happened and what to try, under the backend's own sentence. A deliberate result, never an error. */
+export const NOT_FOUND: Record<NotFoundReason, string> = {
+  no_evidence:
+    "Nothing in these documents matched the question. Try the words the document itself would use, or start a chat with more documents.",
+  model_declined:
+    "Passages close to the question were found, but none of them answers it. Try asking about one specific item, such as a limit, a date or a party.",
+  unverified:
+    "An answer was drafted, but its quotes could not be found in the documents, so it was held back. Try a narrower question.",
+};
+
+/** "2 model calls, 1,960 tokens in, 11 out, $0, 13 ms". */
+export function usageLine(turn: Turn): string {
+  const { calls, inputTokens, outputTokens, costUsd } = turn.usage;
+  const n = (x: number) => x.toLocaleString("en-US");
+  const cost =
+    costUsd === null ? "cost unknown" : costUsd === 0 ? "$0" : `$${costUsd < 0.01 ? costUsd.toFixed(4) : costUsd.toFixed(2)}`;
+  const callWord = calls === 1 ? "call" : "calls";
+  return `${calls} model ${callWord}, ${n(inputTokens)} tokens in, ${n(outputTokens)} out, ${cost}, ${formatMs(turn.latencyMs)}`;
+}
+
+/** "a.pdf", "a.pdf and b.pdf", "a.pdf, b.pdf and c.pdf". */
+export function listNames(names: readonly string[]): string {
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }

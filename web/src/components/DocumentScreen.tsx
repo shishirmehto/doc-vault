@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { api } from "@/api/client";
 import type { ApiError, Doc, DocumentId, Insights, KeyFact, PaneRequest, Result, Selection } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
@@ -17,10 +17,12 @@ type Props = {
   push(s: Selection): void;
   replace(s: Selection): void;
   onRetry(id: DocumentId): Promise<ApiError | null>;
+  /** Starts a chat on this document and opens it. Resolves to the refusal, if any. */
+  onAsk(id: DocumentId): Promise<ApiError | null>;
 };
 
 /** The centre column for one document, and the source pane beside it. */
-export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry }: Props) {
+export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry, onAsk }: Props) {
   // A new key whenever the list shows the document or its insights moving on, so the panel refetches once.
   const insights = useFetched(`${id}:${doc?.lifecycle.status}:${doc?.insights}`, () => api.insights(id));
 
@@ -54,17 +56,20 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry 
             {doc.lifecycle.status === "failed" && (
               <FailureNote failure={doc.lifecycle.failure} onRetry={() => onRetry(id)} />
             )}
-            {doc.layout && doc.lifecycle.status !== "failed" && (
-              <button type="button" className="button" onClick={() => push({ kind: "doc", doc: id, pane: { kind: "page", page: 1 } })}>
-                Read the {unitName(doc.layout.unit, 2)}
-              </button>
-            )}
+            <div className="doc-actions">
+              {doc.lifecycle.status === "ready" && <AskButton onAsk={() => onAsk(id)} />}
+              {doc.layout && doc.lifecycle.status !== "failed" && (
+                <button type="button" className="text-button" onClick={() => push({ kind: "doc", doc: id, pane: { kind: "page", page: 1 } })}>
+                  Read the {unitName(doc.layout.unit, 2)}
+                </button>
+              )}
+            </div>
           </header>
           <InsightsPanel doc={doc} result={insights.result} reload={insights.reload} activeFact={activeFact}
             onOpenFact={openFact} onRetry={() => onRetry(id)} />
         </article>
       </main>
-      {pane && <SourcePane doc={doc} view={sourceView(pane, insights.result)}
+      {pane && <SourcePane view={sourceView(doc, pane, insights.result)}
         onPage={(page) => replace({ kind: "doc", doc: id, pane: pane.kind === "cite" ? { ...pane, page } : { kind: "page", page } })}
         onClose={() => push({ kind: "doc", doc: id, pane: null })} />}
     </>
@@ -72,13 +77,33 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry 
 }
 
 /** Resolves the URL's pane request against the loaded insights: which page, and which passage to mark. */
-function sourceView(pane: PaneRequest, insights: Result<Insights> | null): SourceView {
-  if (pane.kind === "page") return { kind: "page", page: pane.page, mark: null };
+function sourceView(doc: Doc, pane: PaneRequest, insights: Result<Insights> | null): SourceView {
+  if (pane.kind === "page") return { kind: "page", doc, page: pane.page, mark: null };
   if (insights === null) return { kind: "resolving" };
   const fact = insights.ok && insights.value.status === "ready" ? insights.value.keyFacts[pane.cite.index] : undefined;
-  if (!fact) return { kind: "unknown" };
+  if (!fact) return { kind: "unknown", message: "This fact is not in the document's current summary." };
   const page = pane.page ?? fact.source.page;
-  return { kind: "page", page, mark: page === fact.source.page ? { quote: fact.source.quote, label: fact.label } : null, citedPage: fact.source.page };
+  const mark = page === fact.source.page ? { quote: fact.source.quote, label: fact.label } : null;
+  return { kind: "page", doc, page, mark, citedPage: fact.source.page };
+}
+
+function AskButton({ onAsk }: { onAsk(): Promise<ApiError | null> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const ask = async () => {
+    setBusy(true);
+    const refused = await onAsk();
+    setError(refused);
+    setBusy(false);
+  };
+  return (
+    <>
+      <button type="button" className="button" disabled={busy} onClick={() => void ask()}>
+        {busy ? "Starting a chat" : "Ask about this document"}
+      </button>
+      {error && <p className="row-message" data-tone="failed">{explain(error)}</p>}
+    </>
+  );
 }
 
 function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry }: {

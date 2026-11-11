@@ -7,8 +7,11 @@ import { useSelection } from "@/hooks/useSelection";
 import { usePolled } from "@/hooks/usePolled";
 import { useUploads } from "@/hooks/useUploads";
 import { isSettled } from "@/lib/lifecycle";
+import { threads } from "@/hooks/useThread";
 import { Rail } from "./Rail";
+import { ChatScreen } from "./ChatScreen";
 import { DocumentScreen } from "./DocumentScreen";
+import { NewChat } from "./NewChat";
 
 const POLL_MS = 1000;
 
@@ -23,8 +26,9 @@ function upsert(doc: Doc) {
 }
 
 /**
- * Three columns: your documents, what the system says about one, and what the document itself says.
- * The URL holds the selection; the document list is polled until nothing in it can still change.
+ * Three columns: your documents; a chat, or what the system says about one document; and what the
+ * document itself says. The URL holds the selection; the document list is polled until nothing in it
+ * can still change.
  */
 export function Workspace() {
   const { selection, push, replace } = useSelection();
@@ -45,12 +49,23 @@ export function Workspace() {
     [patch, refresh],
   );
 
+  const askAbout = useCallback(
+    async (id: DocumentId): Promise<ApiError | null> => {
+      const result = await threads.start([id], null);
+      if (!result.ok) return result.error;
+      push({ kind: "chat", chat: result.value.id, pane: null });
+      return null;
+    },
+    [push],
+  );
+
   const docs = documents.data?.docs ?? null;
   const selectedDoc = selection.kind === "doc" ? selection.doc : null;
   const current = selectedDoc && docs ? (docs.find((d) => d.id === selectedDoc) ?? null) : null;
+  const paneOpen = selection.kind === "chat" ? selection.pane !== null : current !== null && selection.kind === "doc" && selection.pane !== null;
 
   return (
-    <div className="workspace" data-pane={current && selection.kind === "doc" && selection.pane ? "open" : "closed"}>
+    <div className="workspace" data-pane={paneOpen ? "open" : "closed"}>
       <Rail
         docs={docs}
         connection={documents.error}
@@ -61,17 +76,13 @@ export function Workspace() {
         onOpen={(id) => push({ kind: "doc", doc: id, pane: null })}
         onRetry={retry}
       />
-      {selection.kind !== "doc" ? (
-        <main className="centre">
-          <div className="welcome">
-            <h1>{docs !== null && docs.length === 0 ? "Upload a document to start" : "Choose a document"}</h1>
-            <p>
-              Each document gets a summary and key facts. Every fact links to the page it came from, with the
-              passage marked, so you can check it against the source.
-            </p>
-          </div>
-        </main>
-      ) : (
+      {selection.kind === "none" && (
+        <NewChat docs={docs} onStarted={(chat) => push({ kind: "chat", chat, pane: null })} />
+      )}
+      {selection.kind === "chat" && (
+        <ChatScreen key={selection.chat} id={selection.chat} docs={docs} pane={selection.pane} push={push} replace={replace} />
+      )}
+      {selection.kind === "doc" && (
         <DocumentScreen
           key={selection.doc}
           id={selection.doc}
@@ -81,6 +92,7 @@ export function Workspace() {
           push={push}
           replace={replace}
           onRetry={retry}
+          onAsk={askAbout}
         />
       )}
     </div>
