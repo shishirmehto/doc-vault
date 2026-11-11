@@ -6,6 +6,8 @@ import type { Chat, ChatId, DocumentId, NonEmpty, Result } from "@/api/domain";
 import { canAsk, opening, started, step, type Thread, type ThreadEvent } from "@/lib/thread";
 
 const MAX_QUESTION = 2000;
+/** Text that stops arriving for this long means the answer is written and its citations are being checked. */
+const QUIET_MS = 300;
 
 /**
  * Asks live here, outside React, keyed by chat id: the first question is sent from the screen that
@@ -14,6 +16,7 @@ const MAX_QUESTION = 2000;
 class Threads {
   private threads = new Map<ChatId, Thread>();
   private listeners = new Set<() => void>();
+  private quietTimers = new Map<ChatId, ReturnType<typeof setTimeout>>();
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -43,7 +46,11 @@ class Threads {
     const thread = this.threads.get(id);
     if (question === "" || !thread || !canAsk(thread)) return;
     this.dispatch(id, { type: "sent", question });
-    const result = await api.ask(id, question);
+    const result = await api.askStream(id, question, (progress) => {
+      this.dispatch(id, { type: "progress", progress });
+      if (progress.kind === "text") this.quietAfter(id, QUIET_MS);
+    });
+    clearTimeout(this.quietTimers.get(id));
     if (result.ok) {
       this.dispatch(id, { type: "answered", turn: result.value });
       return;
@@ -59,6 +66,11 @@ class Threads {
 
   dismiss(id: ChatId): void {
     this.dispatch(id, { type: "dismissed" });
+  }
+
+  private quietAfter(id: ChatId, ms: number): void {
+    clearTimeout(this.quietTimers.get(id));
+    this.quietTimers.set(id, setTimeout(() => this.dispatch(id, { type: "quiet" }), ms));
   }
 
   private async loadHistory(id: ChatId): Promise<void> {

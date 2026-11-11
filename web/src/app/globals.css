@@ -253,6 +253,9 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .not-found p:first-child { font-size: var(--t-body); line-height: 1.55; }
 
 .usage { font-size: var(--t-meta); color: var(--graphite); font-variant-numeric: tabular-nums; }
+
+/* Provisional text while the answer streams: the same type as an answer, a shade lighter until it is grounded. */
+.answer.provisional { color: var(--graphite); }
 .actions { display: flex; align-items: center; gap: var(--s4); }
 
 .progress.indeterminate { overflow: hidden; max-width: 240px; }

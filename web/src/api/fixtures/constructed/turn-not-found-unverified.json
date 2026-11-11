@@ -2,20 +2,25 @@
   "status": 200,
   "headers": {},
   "body": {
-    "id": "579aa94e-85de-458e-b749-cb774b9d6ca7",
+    "id": "3a46fb45-04ed-4542-8a5c-c98a3158d8de",
     "question": "What is the property damage deductible?",
     "interpreted_as": "What is the property damage deductible?",
     "status": "not_found",
     "reason": "unverified",
     "answer": "I found passages that look related, but I could not verify an answer against their text, so I am not giving one.",
     "citations": [],
+    "suggestions": [
+      "What is the Policy Number?",
+      "What is the Named Insured?",
+      "What is the Mailing Address?"
+    ],
     "usage": {
       "calls": 2,
-      "input_tokens": 1960,
-      "output_tokens": 11,
+      "input_tokens": 1994,
+      "output_tokens": 23,
       "cost_usd": 0.0
     },
     "latency_ms": 13,
-    "created_at": "2026-11-11T03:40:37.110989Z"
+    "created_at": "2026-11-11T11:48:56.478578Z"
   }
 }

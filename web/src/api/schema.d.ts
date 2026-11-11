@@ -144,6 +144,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/chats/{chat_id}/messages/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Stream
+         * @description Asks like `POST /chats/{chat_id}/messages` and spends from the same rate-limit budget, but answers with
+         *     server-sent events while the answer is written. A refusal found before the stream starts (404, 409, 422, 429)
+         *     is the usual status with the error envelope. After a 200, the events are:
+         *
+         *     - `stage`, data `{"stage": "condensing" | "searching" | "answering"}`, as each step starts. `condensing` comes
+         *       only when the chat has earlier turns.
+         *     - `delta`, data `{"text": "..."}`: provisional answer text with every `[S#]` marker removed. Append it.
+         *     - `reset`, data `{}`: discard the provisional text. Sent before a retry or repair that follows text already sent.
+         *     - `turn`, data: the same body `POST /chats/{chat_id}/messages` returns. It is grounded and final, replaces all
+         *       provisional text, and ends the stream.
+         *     - `error`, data: the error envelope (`ai_unavailable`, `ai_bad_output` or `internal_error`). It ends the stream.
+         *
+         *     If the client disconnects, the answer still finishes and is stored, so `GET /chats/{chat_id}/messages` shows it.
+         */
+        post: operations["ask_stream_chats__chat_id__messages_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/documents": {
         parameters: {
             query?: never;
@@ -655,6 +687,8 @@ export interface components {
             answer: string;
             /** Citations */
             citations: components["schemas"]["CitationOut"][];
+            /** Suggestions */
+            suggestions: string[];
             usage: components["schemas"]["UsageOut"];
             /** Latency Ms */
             latency_ms: number;
@@ -1253,6 +1287,68 @@ export interface operations {
             };
             /** @description ai_unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    ask_stream_chats__chat_id__messages_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskIn"];
+            };
+        };
+        responses: {
+            /** @description stage, delta, reset, then one turn or error event */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description chat_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description documents_deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description rate_limited */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

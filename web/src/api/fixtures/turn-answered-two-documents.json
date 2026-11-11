@@ -2,7 +2,7 @@
   "status": 200,
   "headers": {},
   "body": {
-    "id": "56e3ea35-619c-4e3a-bc6f-6122a7c8e6d2",
+    "id": "ae67dc9e-b6e0-4133-9327-fba61f3df7aa",
     "question": "What is the general aggregate limit?",
     "interpreted_as": "What is the general aggregate limit?",
     "status": "answered",
@@ -30,13 +30,18 @@
         "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/2"
       }
     ],
+    "suggestions": [
+      "What is the Quote Number?",
+      "What is the Named Insured?",
+      "What is the Expiring Policy Number?"
+    ],
     "usage": {
       "calls": 2,
-      "input_tokens": 2415,
-      "output_tokens": 14,
+      "input_tokens": 2449,
+      "output_tokens": 27,
       "cost_usd": 0.0
     },
-    "latency_ms": 8,
-    "created_at": "2026-11-11T03:40:37.163436Z"
+    "latency_ms": 5,
+    "created_at": "2026-11-11T11:48:56.526823Z"
   }
 }

@@ -102,7 +102,18 @@ export type Turn = {
   outcome: Outcome;
   usage: Usage;
   latencyMs: number;
+  /** Up to three follow-up questions to offer under the turn, each ending in "?". */
+  suggestions: readonly string[];
 };
+
+/** The step a streamed answer is on. "condensing" reads a follow-up against the turns before it. */
+export type AskStage = "condensing" | "searching" | "answering";
+
+/**
+ * One event of the streamed ask before its end. `text` is provisional answer text with the source markers
+ * removed; `reset` discards the text so far. The stream ends with a Turn or an ApiError instead.
+ */
+export type AskProgress = { kind: "stage"; stage: AskStage } | { kind: "text"; text: string } | { kind: "reset" };
 
 // ------------------------------------------------------------------ the URL
 

@@ -2,20 +2,25 @@
   "status": 200,
   "headers": {},
   "body": {
-    "id": "5eb43cfd-ad56-4683-967d-bb75aa1c6f77",
+    "id": "9192e75a-1038-4322-85d7-fd6311f1a41a",
     "question": "Exclusions?",
     "interpreted_as": "Exclusions?",
     "status": "not_found",
     "reason": "model_declined",
     "answer": "The selected documents do not say.",
     "citations": [],
+    "suggestions": [
+      "What is the Estimated Annual Payroll?",
+      "What is the Rate per $1,000 of Payroll?",
+      "What is the Policy Number?"
+    ],
     "usage": {
       "calls": 3,
-      "input_tokens": 2141,
-      "output_tokens": 7,
+      "input_tokens": 2175,
+      "output_tokens": 23,
       "cost_usd": 0.0
     },
-    "latency_ms": 6,
-    "created_at": "2026-11-11T03:40:37.149027Z"
+    "latency_ms": 4,
+    "created_at": "2026-11-11T11:48:56.514079Z"
   }
 }

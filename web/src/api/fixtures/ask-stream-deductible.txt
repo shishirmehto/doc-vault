@@ -1,0 +1,27 @@
+event: stage
+data: {"stage": "searching"}
+
+event: stage
+data: {"stage": "answering"}
+
+event: delta
+data: {"text": "Property"}
+
+event: delta
+data: {"text": " Damage"}
+
+event: delta
+data: {"text": " Deductible"}
+
+event: delta
+data: {"text": " $2,500"}
+
+event: delta
+data: {"text": " per"}
+
+event: delta
+data: {"text": " occurrence"}
+
+event: turn
+data: {"id":"c433e1d9-9af3-403b-b06a-21187f685f22","question":"What is the property damage deductible?","interpreted_as":"What is the property damage deductible?","status":"answered","reason":null,"answer":"Property Damage Deductible $2,500 per occurrence [1]","citations":[{"ref":1,"document_id":"6e67edc4-27c9-4d1b-9090-4b47a40b3c29","filename":"sample-cgl-policy.pdf","page":2,"page_label":"p. 2","quote":"Property Damage Deductible $2,500 per occurrence","chunk_id":"016551f1-822d-4f35-838c-d7fbca9ac1e2","page_url":"/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/2"}],"suggestions":["What is the Policy Number?","What is the Named Insured?","What is the Mailing Address?"],"usage":{"calls":2,"input_tokens":1994,"output_tokens":23,"cost_usd":0.0},"latency_ms":613,"created_at":"2026-11-11T11:48:56.539078Z"}
+

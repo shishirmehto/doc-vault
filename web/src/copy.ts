@@ -1,6 +1,6 @@
 // Every sentence the interface writes about state. The backend's own messages are shown verbatim.
 
-import type { ApiError, Doc, NotFoundReason, PageUnit, Turn } from "./api/domain.ts";
+import type { ApiError, AskStage, Doc, NotFoundReason, PageUnit, Turn } from "./api/domain.ts";
 
 export type Tone = "quiet" | "working" | "done" | "failed";
 
@@ -92,6 +92,27 @@ export function usageLine(turn: Turn): string {
   const cost = costUsd === null ? "cost unknown" : formatUsd(costUsd);
   const callWord = calls === 1 ? "call" : "calls";
   return `${calls} model ${callWord}, ${n(inputTokens)} tokens in, ${n(outputTokens)} out, ${cost}, ${formatMs(turn.latencyMs)}`;
+}
+
+/** "Searching 3 documents". The count is unknown until the chat's header loads. */
+export function searching(documents: number | null): string {
+  return documents === null ? "Searching" : `Searching ${documents === 1 ? "1 document" : `${documents} documents`}`;
+}
+
+/** The status line under a streaming answer. `quiet`: text stopped arriving, so the citations are being checked. */
+export function streamingStatus(stage: AskStage, quiet: boolean, documents: number | null): string {
+  switch (stage) {
+    case "condensing":
+      return "Reading the follow-up against the conversation";
+    case "searching":
+      return searching(documents);
+    case "answering":
+      return quiet ? "Checking citations" : "Writing the answer";
+    default: {
+      const unknown: never = stage;
+      return unknown;
+    }
+  }
 }
 
 /** "a.pdf", "a.pdf and b.pdf", "a.pdf, b.pdf and c.pdf". */

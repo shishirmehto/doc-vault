@@ -2,10 +2,10 @@
   "status": 200,
   "headers": {},
   "body": {
-    "chat_id": "fb08c883-7620-4116-957a-29575baec3ba",
+    "chat_id": "7532866d-00fd-4c18-8d0f-590c32093708",
     "turns": [
       {
-        "id": "579aa94e-85de-458e-b749-cb774b9d6ca7",
+        "id": "3a46fb45-04ed-4542-8a5c-c98a3158d8de",
         "question": "What is the property damage deductible?",
         "interpreted_as": "What is the property damage deductible?",
         "status": "answered",
@@ -23,17 +23,22 @@
             "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/2"
           }
         ],
+        "suggestions": [
+          "What is the Policy Number?",
+          "What is the Named Insured?",
+          "What is the Mailing Address?"
+        ],
         "usage": {
           "calls": 2,
-          "input_tokens": 1960,
-          "output_tokens": 11,
+          "input_tokens": 1994,
+          "output_tokens": 23,
           "cost_usd": 0.0
         },
         "latency_ms": 13,
-        "created_at": "2026-11-11T03:40:37.110989Z"
+        "created_at": "2026-11-11T11:48:56.478578Z"
       },
       {
-        "id": "687557f8-fdf2-4d73-86ce-ec43c3709b06",
+        "id": "47c45f97-4e6b-4d20-a22f-0ac133e121f4",
         "question": "Does it apply per occurrence?",
         "interpreted_as": "What is the property damage deductible? Does it apply per occurrence?",
         "status": "answered",
@@ -51,23 +56,33 @@
             "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/2"
           }
         ],
+        "suggestions": [
+          "What is the Policy Number?",
+          "What is the Named Insured?",
+          "What is the Mailing Address?"
+        ],
         "usage": {
           "calls": 3,
-          "input_tokens": 2092,
-          "output_tokens": 22,
+          "input_tokens": 2126,
+          "output_tokens": 34,
           "cost_usd": 0.0
         },
-        "latency_ms": 10,
-        "created_at": "2026-11-11T03:40:37.129795Z"
+        "latency_ms": 6,
+        "created_at": "2026-11-11T11:48:56.497268Z"
       },
       {
-        "id": "1b0ae02a-a7aa-4f6c-97de-b6ff8c9241b7",
+        "id": "3cdb5c92-61bb-482d-8bc1-0515c5f5708c",
         "question": "Who won the 2022 football World Cup?",
         "interpreted_as": "Who won the 2022 football World Cup?",
         "status": "not_found",
         "reason": "no_evidence",
         "answer": "I could not find anything about this in sample-cgl-policy.pdf, so I can't answer it from the selected documents.",
         "citations": [],
+        "suggestions": [
+          "What is the Policy Number?",
+          "What is the Named Insured?",
+          "What is the Mailing Address?"
+        ],
         "usage": {
           "calls": 2,
           "input_tokens": 121,
@@ -75,24 +90,29 @@
           "cost_usd": 0.0
         },
         "latency_ms": 3,
-        "created_at": "2026-11-11T03:40:37.142209Z"
+        "created_at": "2026-11-11T11:48:56.507890Z"
       },
       {
-        "id": "5eb43cfd-ad56-4683-967d-bb75aa1c6f77",
+        "id": "9192e75a-1038-4322-85d7-fd6311f1a41a",
         "question": "Exclusions?",
         "interpreted_as": "Exclusions?",
         "status": "not_found",
         "reason": "model_declined",
         "answer": "The selected documents do not say.",
         "citations": [],
+        "suggestions": [
+          "What is the Estimated Annual Payroll?",
+          "What is the Rate per $1,000 of Payroll?",
+          "What is the Policy Number?"
+        ],
         "usage": {
           "calls": 3,
-          "input_tokens": 2141,
-          "output_tokens": 7,
+          "input_tokens": 2175,
+          "output_tokens": 23,
           "cost_usd": 0.0
         },
-        "latency_ms": 6,
-        "created_at": "2026-11-11T03:40:37.149027Z"
+        "latency_ms": 4,
+        "created_at": "2026-11-11T11:48:56.514079Z"
       }
     ]
   }

@@ -2,7 +2,7 @@
   "status": 200,
   "headers": {},
   "body": {
-    "id": "687557f8-fdf2-4d73-86ce-ec43c3709b06",
+    "id": "47c45f97-4e6b-4d20-a22f-0ac133e121f4",
     "question": "Does it apply per occurrence?",
     "interpreted_as": "What is the property damage deductible? Does it apply per occurrence?",
     "status": "answered",
@@ -20,13 +20,18 @@
         "page_url": "/documents/6e67edc4-27c9-4d1b-9090-4b47a40b3c29/pages/2"
       }
     ],
+    "suggestions": [
+      "What is the Policy Number?",
+      "What is the Named Insured?",
+      "What is the Mailing Address?"
+    ],
     "usage": {
       "calls": 3,
-      "input_tokens": 2092,
-      "output_tokens": 22,
+      "input_tokens": 2126,
+      "output_tokens": 34,
       "cost_usd": 0.0
     },
-    "latency_ms": 10,
-    "created_at": "2026-11-11T03:40:37.129795Z"
+    "latency_ms": 6,
+    "created_at": "2026-11-11T11:48:56.497268Z"
   }
 }

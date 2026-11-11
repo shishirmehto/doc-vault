@@ -227,8 +227,8 @@ test("the URL selects a document, then a cited fact or a page; malformed parts a
   assert.equal(selectionQuery({ kind: "none" }), "");
 });
 
-const CHAT = "fb08c883-7620-4116-957a-29575baec3ba" as ChatId;
-const DEDUCTIBLE_TURN = "579aa94e-85de-458e-b749-cb774b9d6ca7" as TurnId;
+const CHAT = "7532866d-00fd-4c18-8d0f-590c32093708" as ChatId;
+const DEDUCTIBLE_TURN = "3a46fb45-04ed-4542-8a5c-c98a3158d8de" as TurnId;
 
 test("the URL selects a chat, then one turn's citation; a fact cite has no meaning in a chat", () => {
   const sel = (q: string) => parseSelection(new URLSearchParams(q));
@@ -341,8 +341,9 @@ test("a cited answer becomes text and a citation pointing at its page and quote"
           },
         ],
       },
-      usage: { calls: 2, inputTokens: 1960, outputTokens: 11, costUsd: 0 },
+      usage: { calls: 2, inputTokens: 1994, outputTokens: 23, costUsd: 0 },
       latencyMs: 13,
+      suggestions: ["What is the Policy Number?", "What is the Named Insured?", "What is the Mailing Address?"],
     },
   });
 });

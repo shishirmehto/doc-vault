@@ -16,3 +16,8 @@ At phase 3 (`ead25ad`), a capture script run against the live API recaptured the
 the failed document, the document list, both 422s, the 409 and the started chat) and captured the new ones: the chat
 read back with a deleted document, its `documents_deleted` 409, the recent chats, a 429 from 31 duplicate uploads of
 `ui-textless.pdf`, and both metrics routes, including an empty one-hour window.
+
+At bonus phase A, after `TurnOut` gained `suggestions`, a capture script asked the same questions about the same
+documents again and recaptured `turn-*` and `history-policy-four-turns.json`. It also captured
+`ask-stream-deductible.txt`, the raw body of a streamed ask. `turn-answered-zero-citations.json` and
+`turn-not-found-unverified.json` were rebuilt from the new `turn-answered-one-citation.json` as described above.

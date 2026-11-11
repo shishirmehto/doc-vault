@@ -3,10 +3,11 @@
 
 import type * as W from "./wire.ts";
 import type {
-  AnswerPart, ApiError, Chat, ChatId, Citation, CodeCount, Doc, DocumentId, DocumentMetrics, FactCite, Failure, Health,
-  Insights, Lifecycle, Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument, Selection, Spread, Step, Turn,
-  TurnCite, TurnId, TurnOutcome,
+  AnswerPart, ApiError, AskProgress, AskStage, Chat, ChatId, Citation, CodeCount, Doc, DocumentId, DocumentMetrics,
+  FactCite, Failure, Health, Insights, Lifecycle, Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument,
+  Selection, Spread, Step, Turn, TurnCite, TurnId, TurnOutcome,
 } from "./domain.ts";
+import type { SseMessage } from "./sse.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -148,7 +149,38 @@ export function parseTurn(w: W.TurnOut): Turn {
       costUsd: w.usage.cost_usd,
     },
     latencyMs: w.latency_ms,
+    suggestions: w.suggestions,
   };
+}
+
+const STAGES: readonly AskStage[] = ["condensing", "searching", "answering"];
+
+/** An event of POST /chats/{id}/messages/stream: progress, or its end (the final turn, or the error envelope). */
+export type AskEvent = AskProgress | { kind: "turn"; turn: Turn } | { kind: "error"; error: ApiError };
+
+/**
+ * The stream answered 200, so an `error` event is a refusal whose status is that 200; its code and
+ * `retryable` say what failed. Throws on an event or data the contract does not name.
+ */
+export function parseAskEvent(m: SseMessage): AskEvent {
+  const data: unknown = JSON.parse(m.data);
+  switch (m.event) {
+    case "stage": {
+      const stage = isRecord(data) ? STAGES.find((s) => s === data.stage) : undefined;
+      return { kind: "stage", stage: required(stage ?? null, "a stage") };
+    }
+    case "delta":
+      if (!isRecord(data) || typeof data.text !== "string") throw new TypeError("a delta without text");
+      return { kind: "text", text: data.text };
+    case "reset":
+      return { kind: "reset" };
+    case "turn":
+      return { kind: "turn", turn: parseTurn(data as W.TurnOut) };
+    case "error":
+      return { kind: "error", error: parseError(200, data, null) };
+    default:
+      throw new TypeError(`unknown stream event: ${m.event}`);
+  }
 }
 
 export function parseHistory(w: W.HistoryOut): Turn[] {

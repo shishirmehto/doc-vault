@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseHistory } from "../api/parse.ts";
-import type { Turn } from "../api/domain.ts";
+import type { AskProgress, Turn } from "../api/domain.ts";
 import { canAsk, started, step, type Thread, type ThreadEvent } from "./thread.ts";
 
 const captured = JSON.parse(readFileSync(new URL("../api/fixtures/history-policy-four-turns.json", import.meta.url), "utf8"));
@@ -74,4 +74,35 @@ test("a second question cannot be sent while one is in flight", () => {
     { type: "sent", question: perOccurrence.question },
   ]);
   assert.deepEqual(t.ask, { phase: "asking", question: "What is the property damage deductible?" });
+});
+
+const progress = (...events: AskProgress[]): ThreadEvent[] => events.map((p) => ({ type: "progress", progress: p }));
+
+test("a streaming answer shows its step and text, a reset clears the text, and the turn replaces it", () => {
+  const streaming = run([
+    { type: "sent", question: deductible.question },
+    ...progress({ kind: "stage", stage: "searching" }, { kind: "stage", stage: "answering" }, { kind: "text", text: "Property" }),
+    ...progress({ kind: "reset" }, { kind: "text", text: "Property Damage" }, { kind: "text", text: " Deductible" }),
+  ]);
+  assert.deepEqual([streaming.ask, canAsk(streaming)], [
+    { phase: "streaming", question: "What is the property damage deductible?", stage: "answering", text: "Property Damage Deductible", quiet: false },
+    false,
+  ]);
+  const writing = (t: Thread) => (t.ask.phase === "streaming" ? { text: t.ask.text, quiet: t.ask.quiet } : t.ask.phase);
+  const quiet = step(streaming, { type: "quiet" });
+  assert.deepEqual(writing(quiet), { text: "Property Damage Deductible", quiet: true });
+  assert.deepEqual(writing(run(progress({ kind: "text", text: " $2,500" }), quiet)), { text: "Property Damage Deductible $2,500", quiet: false });
+  assert.deepEqual(seen(step(quiet, { type: "answered", turn: deductible })), { ask: "idle", turns: ["What is the property damage deductible?"] });
+});
+
+test("quiet before any text keeps the step as it is, and progress after the end is ignored", () => {
+  const searching = run([{ type: "sent", question: deductible.question }, ...progress({ kind: "stage", stage: "searching" })]);
+  assert.deepEqual(step(searching, { type: "quiet" }), searching);
+  const done = step(searching, { type: "answered", turn: deductible });
+  assert.deepEqual(run(progress({ kind: "text", text: "late" }), done), done);
+});
+
+test("a stream that breaks mid-answer drops its text and checks history like any lost answer", () => {
+  const t = run([{ type: "sent", question: worldCup.question }, ...progress({ kind: "stage", stage: "searching" }), lost]);
+  assert.deepEqual(t.ask, { phase: "checking", question: "Who won the 2022 football World Cup?", error: { kind: "offline" } });
 });

@@ -2,13 +2,18 @@
   "status": 200,
   "headers": {},
   "body": {
-    "id": "1b0ae02a-a7aa-4f6c-97de-b6ff8c9241b7",
+    "id": "3cdb5c92-61bb-482d-8bc1-0515c5f5708c",
     "question": "Who won the 2022 football World Cup?",
     "interpreted_as": "Who won the 2022 football World Cup?",
     "status": "not_found",
     "reason": "no_evidence",
     "answer": "I could not find anything about this in sample-cgl-policy.pdf, so I can't answer it from the selected documents.",
     "citations": [],
+    "suggestions": [
+      "What is the Policy Number?",
+      "What is the Named Insured?",
+      "What is the Mailing Address?"
+    ],
     "usage": {
       "calls": 2,
       "input_tokens": 121,
@@ -16,6 +21,6 @@
       "cost_usd": 0.0
     },
     "latency_ms": 3,
-    "created_at": "2026-11-11T03:40:37.142209Z"
+    "created_at": "2026-11-11T11:48:56.507890Z"
   }
 }

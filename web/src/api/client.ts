@@ -2,10 +2,11 @@
 // next.config.ts rewrites to the API. Every call returns Result<T> and never throws.
 
 import type {
-  Chat, ChatId, Doc, DocumentId, DocumentMetrics, Health, Insights, MetricsWindow, NonEmpty, Page, ProcessingMetrics, Result,
-  Turn, UploadReceipt,
+  AskProgress, Chat, ChatId, Doc, DocumentId, DocumentMetrics, Health, Insights, MetricsWindow, NonEmpty, Page,
+  ProcessingMetrics, Result, Turn, UploadReceipt,
 } from "./domain.ts";
 import * as P from "./parse.ts";
+import { createSseReader } from "./sse.ts";
 import type * as W from "./wire.ts";
 
 const BASE = "/api";
@@ -44,6 +45,29 @@ export const api = {
   /** Records exactly one turn on success. A 503 or a 429 records none. */
   ask: (chat: ChatId, question: string): Promise<Result<Turn>> =>
     call("POST", `/chats/${chat}/messages`, P.parseTurn, { body: { question } satisfies W.AskIn }),
+
+  /**
+   * The same ask, streamed: onProgress hears each stage, piece of provisional text and reset as it arrives,
+   * and the result is the final turn. A refusal before the stream starts (404, 409, 422, 429) and an error
+   * event are "refused". A body that ends without a turn or an error is "offline", like a lost response.
+   */
+  askStream: async (chat: ChatId, question: string, onProgress: (p: AskProgress) => void): Promise<Result<Turn>> => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/chats/${chat}/messages/stream`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify({ question } satisfies W.AskIn),
+      });
+    } catch {
+      return { ok: false, error: { kind: "offline" } };
+    }
+    if (res.status !== 200 || res.body === null) {
+      return settle(res.status, await res.text(), res.headers.get("Retry-After"), P.parseTurn);
+    }
+    return readAskStream(res.body, onProgress);
+  },
 
   /** Oldest first. 200 is the API's maximum. */
   history: (chat: ChatId): Promise<Result<Turn[]>> => call("GET", `/chats/${chat}/messages?limit=200`, P.parseHistory),
@@ -86,6 +110,39 @@ async function call<WireT, T>(
     return { ok: false, error: { kind: "offline" } };
   }
   return settle(res.status, await res.text(), res.headers.get("Retry-After"), parse, dataStatuses);
+}
+
+/**
+ * Reads a streamed ask's body to its turn or error event. Bytes are decoded in stream mode, so a character
+ * split across network chunks arrives whole.
+ */
+export async function readAskStream(body: ReadableStream<Uint8Array>, onProgress: (p: AskProgress) => void): Promise<Result<Turn>> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const sse = createSseReader();
+  for (;;) {
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch {
+      return { ok: false, error: { kind: "offline" } };
+    }
+    if (chunk.done) return { ok: false, error: { kind: "offline" } };
+    for (const message of sse.push(decoder.decode(chunk.value, { stream: true }))) {
+      let event: P.AskEvent;
+      try {
+        event = P.parseAskEvent(message);
+      } catch (err) {
+        void reader.cancel();
+        return { ok: false, error: { kind: "unexpected", detail: err instanceof Error ? err.message : String(err) } };
+      }
+      if (event.kind === "turn" || event.kind === "error") {
+        void reader.cancel();
+        return event.kind === "turn" ? { ok: true, value: event.turn } : { ok: false, error: event.error };
+      }
+      onProgress(event);
+    }
+  }
 }
 
 /** Shared by fetch and XHR, and the only code that calls JSON.parse or a parser. */
