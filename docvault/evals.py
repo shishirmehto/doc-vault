@@ -1,11 +1,12 @@
-"""Retrieval, answer and insights evals over the sample documents.
+"""Retrieval, answer, insights and comparison evals over the sample documents.
 
   uv run python -m docvault.evals [--calibrate] [--out docs/evals.md]
 
 Runs the fixed case set in evals/cases.yaml against the configured provider (the fake when no key is set)
 in its own database, <DATABASE_URL name>_evals, dropped and recreated each run. It uploads the samples through
-documents.upload, runs run_index and run_analyze in-process (no Celery, no Redis), then asks every case
-through chat.start and chat.ask. Each number is scored apart, so it shows where a miss happens:
+documents.upload, runs run_index and run_analyze in-process (no Celery, no Redis), asks every case
+through chat.start and chat.ask, then compares the policy with its renewal quote through compare.create. Each
+number is scored apart, so it shows where a miss happens:
 
   retrieval hit rate   the expected document and page are among the sources given to the answer step
   citation accuracy    a citation of the expected document has the expected page and quotes the fact
@@ -13,6 +14,10 @@ through chat.start and chat.ask. Each number is scored apart, so it shows where 
   key-fact grounding   insights facts kept / (kept + dropped), and the planted facts they recall
   suggestions answered every suggestion under a case's last turn, asked in that chat after the case, comes back
                        answered (a click on a suggestion should never end in a refusal)
+  cell grounding       comparison cells kept / (kept + dropped)
+  difference recall    the changes planted between the policy and the quote (samples/facts.yaml) come back as a
+                       differing row whose two cells sit on the fact's page and quote it
+  equal fields         the fields planted unchanged come back the same way as a row that does not differ
   cost and latency     metrics.processing_stats over the run: llm_calls by purpose and model, chat_turns p95
 
 --calibrate prints each turn's best vector similarity and all-terms match instead, then the relevance-gate
@@ -44,11 +49,11 @@ from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import BaseModel
 
-from . import ai, chat, db, documents, insights, metrics
+from . import ai, chat, compare, db, documents, insights, metrics
 from .ai import ChatBackend, EmbedBackend, RawCompletion, Tokens, Vector
 from .config import Settings, load_settings
 from .context import BlobStore, Ctx
-from .domain import Citation, DocumentId, InsightsReady, Source, TurnOutcome
+from .domain import Cell, Citation, DocumentId, InsightsReady, Row, Source, TurnOutcome
 from .pages import collapse_whitespace, locate_quote
 from .prompts import Prompt
 
@@ -83,10 +88,27 @@ class Case:
 
 
 @dataclass(frozen=True, slots=True)
+class ExpectedField:
+    """A field planted in both documents of the comparison case, as a change or unchanged."""
+
+    field: str
+    policy: Fact            # the first column's cell: on this page, its quote holding this text
+    quote: Fact             # the second column's cell, likewise
+    differs: bool           # True for a planted change
+
+
+@dataclass(frozen=True, slots=True)
+class ComparisonCase:
+    documents: tuple[str, str]      # sample filenames, compared with no focus in this column order
+    fields: tuple[ExpectedField, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CaseSet:
     documents: tuple[str, ...]      # every sample to upload
     planted: tuple[Fact, ...]       # facts.yaml without the boilerplate repeated on every page
     cases: tuple[Case, ...]
+    comparison: ComparisonCase      # from facts.yaml's changes and unchanged
 
 
 def load_cases(path: Path = CASES) -> CaseSet:
@@ -120,7 +142,10 @@ def load_cases(path: Path = CASES) -> CaseSet:
     if problems:
         raise ValueError(f"{path}: " + "; ".join(problems))
     planted = tuple(facts[f["id"]] for f in truth["facts"] if "repeated_on" not in f)
-    return CaseSet(tuple(aliases.values()), planted, tuple(cases))
+    fields = tuple(ExpectedField(item["field"], facts[item["policy"]], facts[item["quote"]], differs)
+                   for key, differs in (("changes", True), ("unchanged", False)) for item in truth[key])
+    comparison = ComparisonCase((fields[0].policy.document, fields[0].quote.document), fields)
+    return CaseSet(tuple(aliases.values()), planted, tuple(cases), comparison)
 
 
 # ------------------------------------------------------------------ scoring
@@ -194,6 +219,25 @@ def _ratio(flags: Iterable[bool]) -> Ratio:
 
 
 @dataclass(frozen=True, slots=True)
+class FieldResult:
+    expected: ExpectedField
+    row: Row | None         # the first row whose two cells hold the expected facts; None when no row does
+
+    @property
+    def found(self) -> bool:
+        return self.row is not None and self.row.differs == self.expected.differs
+
+
+def match_field(expected: ExpectedField, rows: Sequence[Row]) -> FieldResult:
+    return FieldResult(expected, next((row for row in rows if _holds(row.cells[0], expected.policy)
+                                       and _holds(row.cells[1], expected.quote)), None))
+
+
+def _holds(cell: Cell | None, fact: Fact) -> bool:
+    return cell is not None and cell.page == fact.page and collapse_whitespace(fact.text) in cell.quote
+
+
+@dataclass(frozen=True, slots=True)
 class Suggested:
     """One suggestion asked as a question. Kept out of Report.turns: it has no expected facts, so it would count
     as out of scope there and move the gate fit."""
@@ -211,6 +255,8 @@ class Report:
     suggested: tuple[Suggested, ...]
     grounding: Ratio            # insights key facts kept / (kept + dropped)
     recall: Ratio               # planted facts found in a kept key fact's quote, same document and page
+    cell_grounding: Ratio       # comparison cells kept / (kept + dropped)
+    fields: tuple[FieldResult, ...]
     spend: tuple[metrics.AIUsage, ...]
     turn_p95_ms: int | None
 
@@ -229,6 +275,14 @@ class Report:
     @property
     def suggestions(self) -> Ratio:
         return _ratio(s.outcome is TurnOutcome.ANSWERED for s in self.suggested)
+
+    @property
+    def difference_recall(self) -> Ratio:
+        return _ratio(result.found for result in self.fields if result.expected.differs)
+
+    @property
+    def equal_kept(self) -> Ratio:
+        return _ratio(result.found for result in self.fields if not result.expected.differs)
 
 
 # ------------------------------------------------------------------ the gate fit
@@ -366,13 +420,18 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
             suggested += [Suggested(case.id, ask, chat.ask(asking, started.id, ask).answer.outcome)
                           for ask in turn.suggestions]
 
+        compared = compare.create(ctx, [ids[name] for name in case_set.comparison.documents], None)
+        kept = sum(cell is not None for row in compared.rows for cell in row.cells)
+        fields = tuple(match_field(expected, compared.rows) for expected in case_set.comparison.fields)
+
         grounding, recall = _insights(pool, ids, case_set.planted)
         stats = metrics.processing_stats(pool, timedelta(days=1))   # the database holds this run only
         chat_models = ", ".join(f"{tier} {model}" for tier, model in ctx.ai.chat.models.items())
         setup = (f"chat {ctx.ai.chat.provider} ({chat_models}); embeddings {ctx.ai.embedder.provider} "
                  f"{ctx.ai.embed_model}")
         return Report(setup, ctx.ai.min_similarity, tuple(turns), tuple(suggested), grounding, recall,
-                      tuple(stats.ai.by_purpose_and_model), stats.chat.latency_ms.p95)
+                      Ratio(kept, kept + compared.dropped_cells), fields, tuple(stats.ai.by_purpose_and_model),
+                      stats.chat.latency_ms.p95)
 
 
 def _insights(pool: db.Db, ids: Mapping[str, DocumentId], planted: Sequence[Fact]) -> tuple[Ratio, Ratio]:
@@ -411,6 +470,11 @@ def render(report: Report, command: str) -> str:
         f"| Key-fact grounding (insights facts kept / kept + dropped) | {report.grounding} |",
         f"| Key-fact recall (planted facts in a kept key fact) | {report.recall} |",
         f"| Suggestions answered (each one under a case's last turn, asked in that chat) | {report.suggestions} |",
+        f"| Cell grounding (comparison cells kept / kept + dropped) | {report.cell_grounding} |",
+        f"| Difference recall (planted changes found as a differing row, both cells quoting the fact) | "
+        f"{report.difference_recall} |",
+        f"| Equal fields kept equal (planted unchanged fields found as a row that does not differ) | "
+        f"{report.equal_kept} |",
         f"| Gate at {report.threshold}: answerable passed, out-of-scope refused | {_gate_at(turns, report.threshold)} |",
         f"| Best gate threshold on this set | {_fit_line(fit_gate(turns))} |",
         f"| p95 turn latency | {report.turn_p95_ms} ms |",
@@ -420,6 +484,13 @@ def render(report: Report, command: str) -> str:
         *(f"| {u.purpose} | {u.model} | {u.calls} | {u.errors} | {u.input_tokens} | {u.output_tokens} | "
           f"{u.cost_usd}{f' ({u.unpriced_calls} unpriced)' if u.unpriced_calls else ''} | "
           f"{u.latency_ms.p95} ms |" for u in report.spend),
+        "",
+        f"Comparison of {report.fields[0].expected.policy.document} with "
+        f"{report.fields[0].expected.quote.document}, no focus:",
+        "",
+        "| Expected field | Matched row | Differs | Policy page | Quote page | Result |",
+        "|---|---|---|---|---|---|",
+        *(_field_line(result) for result in report.fields),
         "",
         "| Case | Question | Interpreted as | Outcome | Retrieval | Citation |",
         "|---|---|---|---|---|---|",
@@ -442,6 +513,14 @@ def render_calibration(report: Report) -> str:
     lines += ["", f"At the current threshold {report.threshold}: {_gate_at(report.turns, report.threshold)}.",
               f"Best threshold: {_fit_line(fit_gate(report.turns))}."]
     return "\n".join(lines)
+
+
+def _field_line(result: FieldResult) -> str:
+    expected, row = result.expected, result.row
+    verdict = "found" if result.found else "no row" if row is None else "differs" if row.differs else "shown equal"
+    return (f"| {expected.field} | {'no row' if row is None else _cell(row.field)} | "
+            f"{'-' if row is None else 'yes' if row.differs else 'no'} | {expected.policy.page} | "
+            f"{expected.quote.page} | {verdict} |")
 
 
 def _gate_at(turns: Sequence[TurnResult], threshold: float) -> str:
