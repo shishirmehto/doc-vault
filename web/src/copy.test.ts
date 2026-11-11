@@ -5,8 +5,8 @@ import { parseComparison, parseComparisonPage, parseDocumentPage, parseSummary }
 import type { ApiError, DocumentId } from "./api/domain.ts";
 import {
   cannotOpen, clockTime, compareBlocked, compareFailed, comparing, deletedColumns, differCount, docMeta, droppedCells,
-  droppedSources, fieldCount, focusLine, notReadyNames, partlyRead, rewriteOptions, rewriting, rewrittenBy, sourceLabel,
-  wordTarget,
+  fieldCount, focusLine, notReadyNames, partlyRead, rewriteOptions, rewriting, rewrittenBy, sourceLabel,
+  sourcesNote, wordTarget,
 } from "./copy.ts";
 
 const page = JSON.parse(readFileSync(new URL("./api/fixtures/documents-page.json", import.meta.url), "utf8"));
@@ -150,16 +150,26 @@ test("a rewritten summary's options read as its heading, and as the sentence whi
   assert.deepEqual((["brief", "standard", "detailed"] as const).map(wordTarget), ["About 60 words.", "About 150 words.", "About 300 words."]);
 });
 
-test("a rewritten summary's notes: quotes left out, each source's tab, and when it was written", () => {
-  assert.deepEqual([droppedSources(1), droppedSources(3)], [
-    "One more quote was left out because it was not on the page it cited.",
-    "3 more quotes were left out because they were not on the pages they cited.",
-  ]);
+test("a rewritten summary's notes: no sources, quotes left out, each source's tab, and when it was written", () => {
+  const body = JSON.parse(readFileSync(new URL("./api/fixtures/summary-201-brief-focus-client.json", import.meta.url), "utf8")).body;
+  const summary = parseSummary(body);
+  assert.deepEqual(
+    [
+      summary,
+      { ...summary, droppedSources: 1 },
+      { ...summary, droppedSources: 3 },
+      { ...summary, sources: [], droppedSources: 2 },
+    ].map(sourcesNote),
+    [
+      null,
+      "One more quote was left out because it was not on the page it cited.",
+      "3 more quotes were left out because they were not on the pages they cited.",
+      "None of its quotes could be found on the page it cited, so this summary has no sources. Treat it as an overview.",
+    ],
+  );
   assert.equal(sourceLabel(1, 4, "p. 2"), "Source 2 of 4: show the passage on p. 2");
 
   const now = new Date(2026, 10, 12, 18, 30);
   assert.deepEqual([clockTime(new Date(2026, 10, 12, 14, 3), now), clockTime(new Date(2026, 10, 11, 9, 5), now)], ["14:03", "09:05 on 11 Nov"]);
-  const body = JSON.parse(readFileSync(new URL("./api/fixtures/summary-201-brief-focus-client.json", import.meta.url), "utf8")).body;
-  const summary = { ...parseSummary(body), createdAt: new Date(2026, 10, 12, 14, 3) };
-  assert.equal(rewrittenBy(summary, now), "Written by fake-chat with prompt summary-v1 at 14:03.");
+  assert.equal(rewrittenBy({ ...summary, createdAt: new Date(2026, 10, 12, 14, 3) }, now), "Written by fake-chat with prompt summary-v1 at 14:03.");
 });

@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState, type Ref } from "react";
 import type { Summary, SummaryCite, SummaryId, SummaryLength, SummaryTone } from "@/api/domain";
 import type { Rewrites } from "@/hooks/useRewrites";
 import { FOCUS_MAX, LENGTHS, TONES, normaliseFocus, type Run } from "@/lib/summary";
 import {
-  LOADING_REWRITES, LONG_DOCUMENT, MORE_REWRITES, NO_REWRITES, NO_SOURCES, REWRITE_LEAD, REWRITTEN, SAVED_EARLIER,
-  clockTime, droppedSources, explain, rewriteOptions, rewriting, rewrittenBy, sourceLabel, wordTarget,
+  LOADING_REWRITES, LONG_DOCUMENT, MORE_REWRITES, NO_REWRITES, REWRITE_LEAD, REWRITTEN, SAVED_EARLIER, clockTime,
+  explain, rewriteOptions, rewriting, rewrittenBy, sourceLabel, sourcesNote, wordTarget,
 } from "@/copy";
 
 /** After this long, the run says that a long document takes a while. */
@@ -22,19 +22,24 @@ export function SummaryRewrite({ rewrites, cite, onOpenSource }: {
   onOpenSource(summary: SummaryId, index: number): void;
 }) {
   const { run, shown, landed } = rewrites;
+  const submit = useRef<HTMLButtonElement>(null);
   return (
     <details className="rewrite" open={rewrites.open} onToggle={(e) => rewrites.setOpen(e.currentTarget.open)}>
       <summary>Rewrite the summary</summary>
       <div className="rewrite-body">
         <p className="quiet">{REWRITE_LEAD}</p>
-        <RewriteForm rewrites={rewrites} />
+        <RewriteForm rewrites={rewrites} submit={submit} />
         <div className="rewrite-run" aria-live="polite">
           {run.kind === "running" ? (
             <Running key={run.startedAt} run={run} />
           ) : run.kind === "failed" ? (
             <p className="notice" data-tone="failed">
               {explain(run.error)}{" "}
-              <button type="button" className="text-button" onClick={() => void rewrites.start(run.options)}>Try again</button>
+              {/* The run replaces this button, so focus goes to Rewrite, which holds it while the run is in flight. */}
+              <button type="button" className="text-button" onClick={() => {
+                submit.current?.focus();
+                void rewrites.start(run.options);
+              }}>Try again</button>
             </p>
           ) : (
             landed && <p className="visually-hidden">{landed.cached ? SAVED_EARLIER : REWRITTEN}</p>
@@ -47,7 +52,7 @@ export function SummaryRewrite({ rewrites, cite, onOpenSource }: {
   );
 }
 
-function RewriteForm({ rewrites }: { rewrites: Rewrites }) {
+function RewriteForm({ rewrites, submit }: { rewrites: Rewrites; submit: Ref<HTMLButtonElement> }) {
   const { draft, edit } = rewrites;
   const running = rewrites.run.kind === "running";
   const name = useId();
@@ -81,7 +86,7 @@ function RewriteForm({ rewrites }: { rewrites: Rewrites }) {
           </select>
         </label>
         {/* aria-disabled, not disabled: a disabled button drops the focus it holds, and the focus must not move. */}
-        <button type="submit" className="button" aria-disabled={running}>{running ? "Rewriting" : "Rewrite"}</button>
+        <button ref={submit} type="submit" className="button" aria-disabled={running}>{running ? "Rewriting" : "Rewrite"}</button>
       </div>
     </form>
   );
@@ -109,14 +114,13 @@ function RewriteSheet({ summary, cite, onOpenSource }: {
   onOpenSource(summary: SummaryId, index: number): void;
 }) {
   const count = summary.sources.length;
+  const note = sourcesNote(summary);
   return (
     <article className="rewrite-sheet" aria-labelledby={`rewrite-${summary.id}`}>
       <h3 id={`rewrite-${summary.id}`} className="rewrite-options">{rewriteOptions(summary.options)}</h3>
       <p className="summary">{summary.text}</p>
       {summary.cached && <p className="quiet">{SAVED_EARLIER}</p>}
-      {count === 0 ? (
-        <p className="quiet">{NO_SOURCES}</p>
-      ) : (
+      {count > 0 && (
         <p className="rewrite-sources">
           <span className="quiet">Sources</span>
           {summary.sources.map((source, i) => (
@@ -127,7 +131,7 @@ function RewriteSheet({ summary, cite, onOpenSource }: {
           ))}
         </p>
       )}
-      {summary.droppedSources > 0 && <p className="quiet">{droppedSources(summary.droppedSources)}</p>}
+      {note && <p className="quiet">{note}</p>}
       <p className="written-by">{rewrittenBy(summary, new Date())}</p>
     </article>
   );

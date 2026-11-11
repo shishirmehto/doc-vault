@@ -20,6 +20,8 @@ export function useRewrites(id: DocumentId, cite: SummaryCite | null, closeCite:
   const listed = useFetched(`summaries:${id}`, () => api.summaries(id, LISTED));
   // This session's results, newest first: the list read on opening does not hold them.
   const [made, setMade] = useState<readonly Summary[]>([]);
+  // The result the live region announces, until the next run starts.
+  const [landed, setLanded] = useState<Summary | null>(null);
   const [chosen, setChosen] = useState<SummaryId | null>(cite?.summary ?? null);
   const [open, setOpen] = useState(cite !== null);
   const [draft, setDraft] = useState<Draft>({ length: "standard", focus: "", tone: "plain" });
@@ -53,10 +55,12 @@ export function useRewrites(id: DocumentId, cite: SummaryCite | null, closeCite:
 
   const start = async (options: SummaryOptions) => {
     if (!send({ type: "start", options, at: Date.now() })) return;
+    setLanded(null);
     const result = await api.summarize(id, options);
     if (result.ok) {
       setMade((list) => mergeSummary(list, result.value));
       setChosen(result.value.id);
+      setLanded(result.value);
     }
     send(result.ok ? { type: "succeeded" } : { type: "failed", error: result.error });
   };
@@ -70,8 +74,7 @@ export function useRewrites(id: DocumentId, cite: SummaryCite | null, closeCite:
     reload: listed.reload,
     run,
     start,
-    /** The latest result of this session, for the live region to announce. */
-    landed: made[0] ?? null,
+    landed,
     shown: shownSummary(list?.ok ? list.value.summaries : made, chosen, cite),
     choose: setChosen,
     open,

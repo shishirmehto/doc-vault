@@ -414,14 +414,14 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .segments input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
 .segments:has(input:focus-visible) { outline: 2px solid var(--carbon); outline-offset: 2px; }
 /* The live region stays in the page, so screen readers hear what arrives in it, but takes no gap while it shows nothing. */
-.rewrite-run { position: relative; }
+.rewrite-run { position: relative; overflow-wrap: anywhere; }
 .rewrite-run:not(:has(> :not(.visually-hidden))) { margin-top: calc(-1 * var(--s4)); }
 .rewrite-sheet {
   display: grid; gap: var(--s2); padding: var(--s3) var(--s4) var(--s4); background: var(--sheet);
-  box-shadow: 0 0 0 1px var(--rule); border-radius: var(--r-control);
+  box-shadow: 0 0 0 1px var(--rule); border-radius: var(--r-control); overflow-wrap: anywhere;
 }
 /* Set like the routing line on a form. */
-.rewrite .rewrite-options { font-size: var(--t-meta); color: var(--graphite); overflow-wrap: anywhere; }
+.rewrite .rewrite-options { font-size: var(--t-meta); color: var(--graphite); }
 .rewrite-sources { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); }
 .rewrite-sheet .written-by { margin-top: 0; }
 .rewrites { display: grid; gap: var(--s2); }

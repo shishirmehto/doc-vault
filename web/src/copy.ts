@@ -279,13 +279,15 @@ export function rewriting({ length, focus, tone }: SummaryOptions): string {
 export const REWRITTEN = "Rewritten.";
 export const SAVED_EARLIER = "Saved earlier, no new model call.";
 
-export const NO_SOURCES =
-  "None of its quotes could be found on the page it cited, so this summary has no sources. Treat it as an overview.";
-
-export function droppedSources(n: number): string {
-  return n === 1
+/** Said under a summary's sources when it has none, or when the backend left some out; null otherwise. */
+export function sourcesNote({ sources, droppedSources: dropped }: Summary): string | null {
+  if (sources.length === 0) {
+    return "None of its quotes could be found on the page it cited, so this summary has no sources. Treat it as an overview.";
+  }
+  if (dropped === 0) return null;
+  return dropped === 1
     ? "One more quote was left out because it was not on the page it cited."
-    : `${n} more quotes were left out because they were not on the pages they cited.`;
+    : `${dropped} more quotes were left out because they were not on the pages they cited.`;
 }
 
 const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
