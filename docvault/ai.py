@@ -9,6 +9,11 @@ without going through here, so token and cost accounting cannot be skipped.
 
 from __future__ import annotations
 
+import hashlib
+import math
+import re
+import time
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -18,7 +23,7 @@ from pydantic import BaseModel
 
 from .config import Settings
 from .db import Db
-from .domain import DocumentId, Purpose, TurnId
+from .domain import DocumentId, ErrorCode, Purpose, TurnId, VaultError
 from .prompts import Prompt
 
 type Vector = list[float]
@@ -45,7 +50,7 @@ class Price:
 
 # USD per million tokens. Verify against provider pricing pages at build time.
 # A model missing here records cost_usd NULL and counts in metrics as unpriced.
-PRICES: dict[str, Price] = {}
+PRICES: dict[str, Price] = {"fake-hash-1536": Price(Decimal(0), Decimal(0))}
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,11 +116,26 @@ class AI:
         """Embed any number of texts. Output order matches input order.
 
         Splits into batches of embed_batch_size and writes one ledger row per
-        batch. Raises
-        VaultError(AI_UNAVAILABLE, retryable=True) when the provider fails after
-        the SDK's own retries; the pipeline turns that into a Celery retry.
+        batch. Raises VaultError(AI_UNAVAILABLE) when the provider fails; the
+        pipeline turns a retryable one into a Celery retry.
         """
-        raise NotImplementedError
+        vectors: list[Vector] = []
+        for at in range(0, len(texts), self._embed_batch_size):
+            batch = texts[at:at + self._embed_batch_size]
+            started = time.perf_counter()
+            tokens, error = 0, None
+            try:
+                batch_vectors, tokens = self._embedder.embed(batch)
+            except ProviderError as exc:
+                error = exc
+            self._record(purpose=purpose, prompt=None, owner=owner, provider=self._embedder.provider,
+                         model=self._embedder.model, input_tokens=tokens, output_tokens=0,
+                         latency_ms=_elapsed_ms(started), error_code=error and error.code)
+            if error:
+                raise VaultError(ErrorCode.AI_UNAVAILABLE, "The embedding provider is not responding.",
+                                 retryable=error.retryable) from error
+            vectors += batch_vectors
+        return vectors
 
     def complete[T: BaseModel](self, prompt: Prompt, output: type[T], *, owner: Owner) -> T:
         """Run a prompt and return its validated output model.
@@ -135,12 +155,26 @@ class AI:
         """
         raise NotImplementedError
 
-    def _record(self, *, purpose: Purpose, prompt: Prompt | None, owner: Owner, model: str,
-                      input_tokens: int, output_tokens: int, latency_ms: int, error_code: str | None) -> None:
+    def _record(self, *, purpose: Purpose, prompt: Prompt | None, owner: Owner, provider: str, model: str,
+                input_tokens: int, output_tokens: int, latency_ms: int, error_code: str | None) -> None:
         """INSERT INTO llm_calls on the ledger pool (autocommit), so the row
         survives even when the caller's later work rolls back. Spent money stays spent.
         cost_usd = tokens x PRICES[model], or NULL when the model is unpriced."""
-        raise NotImplementedError
+        price = PRICES.get(model)
+        cost = price and (input_tokens * price.input_per_mtok + output_tokens * price.output_per_mtok) / 1_000_000
+        with self._ledger.connection() as conn:
+            conn.execute(
+                "INSERT INTO llm_calls (purpose, provider, model, prompt_name, prompt_version, document_id, turn_id,"
+                " input_tokens, output_tokens, cost_usd, latency_ms, ok, error_code)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (purpose, provider, model, prompt and prompt.name, prompt and prompt.version,
+                 owner.document_id if isinstance(owner, DocOwner) else None,
+                 owner.turn_id if isinstance(owner, TurnOwner) else None,
+                 input_tokens, output_tokens, cost, latency_ms, error_code is None, error_code))
+
+
+def _elapsed_ms(started: float) -> int:
+    return round((time.perf_counter() - started) * 1000)
 
 
 def build(settings: Settings, ledger: Db) -> AI:
@@ -176,8 +210,32 @@ class FakeEmbedder:
     model = "fake-hash-1536"
     min_similarity = 0.30   # with bag-of-words vectors only real word overlap passes
 
+    dimensions = 1536
+
     def embed(self, texts: Sequence[str]) -> tuple[list[Vector], int]:
-        raise NotImplementedError
+        return [self._vector(text) for text in texts], sum(len(text.split()) for text in texts)
+
+    def _vector(self, text: str) -> Vector:
+        counts = Counter(_stem(word) for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in _STOPWORDS)
+        vector = [0.0] * self.dimensions
+        # A text with no content words still needs a non-zero vector: cosine distance to zero is undefined.
+        for token, count in (counts or {"": 1}).items():
+            digest = int.from_bytes(hashlib.blake2b(token.encode(), digest_size=8).digest())
+            vector[digest % self.dimensions] += (1 if digest >> 63 else -1) * (1 + math.log(count))
+        norm = math.sqrt(sum(x * x for x in vector)) or 1.0
+        return [x / norm for x in vector]
+
+
+_STOPWORDS = frozenset(
+    "a an and are as at be by for from has have if in is it its of on or that the this to was we were what "
+    "when which will with you your our us not no any all does do".split())
+
+
+def _stem(word: str) -> str:
+    for suffix in ("ing", "ed", "es", "s"):
+        if len(word) > len(suffix) + 3 and word.endswith(suffix):
+            return word[:-len(suffix)]
+    return word
 
 
 class FakeChat:

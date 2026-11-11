@@ -6,6 +6,7 @@ This file only holds what every module needs.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -41,15 +42,24 @@ LEASE_STEPS: dict[Lease, tuple[Step, ...]] = {
 
 
 def migrate(url: str) -> None:
-    """Run schema.sql. Idempotent, so the API and every worker call it at start.
+    """Apply schema.sql unless this exact file was applied before. The API and
+    every worker process call it at start.
 
-    The advisory lock serialises processes that start together: concurrent
-    CREATE ... IF NOT EXISTS statements can otherwise fail on catalog unique
-    indexes.
+    The advisory lock serialises processes that start together. The recorded
+    hash matters as much: CREATE ... IF NOT EXISTS still locks the tables it
+    names, so re-running the file beside a worker that is writing a document
+    deadlocks with that worker.
     """
+    schema = SCHEMA.read_text()
+    sha256 = hashlib.sha256(schema.encode()).hexdigest()
     with psycopg.connect(url) as conn:
         conn.execute("SELECT pg_advisory_xact_lock(%s)", (MIGRATE_LOCK,))
-        conn.execute(SCHEMA.read_text())
+        conn.execute("CREATE TABLE IF NOT EXISTS schema_version"
+                     " (sha256 text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())")
+        if conn.execute("SELECT 1 FROM schema_version WHERE sha256 = %s", (sha256,)).fetchone():
+            return
+        conn.execute(schema)
+        conn.execute("INSERT INTO schema_version (sha256) VALUES (%s)", (sha256,))
 
 
 def open_pool(url: str, *, min_size: int = 1, max_size: int = 10) -> Db:
@@ -109,9 +119,8 @@ def pipeline_steps(db: Db, doc_id: DocumentId, lease: Lease, attempt: int) -> It
     closes the step rows a crashed holder left open as 'abandoned' (holding
     the lock proves that holder's connection is gone) and yields the recorder.
 
-    The lock is session-scoped and the connection is closed on exit, so it is
-    released on every path, and Postgres releases it when a killed worker's
-    connection drops. There is no expiry to tune.
+    The lock is session-scoped. It is released on exit, and Postgres releases
+    it when a killed worker's connection drops. There is no expiry to tune.
     """
     with psycopg.connect(db.conninfo, autocommit=True, row_factory=dict_row) as conn:
         register_vector(conn)
@@ -124,4 +133,10 @@ def pipeline_steps(db: Db, doc_id: DocumentId, lease: Lease, attempt: int) -> It
             "UPDATE step_runs SET finished_at = now(), outcome = %s "
             "WHERE document_id = %s AND step = ANY(%s) AND finished_at IS NULL",
             (StepOutcome.ABANDONED, doc_id, list(LEASE_STEPS[lease])))
-        yield PipelineSteps(conn, doc_id, attempt)
+        try:
+            yield PipelineSteps(conn, doc_id, attempt)
+        finally:
+            # Closing the connection also releases the lock, but only once the server notices.
+            # Unlocking first means the next delivery never loses a race against that cleanup.
+            if not conn.broken:
+                conn.execute("SELECT pg_advisory_unlock_all()")

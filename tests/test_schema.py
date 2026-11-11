@@ -26,7 +26,9 @@ def test_check_lists_match_the_enums(db):
     assert in_schema == {name: {member.value for member in enum} for name, enum in VALUE_CHECKS.items()}
 
 
-def test_migrate_twice_keeps_the_same_nine_tables(db, database_url):
-    dbmod.migrate(database_url)
-    dbmod.migrate(database_url)
-    assert scalar(db, "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'") == 9
+def test_migrate_again_applies_nothing_and_takes_no_table_locks(db, database_url):
+    with db.connection() as writer, writer.transaction():
+        writer.execute("LOCK TABLE documents IN ACCESS EXCLUSIVE MODE")
+        dbmod.migrate(database_url)   # would block forever if it re-ran the DDL
+    assert scalar(db, "SELECT count(*) FROM schema_version") == 1
+    assert scalar(db, "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'") == 10

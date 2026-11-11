@@ -30,6 +30,16 @@ uv run ruff check
 
 To regenerate the samples, run `uv run python scripts/make_samples.py`. The output is byte-identical on every run.
 
+## Try the upload flow
+
+```bash
+cd samples
+curl -s -F file=@sample-cgl-policy.pdf localhost:8000/documents        # 202, "status": "queued"
+curl -s localhost:8000/documents                                       # poll until "status": "ready"
+curl -s -F file=@sample-cgl-policy.pdf localhost:8000/documents        # 200, the same id: same bytes, no reprocessing
+curl -s localhost:8000/documents/<id>/pages/2                          # the text a citation on page 2 points at
+```
+
 ## Status
 
 This section lists what works at the current commit.
@@ -37,14 +47,24 @@ This section lists what works at the current commit.
 Built:
 
 - Compose stack: `api` on port 8000, `worker`, `beat`, `db` (pgvector 0.8.0 on Postgres 16), and `redis`.
-- `docvault/schema.sql`, applied by `db.migrate()` at every process start. The migration is idempotent and safe to run from several processes at once.
+- `docvault/schema.sql`. `db.migrate()` runs at every process start and applies the file only when its hash is not yet recorded in `schema_version`.
 - `db.pipeline_steps()`: the per-document advisory lease and the `step_runs` log.
 - `GET /health`.
 - The sample documents and `samples/facts.yaml`.
 - `docvault/pages.py`: format detection from file bytes, text extraction for PDF, DOCX, and TXT, the chunker with per-chunk page maps, and `locate_quote`. `find_on_page` is not built yet.
+- Upload with content-hash dedupe: `POST /documents` returns 202 for new bytes and 200 with the existing document for bytes it has seen.
+- Indexing in Celery (`documents.run_index`): parse, chunk, and embed with the fake provider. A rerun after a crash embeds only the chunks that are still pending and does not parse again.
+- `GET /documents`, `GET /documents/{id}`, `GET /documents/{id}/pages/{n}`, `POST /documents/{id}/retry`, and `DELETE /documents/{id}`.
+- `documents.reconcile` on Celery beat every 60 seconds. It re-enqueues documents that stalled for two minutes and re-embeds ready documents after the embedding model changes.
+- `ai.AI.embed` with the fake embedder. Each provider call writes one `llm_calls` row.
 
 Not built yet (the functions raise `NotImplementedError`):
 
-- Upload, indexing, and every `/documents` route.
-- The model gateway (`ai.py`) beyond the fake provider's settings.
-- Insights, chat, metrics, and evals.
+- Real model providers and `ai.AI.complete`. Setting `OPENAI_API_KEY` makes the service fail at start until they exist.
+- Insights (`GET /documents/{id}/insights`, `insights.run_analyze`). Indexing and `reconcile` do not enqueue the analyze task yet. Add those two calls with `run_analyze`: in `documents.run_index` after the parse checkpoint, and as a third rule in `documents.reconcile`.
+- Chat, metrics, and evals.
+
+Known limits:
+
+- The upload size limit is enforced while the service copies the file to storage. The web framework has already received the whole request body by then.
+- The embedding progress count in `GET /documents/{id}` counts chunks with any embedding, so it reads as complete during a re-embed after a model change.

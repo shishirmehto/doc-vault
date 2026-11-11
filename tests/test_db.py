@@ -7,21 +7,7 @@ import pytest
 from docvault.db import Lease, pipeline_steps
 from docvault.domain import DocumentId, ErrorCode, Step, VaultError
 
-from .conftest import scalar
-
-
-class Crash(BaseException):
-    """Stands in for a killed worker: nothing below Exception handlers sees it."""
-
-
-def step_rows(db, doc_id):
-    with db.connection() as conn:
-        return [(r["step"], r["attempt"], r["outcome"], r["error_code"]) for r in conn.execute(
-            "SELECT step, attempt, outcome, error_code FROM step_runs WHERE document_id = %s ORDER BY id", (doc_id,))]
-
-
-def advisory_locks(db) -> int:
-    return scalar(db, "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'")
+from .conftest import Crash, advisory_locks, step_rows
 
 
 def test_second_holder_of_the_same_lease_gets_none(db):

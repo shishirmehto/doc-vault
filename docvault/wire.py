@@ -9,12 +9,29 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Literal, assert_never
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from .domain import DocKind, DocStatus, Document, PageBasis, Turn
+from . import pages
+from .domain import (
+    DocKind,
+    DocStatus,
+    Document,
+    Embedding,
+    Failed,
+    InsightsFailed,
+    InsightsPending,
+    InsightsReady,
+    InsightsUnavailable,
+    Page,
+    PageBasis,
+    Parsing,
+    Queued,
+    Ready,
+    Turn,
+)
 
 # ------------------------------------------------------------------ shared
 
@@ -171,8 +188,45 @@ class HistoryOut(BaseModel):
 
 
 def document_out(doc: Document) -> DocumentOut:
-    """Flatten Lifecycle and InsightsState with exhaustive `match ... case _: assert_never`."""
-    raise NotImplementedError
+    parsed, progress, error = None, None, None
+    match doc.lifecycle:
+        case Queued():
+            status = DocStatus.QUEUED
+        case Parsing():
+            status = DocStatus.PARSING
+        case Embedding(parsed, embedded_chunks):
+            status = DocStatus.EMBEDDING
+            progress = Progress(embedded_chunks=embedded_chunks, total_chunks=parsed.chunk_count)
+        case Ready(parsed):
+            status = DocStatus.READY
+        case Failed(failure, parsed):
+            status = DocStatus.FAILED
+            error = ErrorBody(code=failure.code, message=failure.message, retryable=failure.retryable)
+        case _:
+            assert_never(doc.lifecycle)
+    match doc.insights:
+        case InsightsPending():
+            insights_status = "pending"
+        case InsightsReady():
+            insights_status = "ready"
+        case InsightsFailed():
+            insights_status = "failed"
+        case InsightsUnavailable():
+            insights_status = "unavailable"
+        case _:
+            assert_never(doc.insights)
+    return DocumentOut(
+        id=doc.id, filename=doc.filename, kind=doc.kind, size_bytes=doc.size_bytes, status=status, progress=progress,
+        pages=parsed and parsed.page_count, page_basis=parsed and parsed.basis,
+        empty_pages=list(parsed.empty_pages) if parsed else [],
+        insights_status=insights_status, error=error, processing_ms=doc.processing_ms,
+        created_at=doc.created_at,
+        links={"self": f"/documents/{doc.id}", "insights": f"/documents/{doc.id}/insights",
+               "pages": f"/documents/{doc.id}/pages/{{n}}"})
+
+
+def page_out(doc_id: UUID, basis: PageBasis, page: Page) -> PageOut:
+    return PageOut(document_id=doc_id, number=page.number, label=pages.page_label(basis, page.number), text=page.text)
 
 
 def insights_out(doc: Document) -> InsightsReadyOut | InsightsPendingOut | InsightsFailedOut | InsightsUnavailableOut:

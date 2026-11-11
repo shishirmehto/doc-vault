@@ -15,18 +15,26 @@ Delivery semantics (each is load-bearing):
   queues: "ingest" (parse + embed) and "llm" (insights), so a 60 s summary
           never sits in front of a parse; one worker consumes both in compose
 
-Each worker process builds its own Ctx at worker_process_init, after the
-fork, so no connection pool is shared across processes.
+Each worker process builds its own Ctx on its first task, after the fork,
+so no connection pool is shared across processes.
 """
 
 from __future__ import annotations
 
+import functools
+import logging
+from uuid import UUID
+
 from celery import Celery
 
+from . import documents
 from .config import load_settings
-from .domain import DocumentId
+from .context import Ctx, build_ctx
+from .domain import DocumentId, ErrorCode, Failure, VaultError
 
-MAX_RETRIES = 5   # backoff 2, 4, 8, 16, 32 s with jitter
+log = logging.getLogger(__name__)
+
+MAX_RETRIES = 5   # backoff 2, 4, 8, 16, 32 s
 
 celery_app = Celery("docvault", broker=load_settings().redis_url)
 celery_app.conf.update(
@@ -36,6 +44,9 @@ celery_app.conf.update(
     broker_transport_options={"visibility_timeout": 7200},
     broker_connection_retry_on_startup=True,
     task_ignore_result=True,
+    task_routes={"docvault.tasks.index_document": {"queue": "ingest"},
+                 "docvault.tasks.analyze_document": {"queue": "llm"}},
+    beat_schedule={"reconcile": {"task": "docvault.tasks.reconcile", "schedule": 60.0}},
 )
 
 
@@ -49,21 +60,30 @@ class CeleryJobs:
         analyze_document.delay(str(doc_id))
 
 
-@celery_app.task(bind=True, max_retries=MAX_RETRIES, queue="ingest")
+@functools.cache
+def _ctx() -> Ctx:
+    return build_ctx(load_settings(), CeleryJobs())
+
+
+@celery_app.task(bind=True, max_retries=MAX_RETRIES)
 def index_document(self, doc_id: str) -> None:
-    """documents.run_index(ctx, id, attempt=self.request.retries + 1)
+    """A retryable VaultError becomes a Celery retry until the attempts run out.
+    Every other failure ends in a FAILED document, so the user sees a terminal
+    state and a reason, never a spinner."""
+    ctx, doc = _ctx(), DocumentId(UUID(doc_id))
+    try:
+        documents.run_index(ctx, doc, attempt=self.request.retries + 1)
+    except VaultError as exc:
+        if exc.failure.retryable and self.request.retries < MAX_RETRIES:
+            raise self.retry(exc=exc, countdown=2 ** (self.request.retries + 1)) from exc
+        documents.fail(ctx, doc, exc.failure)
+    except Exception:
+        log.exception("indexing document %s failed", doc_id)
+        documents.fail(ctx, doc, Failure(ErrorCode.INTERNAL, "Processing failed unexpectedly. Retry the document.",
+                                         retryable=True))
 
-    except VaultError as e:
-        if e.failure.retryable and self.request.retries < MAX_RETRIES:
-            raise self.retry(countdown=backoff(self.request.retries))
-        documents.fail(ctx, id, e.failure)
-    Any other exception is a bug: logged with the doc id and traceback, then
-    fail() with INTERNAL (retryable) so the user sees a terminal state, not a spinner.
-    """
-    raise NotImplementedError
 
-
-@celery_app.task(bind=True, max_retries=MAX_RETRIES, queue="llm")
+@celery_app.task(bind=True, max_retries=MAX_RETRIES)
 def analyze_document(self, doc_id: str) -> None:
     """Same shape as index_document around insights.run_analyze; terminal failure
     upserts a failed document_insights row and leaves the document READY."""
@@ -72,5 +92,4 @@ def analyze_document(self, doc_id: str) -> None:
 
 @celery_app.task
 def reconcile() -> int:
-    """documents.reconcile(ctx)"""
-    raise NotImplementedError
+    return documents.reconcile(_ctx())

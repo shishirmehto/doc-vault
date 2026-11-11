@@ -1,5 +1,7 @@
--- The only schema declaration. db.migrate() runs this file on API and worker
--- start; every statement is idempotent (IF NOT EXISTS).
+-- The only schema declaration. db.migrate() applies this file at API and worker
+-- start when its hash is not yet in schema_version (the one table db.py creates
+-- itself). Every statement is idempotent (IF NOT EXISTS), so an edited file can
+-- be applied over an older one.
 --
 -- Ownership: each table has one writing module. step_runs and llm_calls are
 -- append-only logs; every metric is an aggregate over one table, never a

@@ -100,6 +100,7 @@ class ErrorCode(StrEnum):
     DOCUMENTS_NOT_READY = "documents_not_ready"
     NO_READY_DOCUMENTS = "no_ready_documents"
     NOTHING_TO_RETRY = "nothing_to_retry"
+    INVALID_CURSOR = "invalid_cursor"
 
 
 @dataclass(frozen=True, slots=True)

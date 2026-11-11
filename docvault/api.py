@@ -34,11 +34,11 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.DOCUMENTS_NOT_READY: 409,
     ErrorCode.NO_READY_DOCUMENTS: 409,
     ErrorCode.NOTHING_TO_RETRY: 409,
+    ErrorCode.INVALID_CURSOR: 400,
     ErrorCode.AI_UNAVAILABLE: 503,      # with Retry-After: 5
     ErrorCode.AI_BAD_OUTPUT: 502,
     # Stored-only codes (ENCRYPTED_PDF, UNREADABLE_FILE, NO_EXTRACTABLE_TEXT, TOO_MANY_PAGES, INTERNAL)
-    # appear inside a 200 document body, never as a request error. A test asserts
-    # every ErrorCode is either in this table or in documents' stored set.
+    # appear inside a 200 document body, never as a request error.
 }
 
 
@@ -58,8 +58,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def vault_error_handler(request: Request, exc: VaultError) -> JSONResponse:
-    """{"error": {code, message, retryable, details}} with ERROR_STATUS[code]."""
-    raise NotImplementedError
+    failure = exc.failure
+    body = wire.ErrorOut(error=wire.ErrorBody(code=failure.code, message=failure.message, retryable=failure.retryable,
+                                              details=exc.details))
+    headers = {"Retry-After": "5"} if failure.code is ErrorCode.AI_UNAVAILABLE else None
+    return JSONResponse(body.model_dump(mode="json"), status_code=ERROR_STATUS.get(failure.code, 500), headers=headers)
 
 
 def _ping_db(ctx: Ctx) -> None:
@@ -96,7 +99,8 @@ def upload(file: UploadFile, response: Response, ctx: Deps) -> wire.DocumentOut:
 def list_documents(ctx: Deps, status: DocStatus | None = None,
                          limit: Annotated[int, Query(ge=1, le=100)] = 20,
                          cursor: str | None = None) -> wire.DocumentPage:
-    raise NotImplementedError
+    docs, next_cursor = documents.list_documents(ctx.db, status=status, limit=limit, cursor=cursor)
+    return wire.DocumentPage(items=[wire.document_out(doc) for doc in docs], next_cursor=next_cursor)
 
 
 @router.get("/documents/{doc_id}", response_model=wire.DocumentOut)
@@ -111,7 +115,8 @@ def get_insights(doc_id: UUID, ctx: Deps):
 
 @router.get("/documents/{doc_id}/pages/{number}", response_model=wire.PageOut)
 def get_page(doc_id: UUID, number: int, ctx: Deps) -> wire.PageOut:
-    raise NotImplementedError
+    basis, page = documents.page(ctx.db, DocumentId(doc_id), number)
+    return wire.page_out(doc_id, basis, page)
 
 
 @router.post("/documents/{doc_id}/retry", status_code=202, response_model=wire.DocumentOut)

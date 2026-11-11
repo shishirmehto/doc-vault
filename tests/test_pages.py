@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 import zipfile
-from pathlib import Path
 
 import pytest
 import yaml
@@ -14,12 +13,10 @@ from reportlab.pdfgen.canvas import Canvas
 from docvault import pages
 from docvault.domain import DocKind, ErrorCode, ExtractedText, Page, PageBasis, VaultError
 
-SAMPLES = Path(__file__).resolve().parent.parent / "samples"
+from .conftest import ENDORSEMENT, POLICY, QUOTE, SAMPLES
+
 TRUTH = yaml.safe_load((SAMPLES / "facts.yaml").read_text())
 FACTS = {fact["id"]: fact for fact in TRUTH["facts"]}
-POLICY = "sample-cgl-policy.pdf"
-QUOTE = "sample-renewal-quote.pdf"
-ENDORSEMENT = "sample-endorsement-additional-insured.docx"
 
 
 def extracted(name: str) -> ExtractedText:

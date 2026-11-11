@@ -7,13 +7,18 @@ that they cannot call a model or enqueue work.
 
 from __future__ import annotations
 
+import hashlib
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
 from . import ai, db
 from .config import Settings
-from .domain import DocumentId, Sha256
+from .domain import DocumentId, ErrorCode, Sha256, VaultError
+
+_COPY_BLOCK = 1024 * 1024
 
 
 class Jobs(Protocol):
@@ -43,10 +48,30 @@ class BlobStore:
         """Stream to a temp file under root while hashing. Raise FILE_TOO_LARGE as soon
         as max_bytes is passed and EMPTY_FILE at 0 bytes. os.replace onto path(sha),
         which is atomic. Returns (sha, size). The file is never held in memory."""
-        raise NotImplementedError
+        self.root.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256()
+        size = 0
+        fd, tmp = tempfile.mkstemp(dir=self.root, prefix="upload-")
+        try:
+            with os.fdopen(fd, "wb") as out:
+                while block := stream.read(_COPY_BLOCK):
+                    size += len(block)
+                    if size > max_bytes:
+                        raise VaultError(ErrorCode.FILE_TOO_LARGE,
+                                         f"The file is larger than the {max_bytes // (1024 * 1024)} MB limit.")
+                    digest.update(block)
+                    out.write(block)
+            if size == 0:
+                raise VaultError(ErrorCode.EMPTY_FILE, "The file is empty.")
+            sha = Sha256(digest.digest())
+            self.path(sha).parent.mkdir(exist_ok=True)
+            os.replace(tmp, self.path(sha))
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+        return sha, size
 
     def delete(self, sha: Sha256) -> None:
-        raise NotImplementedError
+        self.path(sha).unlink(missing_ok=True)
 
 
 @dataclass(frozen=True, slots=True)
