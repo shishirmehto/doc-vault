@@ -13,6 +13,7 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 type Provider = Literal["auto", "openai", "fake"]
+type ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
 
 class Settings(BaseSettings):
@@ -25,6 +26,15 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     chat_provider: Provider = "auto"
     embed_provider: Provider = "auto"
+    # Model ids from https://developers.openai.com/api/docs/models, fetched 2026-11-11.
+    openai_chat_model: str = "gpt-6.1-sol"                    # main tier: answers and insights
+    openai_small_model: str = "gpt-6-luna"                    # small tier: condense
+    openai_chat_reasoning_effort: ReasoningEffort = "low"     # sol accepts low..max
+    openai_small_reasoning_effort: ReasoningEffort = "none"   # luna accepts none..max
+    openai_embed_model: str = "text-embedding-3-small"
+    embed_dimensions: int = 1536
+    ai_max_attempts: int = 3             # provider attempts per interactive call, the first one included
+    ai_backoff_s: float = 0.5            # first retry delay; ai.AI._call owns the policy
 
     max_upload_bytes: int = 50 * 1024 * 1024
     max_pages: int = 2000
@@ -40,9 +50,19 @@ class Settings(BaseSettings):
 
 
 def load_settings() -> Settings:
-    """Parse env once. Resolve "auto": a key present selects that provider, none selects fake."""
+    """Parse env once. Resolve "auto": a key present selects that provider, none selects fake.
+
+    An explicit openai provider without a key fails here, at process start,
+    instead of on the first upload.
+    """
     settings = Settings()
-    resolved = "openai" if settings.openai_api_key and settings.openai_api_key.get_secret_value() else "fake"
+    has_key = bool(settings.openai_api_key and settings.openai_api_key.get_secret_value())
+    keyless = [f"{name}=openai" for name, provider in (("CHAT_PROVIDER", settings.chat_provider),
+                                                       ("EMBED_PROVIDER", settings.embed_provider))
+               if provider == "openai" and not has_key]
+    if keyless:
+        raise ValueError(f"OPENAI_API_KEY is not set, but it is required by {' and '.join(keyless)}.")
+    resolved = "openai" if has_key else "fake"
     return settings.model_copy(update={
         "chat_provider": resolved if settings.chat_provider == "auto" else settings.chat_provider,
         "embed_provider": resolved if settings.embed_provider == "auto" else settings.embed_provider,

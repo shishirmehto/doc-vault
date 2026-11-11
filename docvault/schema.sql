@@ -1,8 +1,9 @@
 -- The only schema declaration. db.migrate() applies this file at API and worker
 -- start when its hash is not yet in schema_version (the one table db.py creates
--- itself). Every statement is IF NOT EXISTS, so an edited file adds new tables
+-- itself). Every CREATE is IF NOT EXISTS, so an edited file adds new tables
 -- and indexes to an existing database but does not alter a table that exists.
--- A changed column or CHECK needs an explicit ALTER or a fresh database.
+-- A changed column or CHECK goes in the upgrades section at the end as an
+-- idempotent ALTER: the whole file runs again each time its hash changes.
 --
 -- Ownership: each table has one writing module. step_runs and llm_calls are
 -- append-only logs; every metric is an aggregate over one table, never a
@@ -71,7 +72,11 @@ CREATE TABLE IF NOT EXISTS chunks (
   ord             int   NOT NULL,
   text            text  NOT NULL,
   page_map        jsonb NOT NULL,
-  embedding       vector(1536),
+  -- No fixed dimension. Vectors of different sizes are never compared, because every
+  -- read filters on embedding_model, which includes the dimension. The ANN path, when
+  -- built, adds a partial HNSW expression index per embedding space:
+  -- ((embedding::vector(N)) vector_cosine_ops) WHERE embedding_model = '<space>'.
+  embedding       vector,
   embedding_model text,
   tsv             tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED,
   UNIQUE (document_id, ord),
@@ -79,7 +84,6 @@ CREATE TABLE IF NOT EXISTS chunks (
 );
 CREATE INDEX IF NOT EXISTS chunks_doc     ON chunks (document_id);
 CREATE INDEX IF NOT EXISTS chunks_pending ON chunks (document_id) WHERE embedding IS NULL;
-CREATE INDEX IF NOT EXISTS chunks_hnsw    ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_tsv     ON chunks USING gin (tsv);
 
 -- Append-only processing history. One row per attempt of a step. A row with
@@ -174,3 +178,17 @@ CREATE TABLE IF NOT EXISTS llm_calls (
 CREATE INDEX IF NOT EXISTS llm_calls_window ON llm_calls (at);
 CREATE INDEX IF NOT EXISTS llm_calls_turn   ON llm_calls (turn_id) WHERE turn_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS llm_calls_doc    ON llm_calls (document_id) WHERE document_id IS NOT NULL;
+
+-- ------------------------------------------------------------------ upgrades
+-- For databases created by an earlier version of this file. The whole file runs
+-- again on every hash change, so each upgrade checks the catalog and acts once.
+
+-- embedding was vector(1536) under an HNSW index. The ALTER alone keeps that index,
+-- and the index then rejects every vector that is not 1536 long.
+DO $$
+BEGIN
+  IF (SELECT atttypmod FROM pg_attribute WHERE attrelid = 'chunks'::regclass AND attname = 'embedding') <> -1 THEN
+    DROP INDEX IF EXISTS chunks_hnsw;
+    ALTER TABLE chunks ALTER COLUMN embedding TYPE vector;
+  END IF;
+END $$;

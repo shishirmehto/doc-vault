@@ -20,6 +20,8 @@ from pydantic import BaseModel, Field
 
 from .domain import DocRef, Page, PageBasis, Purpose, Source, Turn
 
+type Tier = Literal["main", "small"]
+
 CONDENSE_VERSION = "condense-v1"
 ANSWER_VERSION = "answer-v1"
 INSIGHTS_VERSION = "insights-v1"
@@ -39,7 +41,7 @@ class Prompt:
     name: Literal["condense", "answer", "insights"]
     version: str
     purpose: Purpose
-    tier: Literal["main", "small"]          # which configured model runs it
+    tier: Tier                              # which configured model runs it
     system: str
     messages: tuple[Msg, ...]
     inputs: Mapping[str, object] = field(default_factory=dict)

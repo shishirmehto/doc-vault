@@ -47,24 +47,26 @@ This section lists what works at the current commit.
 Built:
 
 - Compose stack: `api` on port 8000, `worker`, `beat`, `db` (pgvector 0.8.0 on Postgres 16), and `redis`.
-- `docvault/schema.sql`. `db.migrate()` runs at every process start and applies the file only when its hash is not yet recorded in `schema_version`.
+- `docvault/schema.sql`. `db.migrate()` runs at every process start and applies the file only when its hash is not yet recorded in `schema_version`. `chunks.embedding` has no fixed dimension: `chunks.embedding_model` names the model and the dimension, and every read filters on it.
 - `db.pipeline_steps()`: the per-document advisory lease and the `step_runs` log.
 - `GET /health`.
 - The sample documents and `samples/facts.yaml`.
 - `docvault/pages.py`: format detection from file bytes, text extraction for PDF, DOCX, and TXT, the chunker with per-chunk page maps, and `locate_quote`. `find_on_page` is not built yet.
 - Upload with content-hash dedupe: `POST /documents` returns 202 for new bytes and 200 with the existing document for bytes it has seen.
-- Indexing in Celery (`documents.run_index`): parse, chunk, and embed with the fake provider. A rerun after a crash embeds only the chunks that are still pending and does not parse again.
+- Indexing in Celery (`documents.run_index`): parse, chunk, and embed with the configured provider. A rerun after a crash embeds only the chunks that are still pending and does not parse again.
 - `GET /documents`, `GET /documents/{id}`, `GET /documents/{id}/pages/{n}`, `POST /documents/{id}/retry`, and `DELETE /documents/{id}`.
 - `documents.reconcile` on Celery beat every 60 seconds. It re-enqueues documents that stalled for two minutes and re-embeds ready documents after the embedding model changes.
-- `ai.AI.embed` with the fake embedder. Each provider call writes one `llm_calls` row.
+- The AI gateway (`docvault/ai.py`): `embed()` and `complete()`, with OpenAI (Chat Completions with strict JSON-schema output, and embeddings) and the deterministic fake. Every provider attempt, retries and failures included, writes one `llm_calls` row priced from `ai.PRICES` (cached input at its own rate). Chat calls retry 429, 5xx and timeouts in the gateway with doubling backoff. Background embedding and insights calls get one attempt each, and Celery retries the task, which frees the worker and the document lease between tries. Output that fails validation gets one repair turn. Model ids, reasoning effort and the embedding dimension come from the environment (`.env.example`). `GET /health` reports `ai_mode` as `fake`, `live` or `mixed`.
 
 Not built yet (the functions raise `NotImplementedError`):
 
-- Real model providers and `ai.AI.complete`. Setting `OPENAI_API_KEY` makes the service fail at start until they exist.
 - Insights (`GET /documents/{id}/insights`, `insights.run_analyze`). Indexing and `reconcile` do not enqueue the analyze task yet. Add those two calls with `run_analyze`: in `documents.run_index` after the parse checkpoint, and as a third rule in `documents.reconcile`.
 - Chat, metrics, and evals.
 
 Known limits:
 
+- The OpenAI backends are tested against canned HTTP responses only. They have not run against the live API yet.
+- Gateway retries have no jitter, so requests that hit a rate limit together retry together.
+- Celery's retry countdown (2 to 32 seconds) ignores the provider's Retry-After header.
 - The upload size limit is enforced while the service copies the file to storage. The web framework has already received the whole request body by then.
 - The embedding progress count in `GET /documents/{id}` counts chunks with any embedding, so it reads as complete during a re-embed after a model change.

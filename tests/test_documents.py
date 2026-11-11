@@ -10,7 +10,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen.canvas import Canvas
 
 from docvault import documents, tasks
-from docvault.ai import AI, FakeEmbedder, ProviderError
+from docvault.ai import FakeEmbedder, ProviderError
 from docvault.db import Lease, pipeline_steps
 from docvault.domain import (
     Created,
@@ -39,17 +39,18 @@ class FailingEmbedder(FakeEmbedder):
     """Works for the first `good_calls` batches, then raises."""
 
     def __init__(self, good_calls: int, error: BaseException) -> None:
+        super().__init__()
         self.good_calls, self.error = good_calls, error
 
-    def embed(self, texts):
+    def embed(self, texts, *, timeout_s):
         if self.good_calls == 0:
             raise self.error
         self.good_calls -= 1
-        return super().embed(texts)
+        return super().embed(texts, timeout_s=timeout_s)
 
 
 def with_embedder(ctx, embedder):
-    return dataclasses.replace(ctx, ai=AI(embedder, ctx.db, embed_batch_size=ctx.settings.embed_batch_size))
+    return dataclasses.replace(ctx, ai=dataclasses.replace(ctx.ai, embedder=embedder))
 
 
 def upload(ctx, path: Path, name: str | None = None):
@@ -165,7 +166,7 @@ def test_retry_after_a_provider_failure_resumes_at_embedding_without_parsing_aga
     assert steps(ctx, doc_id) == [("parse", "ok", None), ("embed", "failed", "ai_unavailable"), ("embed", "ok", None)]
     with ctx.db.connection() as conn:
         calls = [(r["ok"], r["error_code"]) for r in conn.execute("SELECT ok, error_code FROM llm_calls ORDER BY id")]
-    assert calls == [(True, None), (False, "timeout"), (True, None), (True, None)]
+    assert calls == [(True, None), (False, "timeout"), (True, None), (True, None)]   # Celery retries, not the gateway
 
 
 def test_retry_refuses_a_document_that_did_not_fail(ctx):
@@ -206,7 +207,7 @@ def test_reconcile_re_embeds_a_ready_document_after_the_embedding_model_changes(
     assert isinstance(documents.get(ctx.db, doc_id).lifecycle, Ready)
     with ctx.db.connection() as conn:
         models = [r["embedding_model"] for r in conn.execute("SELECT DISTINCT embedding_model FROM chunks")]
-    assert models == ["fake-hash-v2"]
+    assert models == ["fake-hash-v2-1536"]
     assert steps(ctx, doc_id) == [("parse", "ok", None), ("embed", "ok", None), ("embed", "ok", None)]
 
 

@@ -71,7 +71,7 @@ class RecordingJobs:
 def ctx(db: dbmod.Db, tmp_path: Path) -> Ctx:
     settings = Settings(_env_file=None, database_url=TEST_DATABASE_URL, storage_dir=tmp_path / "blobs",
                         chat_provider="fake", embed_provider="fake", embed_batch_size=2,
-                        max_upload_bytes=1024 * 1024)
+                        max_upload_bytes=1024 * 1024, ai_backoff_s=0)
     return Ctx(settings, db, ai.build(settings, db), BlobStore(settings.storage_dir), RecordingJobs())
 
 
