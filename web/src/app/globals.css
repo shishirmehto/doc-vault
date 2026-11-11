@@ -98,8 +98,8 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
   border: 0; border-radius: var(--r-control); background: var(--carbon); color: var(--sheet);
   font-weight: 600; padding: 7px 14px; cursor: pointer; justify-self: start;
 }
-.button:hover:not(:disabled) { background: #22328a; }
-.button:disabled { opacity: 0.55; cursor: not-allowed; }
+.button:hover:not(:disabled, [aria-disabled="true"]) { background: #22328a; }
+.button:disabled, .button[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
 .text-button {
   border: 0; background: none; padding: 0; color: var(--carbon); font-weight: 600; cursor: pointer;
   text-underline-offset: 3px; justify-self: start;
@@ -127,6 +127,8 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
 .done-note:focus { outline: none; }
 
 .quiet { color: var(--graphite); }
+/* Read by screen readers, never drawn. clip-path hides it, so no overflow: hidden cuts the text a sighted reader never sees. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); white-space: nowrap; }
 .notice { font-size: var(--t-body); max-width: 60ch; }
 [data-tone="failed"].notice, .row-message[data-tone="failed"] { color: var(--stamp); }
 
@@ -166,11 +168,11 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
 
 .find { display: grid; gap: 2px; flex: 1 1 18ch; min-width: 0; margin-bottom: var(--s3); }
 .find > span { font-size: var(--t-meta); font-weight: 600; color: var(--graphite); }
-.find input {
+.find input, .find select {
   min-width: 0; padding: 6px var(--s3); border: 1px solid var(--rule); border-radius: var(--r-control);
   background: var(--sheet); color: var(--ink); font: 400 var(--t-ui)/1.4 var(--font-ui);
 }
-.find input:focus-visible { outline: 2px solid var(--carbon); outline-offset: 0; border-color: var(--carbon); }
+.find input:focus-visible, .find select:focus-visible { outline: 2px solid var(--carbon); outline-offset: 0; border-color: var(--carbon); }
 .rail-note[data-tone="failed"] { color: var(--stamp); }
 
 .rows { display: grid; gap: 2px; }
@@ -391,6 +393,49 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .coverage { border-left: 3px solid var(--graphite); padding-left: var(--s3); max-width: 60ch; }
 .written-by { font-size: var(--t-meta); color: var(--graphite); margin-top: var(--s4); }
 
+/* The summary written again for another reader: a disclosure under the summary that reads as a text button, its
+   options on one row that wraps, and the result on the key-facts schedule's white paper. */
+.rewrite > summary { width: fit-content; font-weight: 600; cursor: pointer; }
+.rewrite > summary:hover { color: var(--carbon); }
+.rewrite-body { display: grid; gap: var(--s4); margin-top: var(--s3); }
+.rewrite h3 { margin: 0; font-size: var(--t-ui); font-weight: 600; }
+.rewrite-form { display: flex; flex-wrap: wrap; align-items: start; gap: var(--s3) var(--s4); }
+.rewrite-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.rewrite-form legend { padding: 0; margin-bottom: 2px; font-size: var(--t-meta); font-weight: 600; color: var(--graphite); }
+.rewrite-form fieldset .quiet { margin-top: 2px; font-size: var(--t-meta); }
+.rewrite-form .find { margin-bottom: 0; }
+/* The tone and Rewrite wrap together, so Rewrite never starts a line on its own. */
+.rewrite-send { display: flex; align-items: end; gap: var(--s3); }
+.rewrite-send .button { padding: 7px 18px; }
+/* Radios drawn as the segmented control: the chosen length carbon, the ring round the whole group. */
+.segments label { position: relative; padding: 6px 12px; background: var(--sheet); color: var(--ink); cursor: pointer; }
+.segments label + label { border-left: 1px solid var(--rule); }
+.segments label:has(input:checked) { background: var(--carbon); color: var(--sheet); font-weight: 600; }
+.segments input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.segments:has(input:focus-visible) { outline: 2px solid var(--carbon); outline-offset: 2px; }
+/* The live region stays in the page, so screen readers hear what arrives in it, but takes no gap while it shows nothing. */
+.rewrite-run { position: relative; }
+.rewrite-run:not(:has(> :not(.visually-hidden))) { margin-top: calc(-1 * var(--s4)); }
+.rewrite-sheet {
+  display: grid; gap: var(--s2); padding: var(--s3) var(--s4) var(--s4); background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule); border-radius: var(--r-control);
+}
+/* Set like the routing line on a form. */
+.rewrite .rewrite-options { font-size: var(--t-meta); color: var(--graphite); overflow-wrap: anywhere; }
+.rewrite-sources { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); }
+.rewrite-sheet .written-by { margin-top: 0; }
+.rewrites { display: grid; gap: var(--s2); }
+.rewrites ul { display: grid; gap: 2px; margin: 0 calc(-1 * var(--s3)); }
+.rewrite-item {
+  display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); width: 100%;
+  border: 0; border-radius: var(--r-control); background: none; padding: var(--s2) var(--s3);
+  color: var(--ink); text-align: left; cursor: pointer;
+}
+.rewrite-item:hover { background: var(--desk-raised); }
+.rewrite-item[aria-current="true"] { background: var(--carbon-tint); color: var(--carbon); }
+.rewrite-item span { min-width: 0; overflow-wrap: anywhere; }
+.rewrite-item time { font-size: var(--t-meta); color: var(--graphite); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 /* Key facts: a schedule on white paper, like a policy's declarations page. */
 .facts { background: var(--sheet); box-shadow: 0 0 0 1px var(--rule); border-radius: var(--r-control); overflow: hidden; }
 .fact {
@@ -532,6 +577,11 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .rail-flight > .text-button { margin: var(--s2) var(--s4) 0; }
   .rail-body { padding-top: 0; }
   .pick { grid-template-columns: auto minmax(0, 1fr); row-gap: 0; }
+  .rewrite-form { flex-direction: column; align-items: stretch; }
+  .rewrite-form .segments { display: flex; }
+  .rewrite-form .segments label { flex: 1 1 0; text-align: center; }
+  .rewrite-form .find { flex: none; }
+  .rewrite-send { flex-direction: column; align-items: stretch; }
   .pick-meta { grid-column: 2; text-align: left; }
   .composer-actions { flex-direction: column; }
   .pane { width: 100%; }

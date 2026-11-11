@@ -2,14 +2,19 @@
 
 import { useState, type ReactNode } from "react";
 import { api } from "@/api/client";
-import type { ApiError, Doc, DocumentId, Insights, KeyFact, PaneRequest, Result, Selection } from "@/api/domain";
+import type {
+  ApiError, Doc, DocumentId, Insights, KeyFact, PaneRequest, Result, Selection, SummaryId, SummaryList,
+} from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
+import { useRewrites } from "@/hooks/useRewrites";
+import { citedFact, citedSource, summarySourceView } from "@/lib/summaryPane";
 import { docMeta, explain, formatMs, statusLine, unitName } from "@/copy";
 import { DeleteDocument } from "./DeleteDocument";
 import { MissingDocument } from "./Missing";
 import { FailureNote } from "./Rail";
 import { SourcePane, type SourceView } from "./SourcePane";
 import { StageBar } from "./StageBar";
+import { SummaryRewrite } from "./SummaryRewrite";
 
 type Props = {
   id: DocumentId;
@@ -29,6 +34,8 @@ type Props = {
 export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry, onAsk, onDelete }: Props) {
   // A new key whenever the list shows the document or its insights moving on, so the panel refetches once.
   const insights = useFetched(`${id}:${doc?.lifecycle.status}:${doc?.insights}`, () => api.insights(id));
+  const cite = citedSource(pane);
+  const rewrites = useRewrites(id, cite, () => replace({ kind: "doc", doc: id, pane: null }));
 
   if (!doc) {
     return (
@@ -39,7 +46,8 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry,
   }
 
   const openFact = (index: number) => push({ kind: "doc", doc: id, pane: { kind: "cite", cite: { kind: "fact", index }, page: null } });
-  const activeFact = pane?.kind === "cite" && pane.cite.kind === "fact" ? pane.cite.index : null;
+  const openSource = (summary: SummaryId, index: number) =>
+    push({ kind: "doc", doc: id, pane: { kind: "cite", cite: { kind: "summary", summary, index }, page: null } });
 
   return (
     <>
@@ -77,21 +85,25 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry,
               <DeleteDocument doc={doc} onDelete={() => onDelete(doc)} />
             </div>
           </header>
-          <InsightsPanel doc={doc} result={insights.result} reload={insights.reload} activeFact={activeFact}
-            onOpenFact={openFact} onRetry={() => onRetry(id)} />
+          <InsightsPanel doc={doc} result={insights.result} reload={insights.reload} activeFact={citedFact(pane)}
+            onOpenFact={openFact} onRetry={() => onRetry(id)}
+            rewrite={doc.lifecycle.status === "ready" && <SummaryRewrite rewrites={rewrites} cite={cite} onOpenSource={openSource} />} />
         </article>
       </main>
-      {pane && <SourcePane view={sourceView(doc, pane, insights.result)}
+      {pane && <SourcePane view={sourceView(doc, pane, insights.result, rewrites.list)}
         onPage={(page) => replace({ kind: "doc", doc: id, pane: pane.kind === "cite" ? { ...pane, page } : { kind: "page", page } })}
         onClose={() => push({ kind: "doc", doc: id, pane: null })} />}
     </>
   );
 }
 
-/** Resolves the URL's pane request against the loaded insights: which page, and which passage to mark. */
-function sourceView(doc: Doc, pane: PaneRequest, insights: Result<Insights> | null): SourceView {
+/**
+ * Resolves the URL's pane request against the loaded insights, or the document's rewritten summaries: which page,
+ * and which passage to mark.
+ */
+function sourceView(doc: Doc, pane: PaneRequest, insights: Result<Insights> | null, summaries: Result<SummaryList> | null): SourceView {
   if (pane.kind === "page") return { kind: "page", doc, page: pane.page, mark: null };
-  if (pane.cite.kind === "summary") return { kind: "unknown", message: "A rewritten summary's passage cannot be opened here." };
+  if (pane.cite.kind === "summary") return summarySourceView(summaries, pane.cite, pane.page, doc);
   if (insights === null) return { kind: "resolving" };
   const fact = insights.ok && insights.value.status === "ready" ? insights.value.keyFacts[pane.cite.index] : undefined;
   if (!fact) return { kind: "unknown", message: "This fact is not in the document's current summary." };
@@ -119,13 +131,15 @@ function AskButton({ onAsk }: { onAsk(): Promise<ApiError | null> }) {
   );
 }
 
-function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry }: {
+/** `rewrite` sits under the summary, or under the note that it is still being written or failed. */
+function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry, rewrite }: {
   doc: Doc;
   result: Result<Insights> | null;
   reload(): void;
   activeFact: number | null;
   onOpenFact(index: number): void;
   onRetry(): Promise<ApiError | null>;
+  rewrite: ReactNode;
 }) {
   if (result === null) return <SummarySkeleton label="Loading the summary" />;
   if (!result.ok) {
@@ -140,16 +154,19 @@ function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry }:
   switch (insights.status) {
     case "pending":
       return doc.lifecycle.status === "ready"
-        ? <SummarySkeleton label="Writing the summary" />
+        ? <><SummarySkeleton label="Writing the summary" />{rewrite}</>
         : <p className="notice">The summary appears when indexing finishes.</p>;
     case "unavailable":
       return <p className="notice">{insights.reason}</p>;
     case "failed":
       return (
-        <section className="insights">
-          <h2>The summary failed</h2>
-          <FailureNote failure={insights.failure} onRetry={onRetry} />
-        </section>
+        <>
+          <section className="insights">
+            <h2>The summary failed</h2>
+            <FailureNote failure={insights.failure} onRetry={onRetry} />
+          </section>
+          {rewrite}
+        </>
       );
     case "ready":
       return (
@@ -166,6 +183,7 @@ function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry }:
           </p>
           <CoverageNotice coverage={insights.coverage} doc={doc} />
           <p className="summary">{insights.summary}</p>
+          {rewrite}
           <h3>Key facts</h3>
           <KeyFacts facts={insights.keyFacts} active={activeFact} onOpen={onOpenFact} />
           {insights.droppedKeyFacts > 0 && (
