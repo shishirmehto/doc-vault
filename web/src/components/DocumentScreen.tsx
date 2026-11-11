@@ -6,6 +6,7 @@ import type { ApiError, Doc, DocumentId, Insights, KeyFact, PaneRequest, Result,
 import { useFetched } from "@/hooks/useFetched";
 import { docMeta, explain, formatMs, statusLine, unitName } from "@/copy";
 import { DeleteDocument } from "./DeleteDocument";
+import { MissingDocument } from "./Missing";
 import { FailureNote } from "./Rail";
 import { SourcePane, type SourceView } from "./SourcePane";
 import { StageBar } from "./StageBar";
@@ -32,7 +33,7 @@ export function DocumentScreen({ id, doc, loading, pane, push, replace, onRetry,
   if (!doc) {
     return (
       <main className="centre">
-        {loading ? <HeaderSkeleton /> : <p className="notice">This document isn&apos;t in the vault. It may have been deleted.</p>}
+        {loading ? <HeaderSkeleton /> : <MissingDocument />}
       </main>
     );
   }

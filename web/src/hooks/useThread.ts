@@ -68,6 +68,13 @@ class Threads {
     await this.loadHistory(id);
   }
 
+  /** Reads history again after the first read failed. */
+  reload(id: ChatId): void {
+    if (this.threads.get(id)?.history.kind !== "failed") return;
+    this.set(id, opening);
+    void this.loadHistory(id);
+  }
+
   async recheck(id: ChatId): Promise<void> {
     this.dispatch(id, { type: "recheck" });
     await this.loadHistory(id);

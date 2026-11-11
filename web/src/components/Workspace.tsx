@@ -14,6 +14,7 @@ import { ChatScreen } from "./ChatScreen";
 import { DocumentScreen } from "./DocumentScreen";
 import { NewChat } from "./NewChat";
 import { Metrics } from "./Metrics";
+import { MissingChat, MissingDocument } from "./Missing";
 
 const POLL_MS = 1000;
 
@@ -103,6 +104,9 @@ export function Workspace() {
       {selection.kind === "none" && (
         <NewChat docs={docs} deleted={deleted} onDismiss={() => setDeleted(null)}
           onOpen={(chat) => push({ kind: "chat", chat, pane: null })} />
+      )}
+      {selection.kind === "missing" && (
+        <main className="centre">{selection.what === "doc" ? <MissingDocument /> : <MissingChat />}</main>
       )}
       {selection.kind === "metrics" && (
         <Metrics window={selection.window} onWindow={(window) => replace({ kind: "metrics", window })} />

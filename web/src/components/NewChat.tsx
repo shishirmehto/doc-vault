@@ -117,7 +117,7 @@ const WHEN = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", 
 
 /** Titles are usually empty and many chats share a document, so each row also says when it started. */
 function RecentChats({ onOpen }: { onOpen(id: ChatId): void }) {
-  const { result } = useFetched("recent-chats", api.recentChats);
+  const { result, reload } = useFetched("recent-chats", api.recentChats);
   if (result === null || (result.ok && result.value.length === 0)) return null;
   return (
     <section className="recent-chats" aria-labelledby="recent-chats-title">
@@ -141,7 +141,10 @@ function RecentChats({ onOpen }: { onOpen(id: ChatId): void }) {
           ))}
         </ul>
       ) : (
-        <p className="quiet">{explain(result.error)}</p>
+        <p className="quiet">
+          {explain(result.error)}{" "}
+          <button type="button" className="text-button" onClick={reload}>Try again</button>
+        </p>
       )}
     </section>
   );

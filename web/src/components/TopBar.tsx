@@ -57,6 +57,7 @@ function CurrentSections() {
     case "metrics":
       return <Sections current={{ ask: undefined, metrics: "page" }} />;
     case "doc":
+    case "missing":
       return <Sections current={NONE} />;
     default: {
       const unknown: never = selection;

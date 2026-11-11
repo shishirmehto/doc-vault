@@ -195,6 +195,11 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   font-size: var(--t-h1); font-weight: 600; line-height: 1.2; letter-spacing: -0.015em; overflow-wrap: anywhere;
 }
 
+.missing { max-width: 60ch; display: grid; gap: var(--s4); padding-bottom: var(--s8); }
+.missing h1 { font-size: var(--t-h1); font-weight: 600; line-height: 1.2; letter-spacing: -0.015em; }
+.missing .button { display: inline-block; text-decoration: none; }
+.load-failed { display: grid; gap: var(--s3); }
+
 /* ------------------------------------------------------------- new chat */
 
 .new-chat { max-width: 68ch; display: grid; gap: var(--s6); }

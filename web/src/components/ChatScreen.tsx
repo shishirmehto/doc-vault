@@ -8,6 +8,7 @@ import { threads, useThread } from "@/hooks/useThread";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { askStatus, explain, listNames, NOT_FOUND, usageLine } from "@/copy";
 import { Composer } from "./Composer";
+import { MissingChat } from "./Missing";
 import { SourcePane, type SourceView } from "./SourcePane";
 
 type Props = {
@@ -21,7 +22,7 @@ type Props = {
 /** One chat: its turns oldest first, the question in flight, the composer, and the cited page beside them. */
 export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   const thread = useThread(id);
-  const header = useFetched(`chat:${id}`, () => api.chat(id)).result;
+  const { result: header, reload: reloadHeader } = useFetched(`chat:${id}`, () => api.chat(id));
   const documents = header?.ok ? header.value.documents : null;
   const deleted = documents?.filter((d) => d.deleted).map((d) => d.filename) ?? [];
   const accepting = deleted.length === 0;
@@ -46,6 +47,15 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
     if (streamed > 0 && following.current) column.current?.scrollTo({ top: column.current.scrollHeight });
   }, [streamed]);
 
+  const reload = () => {
+    threads.reload(id);
+    reloadHeader();
+  };
+
+  if (header && !header.ok && header.error.kind === "refused" && header.error.status === 404) {
+    return <main className="centre"><MissingChat /></main>;
+  }
+
   const send = () => {
     if (!thread || !canAsk(thread) || !accepting || draft.trim() === "") return;
     void threads.ask(id, draft);
@@ -69,7 +79,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
                 <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
               </p>
             </header>
-            <Turns thread={thread} pane={pane} onOpen={open} accepting={accepting}
+            <Turns thread={thread} pane={pane} onOpen={open} accepting={accepting} onReload={reload}
               onSuggest={(question) => void threads.ask(id, question)} />
             {thread && (
               <PendingTurn
@@ -126,11 +136,12 @@ function sourceView(pane: ChatPane, turns: readonly Turn[] | null, docs: readonl
   return { kind: "page", doc, page, mark, citedPage: citation.source.page };
 }
 
-function Turns({ thread, pane, onOpen, accepting, onSuggest }: {
+function Turns({ thread, pane, onOpen, accepting, onReload, onSuggest }: {
   thread: Thread | undefined;
   pane: ChatPane | null;
   onOpen(cite: TurnCite): void;
   accepting: boolean;
+  onReload(): void;
   onSuggest(question: string): void;
 }) {
   if (!thread || thread.history.kind === "loading") {
@@ -141,7 +152,12 @@ function Turns({ thread, pane, onOpen, accepting, onSuggest }: {
     );
   }
   if (thread.history.kind === "failed") {
-    return <p className="notice" data-tone="failed">{explain(thread.history.error)}</p>;
+    return (
+      <div className="load-failed">
+        <p className="notice" data-tone="failed" role="alert">{explain(thread.history.error)}</p>
+        <button type="button" className="button" onClick={onReload}>Try again</button>
+      </div>
+    );
   }
   if (thread.history.turns.length === 0 && thread.ask.phase === "idle") {
     return accepting ? <p className="quiet">Ask a question to start. Follow-ups can refer back to earlier answers.</p> : null;

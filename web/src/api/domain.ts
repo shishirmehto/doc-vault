@@ -137,7 +137,9 @@ export type Selection =
   | { kind: "none" }
   | { kind: "metrics"; window: MetricsWindow }
   | { kind: "doc"; doc: DocumentId; pane: PaneRequest | null }
-  | { kind: "chat"; chat: ChatId; pane: ChatPane | null };
+  | { kind: "chat"; chat: ChatId; pane: ChatPane | null }
+  /** The URL names a document or chat by something that cannot be an id. */
+  | { kind: "missing"; what: "doc" | "chat" };
 
 export type ApiError =
   /** The backend's error envelope: 404, 409, 413, 415, 422, and 429 and 503 with Retry-After. */

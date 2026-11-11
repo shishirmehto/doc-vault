@@ -353,12 +353,13 @@ export function parseSelection(params: URLSearchParams): Selection {
   if (params.get("view") === "metrics") return { kind: "metrics", window: params.get("window") === "7d" ? "7d" : "24h" };
   const page = positiveInt(params.get("p"));
   const chat = asChatId(params.get("chat") ?? "");
+  if (chat === null && params.has("chat")) return { kind: "missing", what: "chat" };
   if (chat !== null) {
     const cite = turnCite(params.get("cite"));
     return { kind: "chat", chat, pane: cite ? { cite, page } : null };
   }
   const doc = asDocumentId(params.get("doc") ?? "");
-  if (doc === null) return { kind: "none" };
+  if (doc === null) return params.has("doc") ? { kind: "missing", what: "doc" } : { kind: "none" };
   const cite = factCite(params.get("cite"));
   const pane: PaneRequest | null = cite ? { kind: "cite", cite, page } : page ? { kind: "page", page } : null;
   return { kind: "doc", doc, pane };
@@ -369,6 +370,7 @@ export function selectionQuery(s: Selection): string {
   const params = new URLSearchParams();
   switch (s.kind) {
     case "none":
+    case "missing":
       break;
     case "metrics":
       params.set("view", "metrics");

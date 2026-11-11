@@ -232,7 +232,9 @@ test("the URL selects a document, then a cited fact or a page; malformed parts a
   });
   assert.deepEqual(sel(`doc=${POLICY}&p=4`), { kind: "doc", doc: POLICY, pane: { kind: "page", page: 4 } });
   assert.deepEqual(sel(`doc=${POLICY}&cite=turn.1&p=0`), { kind: "doc", doc: POLICY, pane: null });
-  assert.deepEqual(sel("doc=not-a-uuid&p=2"), { kind: "none" });
+  assert.deepEqual(sel("doc=not-a-uuid&p=2"), { kind: "missing", what: "doc" });
+  assert.deepEqual(sel("chat=7532866d"), { kind: "missing", what: "chat" });
+  assert.deepEqual(sel(""), { kind: "none" });
   assert.equal(selectionQuery(sel(`p=2&cite=fact.0&doc=${POLICY}`)), `?doc=${POLICY}&cite=fact.0&p=2`);
   assert.equal(selectionQuery({ kind: "none" }), "");
 });
