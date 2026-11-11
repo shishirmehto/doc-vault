@@ -440,9 +440,9 @@ export interface components {
         StartChatIn: {
             /**
              * Document Ids
-             * @description Empty means every ready document.
+             * @description The documents the chat answers from, fixed for its life.
              */
-            document_ids?: string[];
+            document_ids: string[];
             /** Title */
             title?: string | null;
         };
@@ -486,7 +486,7 @@ export interface components {
             /** Output Tokens */
             output_tokens: number;
             /** Cost Usd */
-            cost_usd: string | null;
+            cost_usd: number | null;
         };
         /** ValidationError */
         ValidationError: {
