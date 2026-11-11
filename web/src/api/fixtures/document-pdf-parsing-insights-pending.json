@@ -12,6 +12,7 @@
     "page_basis": null,
     "empty_pages": [],
     "insights_status": "pending",
+    "document_type": null,
     "error": null,
     "processing_ms": null,
     "created_at": "2026-11-11T03:06:52.288386Z",

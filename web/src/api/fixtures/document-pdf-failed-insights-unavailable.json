@@ -12,6 +12,7 @@
     "page_basis": null,
     "empty_pages": [],
     "insights_status": "unavailable",
+    "document_type": null,
     "error": {
       "code": "no_extractable_text",
       "message": "None of the 3 pages has a text layer. This looks like a scanned PDF, and OCR is not supported.",

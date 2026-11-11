@@ -35,12 +35,16 @@ export function unitName(unit: PageUnit, count: number): string {
   return `${unit}${count === 1 ? "" : "s"}`;
 }
 
-/** "PDF, 7 pages, 1.8 MB". Commas, never middle dots. */
+/**
+ * "Policy. PDF, 7 pages, 11 KB": the type from the insights leads once it is known, unless it is "other", which
+ * says nothing. Commas, never middle dots.
+ */
 export function docMeta(doc: Doc): string {
   const parts = [KIND[doc.kind]];
   if (doc.layout) parts.push(`${doc.layout.pageCount} ${unitName(doc.layout.unit, doc.layout.pageCount)}`);
   parts.push(formatBytes(doc.sizeBytes));
-  return parts.join(", ");
+  const type = doc.documentType && doc.documentType !== "other" ? `${doc.documentType.charAt(0).toUpperCase()}${doc.documentType.slice(1)}. ` : "";
+  return type + parts.join(", ");
 }
 
 export function formatBytes(n: number): string {

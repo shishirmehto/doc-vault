@@ -37,6 +37,7 @@ test("a failed document keeps the backend's reason and the stage that failed", (
         },
       },
       insights: "unavailable",
+      documentType: null,
       layout: null,
       processingMs: null,
       createdAt: new Date("2026-11-11T03:06:52.288Z"),

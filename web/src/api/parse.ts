@@ -68,6 +68,7 @@ export function parseDoc(w: W.DocumentOut): Doc {
     sizeBytes: w.size_bytes,
     lifecycle: lifecycle(w),
     insights: w.insights_status,
+    documentType: w.document_type,
     layout: w.pages === null
       ? null
       : { pageCount: w.pages, unit: w.page_basis === "synthetic" ? "section" : "page", emptyPages: w.empty_pages },

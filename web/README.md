@@ -78,4 +78,6 @@ While an answer streams, the column follows its text so the sticky question box 
 
 At bonus phase A, `TurnOut` gained `suggestions`, so the `turn-*` and history fixtures were recaptured with the same questions over the same documents, and `ask-stream-deductible.txt` holds the raw body of a streamed ask. The stream tests read it split at every byte.
 
+At phase G1, `DocumentOut` gained `document_type`. `documents-page.json` was captured again. The other document fixtures are snapshots of states that have passed, so the field was added as the API writes it: null while insights are not ready, and, for the two with ready insights, the value `GET /documents/{id}` returned. `delete-404-not-found.json` is a real `DELETE` of an id the vault does not have.
+
 The `locateQuote` cases come from the backend's `tests/test_pages.py`. They were checked against the Python `locate_quote` on the same inputs.

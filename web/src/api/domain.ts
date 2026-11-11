@@ -37,6 +37,8 @@ export type Doc = {
   sizeBytes: number;
   lifecycle: Lifecycle;
   insights: InsightsStatus;
+  /** The insights' document type ("policy", "quote", "other"); null until insights are ready. */
+  documentType: string | null;
   /** Null until parsing has run. */
   layout: Layout | null;
   processingMs: number | null;

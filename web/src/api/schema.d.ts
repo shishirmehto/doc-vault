@@ -419,6 +419,8 @@ export interface components {
              */
             empty_pages: number[];
             insights_status: components["schemas"]["InsightsStatus"];
+            /** Document Type */
+            document_type: string | null;
             error: components["schemas"]["ErrorBody"] | null;
             /** Failed Stage */
             failed_stage: ("parse" | "embed") | null;
