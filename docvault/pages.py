@@ -21,6 +21,7 @@ from pypdf import PdfReader
 from .domain import ChunkDraft, DocKind, ErrorCode, ExtractedText, Page, PageBasis, PageMap, VaultError
 
 PAGE_JOINER = "\n\n"   # placed between non-empty pages in the document text stream
+TABLE_CELL = " | "     # joins the cells of a DOCX table row on one line
 SYNTHETIC_PAGE_CHARS = 3000
 SNIFF_BYTES = 8192
 
@@ -132,7 +133,7 @@ def _extract_docx(path: Path, max_pages: int) -> ExtractedText:
     paragraphs: list[str] = []
     for item in open_docx(str(path)).iter_inner_content():
         if isinstance(item, Table):
-            paragraphs += [" | ".join(_tidy(cell.text) for cell in row.cells) for row in item.rows]
+            paragraphs += [TABLE_CELL.join(_tidy(cell.text) for cell in row.cells) for row in item.rows]
         else:
             paragraphs.append(_tidy(item.text))
     return _sections(paragraphs, joiner="\n")
@@ -177,7 +178,7 @@ _EXTRACTORS: dict[DocKind, Callable[[Path, int], ExtractedText]] = {
 }
 
 # Two word characters before the full stop, so list labels such as "a." and "2." stay with their text.
-_SENTENCE_OR_PARAGRAPH_END = re.compile(r"""(?<=\w\w[.!?])\s+|(?<=\w[.!?]["')])\s+|\n\s*\n\s*""")
+SENTENCE_OR_PARAGRAPH_END = re.compile(r"""(?<=\w\w[.!?])\s+|(?<=\w[.!?]["')])\s+|\n\s*\n\s*""")
 _WHITESPACE = re.compile(r"\s+")
 
 
@@ -215,7 +216,7 @@ def chunk(doc: ExtractedText, *, max_chars: int, overlap_chars: int) -> list[Chu
     is shorter than the overlap.
     """
     stream, page_starts = page_stream(doc)
-    bounds = _cut_points(stream, max_chars, [m.end() for m in _SENTENCE_OR_PARAGRAPH_END.finditer(stream)])
+    bounds = _cut_points(stream, max_chars, [m.end() for m in SENTENCE_OR_PARAGRAPH_END.finditer(stream)])
     page_offsets = [offset for offset, _ in page_starts]
     drafts: list[ChunkDraft] = []
     start = previous_end = 0
@@ -311,8 +312,18 @@ def page_label(basis: PageBasis, number: int) -> str:
     return f"section {number}" if basis is PageBasis.SYNTHETIC else f"p. {number}"
 
 
-def find_on_page(quote: str, pages: Sequence[Page], page: int) -> tuple[int, str] | None:
-    """Verify an insight's quote on its claimed page, allowing the next page
-    (facts that straddle a break). Returns (actual_page, matched_span) or None.
+def collapse_whitespace(text: str) -> str:
+    """'Each Occurrence Limit\\n$1,000,000' -> 'Each Occurrence Limit $1,000,000', for quotes shown to people."""
+    return _WHITESPACE.sub(" ", text).strip()
+
+
+def find_on_page(quote: str, pages: Sequence[Page], page: int) -> str | None:
+    """The source text of `quote` on the page it cites, whitespace collapsed, or None.
+
+    A quote found only on another page is a wrong citation and is rejected. A
+    quote that runs across a page break is rejected too: the running footer
+    and header sit between the two pages, so it is not contiguous source text.
     """
-    raise NotImplementedError
+    text = next((p.text for p in pages if p.number == page), "")
+    span = locate_quote(quote, text)
+    return None if span is None else collapse_whitespace(text[span[0]:span[1]])

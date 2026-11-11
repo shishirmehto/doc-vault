@@ -9,10 +9,13 @@ from pathlib import Path
 
 import psycopg
 import pytest
+import yaml
+from fastapi.testclient import TestClient
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from docvault import ai
 from docvault import db as dbmod
+from docvault.api import app
 from docvault.config import Settings
 from docvault.context import BlobStore, Ctx
 from docvault.domain import DocumentId
@@ -21,6 +24,8 @@ SAMPLES = Path(__file__).resolve().parent.parent / "samples"
 POLICY = "sample-cgl-policy.pdf"
 QUOTE = "sample-renewal-quote.pdf"
 ENDORSEMENT = "sample-endorsement-additional-insured.docx"
+TRUTH = yaml.safe_load((SAMPLES / "facts.yaml").read_text())
+FACTS = {fact["id"]: fact for fact in TRUTH["facts"]}
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://vault:vault@localhost:54329/vault_test")
 
 
@@ -88,3 +93,9 @@ def step_rows(db: dbmod.Db, doc_id: DocumentId) -> list[tuple]:
 def advisory_locks(db: dbmod.Db) -> int:
     return scalar(db, "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"
                       " AND database = (SELECT oid FROM pg_database WHERE datname = current_database())")
+
+
+@pytest.fixture
+def client(ctx: Ctx) -> TestClient:
+    app.state.ctx = ctx   # the lifespan (which needs Redis) only runs when TestClient is a context manager
+    return TestClient(app)

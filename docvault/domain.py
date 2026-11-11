@@ -182,7 +182,6 @@ class InsightsBody:
     summary: str
     key_facts: tuple[KeyFact, ...]  # only facts whose quote was found on the cited page
     tags: tuple[str, ...]
-    suggested_questions: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,8 +192,10 @@ class InsightsPending:
 @dataclass(frozen=True, slots=True)
 class InsightsReady:
     body: InsightsBody
-    pages_read: int     # coverage: pages 1..pages_read fit the prompt budget
+    pages_read: int         # coverage: pages 1..pages_read fit the prompt budget
     page_count: int
+    page_basis: PageBasis   # here because a retried document reads as Queued, which carries no Parsed
+    dropped_key_facts: int  # facts the model cited whose quote was not on the cited page
     model: str
     prompt_version: str
 

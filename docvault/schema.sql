@@ -112,10 +112,11 @@ CREATE TABLE IF NOT EXISTS document_insights (
   status              text NOT NULL CHECK (status IN ('ready', 'failed')),
   prompt_version      text NOT NULL,
   model               text NOT NULL,
-  body                jsonb,       -- InsightsBody: title, type, summary, key_facts (verified), tags, suggested_questions
+  body                jsonb,       -- InsightsBody: title, document_type, summary, key_facts (verified), tags
   pages_read          int,         -- coverage: pages 1..pages_read went into the prompt
   dropped_unverified  int,         -- key facts whose quote was not found on the cited page
   error_code          text,
+  error_message       text,
   error_retryable     boolean,
   updated_at          timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT ready_has_body CHECK ((status = 'ready') = (body IS NOT NULL)),
@@ -192,3 +193,5 @@ BEGIN
     ALTER TABLE chunks ALTER COLUMN embedding TYPE vector;
   END IF;
 END $$;
+
+ALTER TABLE document_insights ADD COLUMN IF NOT EXISTS error_message text;

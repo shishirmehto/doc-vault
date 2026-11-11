@@ -21,6 +21,7 @@ from .domain import (
     Document,
     Embedding,
     Failed,
+    Failure,
     InsightsFailed,
     InsightsPending,
     InsightsReady,
@@ -88,7 +89,9 @@ class KeyFactOut(BaseModel):
     label: str
     value: str
     page: int
-    quote: str
+    page_label: str                    # "p. 3" or "section 3"
+    quote: str                         # the source text on that page, whitespace collapsed
+    page_url: str
 
 
 class Coverage(BaseModel):
@@ -103,8 +106,8 @@ class InsightsReadyOut(BaseModel):
     summary: str
     key_facts: list[KeyFactOut]
     tags: list[str]
-    suggested_questions: list[str]
     coverage: Coverage
+    dropped_key_facts: int             # cited by the model, but the quote was not on the cited page
     model: str
     prompt_version: str
 
@@ -187,6 +190,10 @@ class HistoryOut(BaseModel):
 # ------------------------------------------------------------------ mapping
 
 
+def error_body(failure: Failure, details: dict[str, object] | None = None) -> ErrorBody:
+    return ErrorBody(code=failure.code, message=failure.message, retryable=failure.retryable, details=details or {})
+
+
 def document_out(doc: Document) -> DocumentOut:
     parsed, progress, error = None, None, None
     match doc.lifecycle:
@@ -201,7 +208,7 @@ def document_out(doc: Document) -> DocumentOut:
             status = DocStatus.READY
         case Failed(failure, parsed):
             status = DocStatus.FAILED
-            error = ErrorBody(code=failure.code, message=failure.message, retryable=failure.retryable)
+            error = error_body(failure)
         case _:
             assert_never(doc.lifecycle)
     match doc.insights:
@@ -230,7 +237,24 @@ def page_out(doc_id: UUID, basis: PageBasis, page: Page) -> PageOut:
 
 
 def insights_out(doc: Document) -> InsightsReadyOut | InsightsPendingOut | InsightsFailedOut | InsightsUnavailableOut:
-    raise NotImplementedError
+    match doc.insights:
+        case InsightsReady(body=body) as ready:
+            return InsightsReadyOut(
+                status="ready", title=body.title, document_type=body.document_type, summary=body.summary,
+                key_facts=[KeyFactOut(label=fact.label, value=fact.value, page=fact.page,
+                                      page_label=pages.page_label(ready.page_basis, fact.page), quote=fact.quote,
+                                      page_url=f"/documents/{doc.id}/pages/{fact.page}") for fact in body.key_facts],
+                tags=list(body.tags), coverage=Coverage(pages_read=ready.pages_read, page_count=ready.page_count),
+                dropped_key_facts=ready.dropped_key_facts, model=ready.model, prompt_version=ready.prompt_version)
+        case InsightsPending():
+            return InsightsPendingOut(status="pending")
+        case InsightsFailed(failure):
+            return InsightsFailedOut(status="failed", error=error_body(failure))
+        case InsightsUnavailable():
+            return InsightsUnavailableOut(status="unavailable",
+                                          reason="This document failed to process, so it has no insights.")
+        case _:
+            assert_never(doc.insights)
 
 
 def turn_out(turn: Turn) -> TurnOut:

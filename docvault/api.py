@@ -59,8 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def vault_error_handler(request: Request, exc: VaultError) -> JSONResponse:
     failure = exc.failure
-    body = wire.ErrorOut(error=wire.ErrorBody(code=failure.code, message=failure.message, retryable=failure.retryable,
-                                              details=exc.details))
+    body = wire.ErrorOut(error=wire.error_body(failure, exc.details))
     headers = {"Retry-After": "5"} if failure.code is ErrorCode.AI_UNAVAILABLE else None
     return JSONResponse(body.model_dump(mode="json"), status_code=ERROR_STATUS.get(failure.code, 500), headers=headers)
 

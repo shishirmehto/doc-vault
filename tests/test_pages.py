@@ -6,17 +6,13 @@ import re
 import zipfile
 
 import pytest
-import yaml
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen.canvas import Canvas
 
 from docvault import pages
 from docvault.domain import DocKind, ErrorCode, ExtractedText, Page, PageBasis, VaultError
 
-from .conftest import ENDORSEMENT, POLICY, QUOTE, SAMPLES
-
-TRUTH = yaml.safe_load((SAMPLES / "facts.yaml").read_text())
-FACTS = {fact["id"]: fact for fact in TRUTH["facts"]}
+from .conftest import ENDORSEMENT, FACTS, POLICY, QUOTE, SAMPLES, TRUTH
 
 
 def extracted(name: str) -> ExtractedText:
