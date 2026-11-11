@@ -1,14 +1,14 @@
 # Doc Vault web UI
 
-A small Next.js app for the doc-vault API. You can upload documents and watch them process. Each document shows its summary, tags and key facts, and can be deleted from its page. You can also start a chat over one or more ready documents and ask questions. The answer appears as it is written, then the cited answer replaces it, with up to three follow-up questions to ask in one click. Click a key fact's page tab, or an answer's numbered citation, to open that page with the quoted passage marked and a flag on the page edge. In a chat, the flag carries the citation's number. The top bar has two sections: Ask, the new-chat screen and its chats, and Metrics, which shows how documents, steps, AI calls and chats are doing.
+A small Next.js app for the doc-vault API. You can upload documents and watch them process. Each document shows its summary, tags and key facts, and can be deleted from its page. You can also start a chat over one or more ready documents and ask questions. The answer appears as it is written, then the cited answer replaces it, with up to three follow-up questions to ask in one click. Click a key fact's page tab, or an answer's numbered citation, to open that page with the quoted passage marked and a flag on the page edge. In a chat, the flag carries the citation's number. You can also compare 2 to 5 ready documents side by side. Doc Vault lines up the fields a broker compares, such as limits, deductibles and premium, marks each field whose values differ, and gives every value a page tab that opens its passage. The top bar has three sections. Ask is the new-chat screen and its chats. Compare is the compare screen and its comparisons. Metrics shows how documents, steps, AI calls and chats are doing, with comparisons among the AI calls.
 
 ## Layout
 
-The page itself never scrolls. `html`, `body` and the `.app` wrapper are flex and grid boxes down to the three columns, so each column scrolls on its own. Anything a browser extension adds to the page, or a margin it sets, takes its own share of the height instead of pushing content off the window. On the chat and new-chat screens the content scrolls above a footer row that holds the question box, and nothing is `position: sticky`. The question box stays on screen at every window height down to 500 px.
+The page itself never scrolls. `html`, `body` and the `.app` wrapper are flex and grid boxes down to the three columns, so each column scrolls on its own. Anything a browser extension adds to the page, or a margin it sets, takes its own share of the height instead of pushing content off the window. On the chat, new-chat and compare screens the content scrolls above a footer row that holds the question box or the focus field, and nothing is `position: sticky`. The question box stays on screen at every window height down to 500 px.
 
 Below 1100 px the source pane covers the centre column. Below 760 px the rail folds into a "Documents (n)" button above the centre column. It is open while the vault is empty or uploads are listed, closes when a document is opened from it, and takes at most half the height, with its own scroll. Folded, it still lists up to three documents that are processing under the button, so a document uploaded from another tab shows its progress. Past three, an "N more processing" button opens the rail.
 
-An empty vault shows the steps from upload to first question, with a large drop target in step 1. Over six documents, the rail shows a "Find a document" field and the new-chat picker a "Find a document to ask about" field. Each matches the filename and the document type, except the type "other", which rows do not show. The picker's "Select all ready" ticks the ready documents the search shows, up to the 50 a chat allows. Each row's meta leads with the document type once insights know it ("Policy. PDF, 7 pages, 11 KB").
+An empty vault shows the steps from upload to first question, with a large drop target in step 1. Over six documents, the rail shows a "Find a document" field, the new-chat picker a "Find a document to ask about" field and the compare picker a "Find a document to compare" field. Each matches the filename and the document type, except the type "other", which rows do not show. The picker's "Select all ready" ticks the ready documents the search shows, up to the 50 a chat allows. Each row's meta leads with the document type once insights know it ("Policy. PDF, 7 pages, 11 KB").
 
 `.claude/skills/verify-doc-vault/scripts/visible.js` checks a screen for clipped text, controls nothing can scroll into view, and sideways page scroll. The verify skill's `features/README.md` says how to run it.
 
@@ -58,9 +58,9 @@ The rewrite also compresses responses, and a compressed `text/event-stream` arri
 | `src/api/client.ts` | One function per endpoint. Each returns `Result<T>` and never throws. Uploads use XHR for progress. `askStream` reads the streamed ask with `fetch`, because `EventSource` cannot POST |
 | `src/api/sse.ts` | Frames a `text/event-stream` body into messages, from text split anywhere |
 | `src/api/domain.ts` | Types the components read: branded ids, the lifecycle, insights and turn unions, `SourceRef` |
-| `src/lib/` | Logic with no React, tested on Node: `locateQuote`, `isSettled`, `stageProgress`, the upload scheduler, the chat thread's state machine, `findDocs` and `chooseAll` for long lists, the rail list's rules (`docList`), `ListSync`, which keeps a list read and the events around it consistent, and `LiveFeed`, which reopens the event stream and says when it is paused |
-| `src/hooks/` | `useDocuments` (the list, kept current by the live feed, with polling as the fallback), `useLiveFeed` (the page's one event stream and its status), `useFetched`, `useSelection`, `useUploads`, `useHealth` (one shared `/health` poll), `useFileDrop`, and `useThread`, which sends one question at a time per chat |
-| `src/components/` | The top bar, the rail, the new-chat screen, the chat, the document view and its delete dialog, the source pane, the metrics screen, and the missing-page message |
+| `src/lib/` | Logic with no React, tested on Node: `locateQuote`, `isSettled`, `stageProgress`, the upload scheduler, the chat thread's state machine, `findDocs` and `chooseAll` for long lists, the rail list's rules (`docList`), `ListSync`, which keeps a list read and the events around it consistent, `LiveFeed`, which reopens the event stream and says when it is paused, and `compare.ts`: the comparison run's state machine, the column order, the "Only differences" rows and the cell a URL names |
+| `src/hooks/` | `useDocuments` (the list, kept current by the live feed, with polling as the fallback), `useLiveFeed` (the page's one event stream and its status), `useFetched`, `useSelection`, `useUploads`, `useHealth` (one shared `/health` poll), `useFileDrop`, `useThread`, which sends one question at a time per chat, and `useCompareRun`, which holds the one comparison in flight |
+| `src/components/` | The top bar, the rail, the new-chat screen, the document picker it shares with the compare screen, the chat, the compare screen, the comparison, the document view and its delete dialog, the source pane, the metrics screen, and the missing-page message |
 | `src/copy.ts` | Every sentence the UI writes about state |
 
 The URL holds the selection:
@@ -69,12 +69,14 @@ The URL holds the selection:
 - `?view=metrics` shows the metrics, for the last 24 hours. `&window=7d` shows the last 7 days.
 - `?doc=<id>` opens a document. `&cite=fact.<n>` or `&p=<n>` opens the source pane.
 - `?chat=<id>` opens a chat. `&cite=turn.<turn id>.<n>` opens citation `[n]` of that turn, and `&p=<n>` pages away from it.
+- `?view=compare` shows the compare screen. Only ready documents can be ticked, at most 5. Below the picker are the ten newest comparisons. `&with=<doc id>` ticks that document, which is how a document page's "Compare with..." opens it.
+- `?compare=<id>` opens a comparison. `&cite=cmp.<row>.<col>` opens the page of one cell, counting rows and columns from 0 among all the rows. `&p=<n>` pages away from it, and `&only=differences` shows only the fields that differ.
 
-A `?doc=` or `?chat=` the vault does not have, or one that is not an id at all, shows a sentence saying so and an "Ask your documents" button. Any other path shows the app's own not-found page.
+A `?doc=` or `?chat=` the vault does not have, or one that is not an id at all, shows a sentence saying so and an "Ask your documents" button. A `?compare=` that is not an id, or that the vault does not have, shows the same kind of sentence with a "Compare documents" button. Any other path shows the app's own not-found page.
 
 Deleting a document asks first, in a dialog that names the file and says that chats which used it keep their answers and citations but take no more questions. Afterwards the home screen opens with a note naming the file, and the note takes focus.
 
-Starting a chat, opening a fact and opening a citation each add a history entry, so Back undoes them. A pasted link reopens the same chat or highlight in any browser, because the chat's header comes from `GET /chats/{id}`. If a chat's document was deleted after it started, the header marks it and the composer closes, since the API would refuse the question.
+Starting a chat, opening a fact, opening a citation and opening a comparison's cell each add a history entry, so Back undoes them. A pasted link reopens the same chat or highlight in any browser, because the chat's header comes from `GET /chats/{id}`. If a chat's document was deleted after it started, the header marks it and the composer closes, since the API would refuse the question.
 
 A file larger than `/health`'s `max_upload_bytes` is refused in the browser and never sent. Until `/health` answers, the API's 413 decides.
 
@@ -88,6 +90,10 @@ Questions go to `POST /chats/{id}/messages/stream`. While the answer streams, th
 
 When an ask fails, the chat reads its history again before it offers Try again. If the question was recorded after all, the turn is shown and nothing is asked twice. An `error` event and a stream that ends without its `turn` take this path too. The second case is a connection dropped mid-answer, and the backend still stores the turn, possibly seconds later. So after a stream that had started breaks, the chat reads history again after 0, 1, 2, 4, 8 and 15 seconds and adopts the turn as soon as it appears. It offers Try again only when the turn is still missing after that. In a browser check, a stream cut after its first delta was adopted from the 1-second read, with no Try again.
 
+One comparison runs at a time, in a store outside React, so the run outlives the screen that started it. The compare screen starts one, and so does the new-chat screen's Compare button, which uses the question as the focus and opens the compare screen. While it runs, the compare screen shows "Comparing a.pdf and b.pdf" with the ask's progress line, and after 5 s says that a long document can take up to a minute and a half. When it lands, the compare screen's URL is replaced by the comparison's, so Back skips the compare screen and returns to where Compare was clicked. A reader who has moved to another screen stays there, and the comparison heads Recent comparisons. When a run fails, the screen says why, names any document that is not ready, and offers Try again, which sends the same request, and "Change the documents", which returns to the picker with the ticks and focus kept. Try again is left out for a refusal the backend marks final, other than documents that are not ready yet.
+
+A comparison's table scrolls sideways in its own box. Each field that differs carries a bar on the left edge of its field cell and a "Differs" tag. A page tab opens its cell's page in the source pane with the passage marked, and the cell turns canary. A deleted document keeps its column and values, but its page tabs become plain text, such as "p. 2, deleted". The "Only differences" checkbox replaces the URL instead of adding a history entry.
+
 While an answer streams, the column follows its text until the reader scrolls up. When the answer lands, the column scrolls to the end, so the suggestions under it sit fully above the question box.
 
 ## Tests and fixtures
@@ -99,5 +105,16 @@ At bonus phase A, `TurnOut` gained `suggestions`, so the `turn-*` and history fi
 At phase G1, `DocumentOut` gained `document_type`. `documents-page.json` was captured again. The other document fixtures are snapshots of states that have passed, so the field was added as the API writes it: null while insights are not ready, and, for the two with ready insights, the value `GET /documents/{id}` returned. `delete-404-not-found.json` is a real `DELETE` of an id the vault does not have.
 
 At bonus phase B, `events-documents.txt` holds the raw body of `GET /events/documents` read through the proxy on port 3000 while a 2.5 MB text file processed. It has the `: connected` comment, six `document` events from parsing through 128, 512, 896 and 1280 of 1604 passages to ready, a keepalive, a `resync` and the `deleted` event. The event tests read it split at every byte. The feed's reconnect delays and pause timing are tested against a fake `EventSource` with Node's mock timers.
+
+At bonus phase C, the comparison fixtures were captured from the fake provider with a script that uploads two throwaway text files and deletes them again:
+- `compare-201-policy-quote.json`: the policy and the renewal quote, 12 fields, 5 of which differ;
+- `compare-201-focus-deductible.json`: the same with the focus `deductible`, which leaves one field;
+- `compare-201-three-documents.json`: the policy, the quote and the endorsement, where the endorsement's empty cells are null;
+- `comparisons-page.json`: `GET /comparisons?limit=10`, which includes a comparison with no rows;
+- `comparison-get-deleted-document.json`: a comparison with a throwaway text file, read back after the file was deleted;
+- `compare-409-not-ready.json`: a comparison with a large text file posted while it was still queued;
+- `compare-422-one-document.json` and `comparison-404-not-found.json`.
+
+The tests build the malformed bodies by editing a captured one: a row with a missing cell, cells in the wrong columns, and a cell with a value but no page or quote.
 
 The `locateQuote` cases come from the backend's `tests/test_pages.py`. They were checked against the Python `locate_quote` on the same inputs.
