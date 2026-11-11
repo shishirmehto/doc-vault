@@ -2,7 +2,7 @@
 (* One uploaded document moving through doc-vault's indexing pipeline.
    Mirrors docvault/documents.py (run_index, _index, retry, reconcile),
    docvault/db.py (pipeline_steps lease) and docvault/tasks.py (index_document)
-   at commit 3437628. Insights and deletes are left out. *)
+   at commit 1645d50. Insights and deletes are left out. *)
 EXTENDS Naturals, FiniteSets
 
 CONSTANTS Workers, Chunks, MaxRetries, MaxCrashes, MaxFaults, QCap, MaxUserRetries
