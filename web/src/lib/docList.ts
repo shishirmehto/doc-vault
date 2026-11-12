@@ -1,6 +1,15 @@
-import type { Doc, DocEvent } from "../api/domain.ts";
+import type { ApiError, Doc, DocEvent, Result } from "../api/domain.ts";
 
 export type DocList = { docs: Doc[]; complete: boolean };
+
+/** A document the list lacks, read by id. `doc` and `failed` both null, once loaded, means it is not in the vault. */
+export type LookedUp = { doc: Doc | null; loading: boolean; failed: ApiError | null };
+
+/** A read that failed for any reason but a 404: the document may well be there, so the reader gets Try again. */
+export function failedRead(read: Result<unknown> | null): ApiError | null {
+  if (read === null || read.ok) return null;
+  return read.error.kind === "refused" && read.error.status === 404 ? null : read.error;
+}
 
 export const LIST_LIMIT = 100;
 

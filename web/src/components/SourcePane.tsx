@@ -2,10 +2,11 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { api } from "@/api/client";
-import type { Doc, Page } from "@/api/domain";
+import type { ApiError, Doc, Page } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { locateQuote } from "@/lib/quote";
 import { explain } from "@/copy";
+import { LoadFailed } from "./Missing";
 
 /** A passage to mark. `flag` is the short text on the page-edge flag: a chat citation's number. */
 export type Mark = { quote: string; label: string; flag?: string };
@@ -17,12 +18,14 @@ export type Mark = { quote: string; label: string; flag?: string };
 export type SourceView =
   | { kind: "resolving" }
   | { kind: "unknown"; message: string }
+  /** The document could not be read; it may still be in the vault. */
+  | { kind: "failed"; error: ApiError }
   | { kind: "page"; doc: Doc; page: number; mark: Mark | null; citedPage?: number };
 
-type Props = { view: SourceView; onPage(page: number): void; onClose(): void };
+type Props = { view: SourceView; onPage(page: number): void; onClose(): void; onRetry?(): void };
 
 /** The document's own words. Only a document page is paper; Esc and Close both close it. */
-export function SourcePane({ view, onPage, onClose }: Props) {
+export function SourcePane({ view, onPage, onClose, onRetry }: Props) {
   const close = useRef(onClose);
   useEffect(() => {
     close.current = onClose;
@@ -60,6 +63,9 @@ export function SourcePane({ view, onPage, onClose }: Props) {
       <div className="pane-body">
         {view.kind === "resolving" && <SheetSkeleton />}
         {view.kind === "unknown" && <p className="notice">{view.message}</p>}
+        {view.kind === "failed" && (onRetry
+          ? <LoadFailed error={view.error} onRetry={onRetry} />
+          : <p className="notice">{explain(view.error)}</p>)}
         {view.kind === "page" && (
           <>
             {view.mark === null && view.citedPage !== undefined && (

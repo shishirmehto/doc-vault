@@ -15,7 +15,7 @@ import { familyOf, hasVersions } from "@/lib/versions";
 import { citedFact, citedSource, summarySourceView } from "@/lib/summaryPane";
 import { docMeta, explain, formatMs, statusLine, unitName, versionCompareBlocked, withVersion } from "@/copy";
 import { DeleteDocument } from "./DeleteDocument";
-import { MissingDocument } from "./Missing";
+import { LoadFailed, MissingDocument } from "./Missing";
 import { FailureNote } from "./Rail";
 import { SourcePane, type SourceView } from "./SourcePane";
 import { StageBar } from "./StageBar";
@@ -26,6 +26,9 @@ type Props = {
   id: DocumentId;
   doc: Doc | null;
   loading: boolean;
+  /** The read by id failed for a reason other than a 404. */
+  failed: ApiError | null;
+  onReload(): void;
   pane: PaneRequest | null;
   push(s: Selection): void;
   replace(s: Selection): void;
@@ -39,7 +42,8 @@ type Props = {
 
 /** The centre column for one document, and the source pane beside it. */
 export function DocumentScreen({
-  id, doc: current, loading, pane, push, replace, onRetry, onAsk, onDelete, onCompareVersions, onUploadVersion,
+  id, doc: current, loading, failed, onReload, pane, push, replace, onRetry, onAsk, onDelete, onCompareVersions,
+  onUploadVersion,
 }: Props) {
   // A document that leaves the list, because a newer version arrived or because it was deleted, is read again on its
   // own. Until that read lands the page keeps what it showed, rather than a skeleton.
@@ -59,7 +63,7 @@ export function DocumentScreen({
   if (!doc) {
     return (
       <main className="centre">
-        {loading ? <HeaderSkeleton /> : <MissingDocument />}
+        {loading ? <HeaderSkeleton /> : failed ? <LoadFailed error={failed} onRetry={onReload} /> : <MissingDocument />}
       </main>
     );
   }

@@ -11,6 +11,7 @@ import { useListedDoc } from "@/hooks/useListedDoc";
 import { threads, useThread } from "@/hooks/useThread";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { citedPageView } from "@/lib/citedPage";
+import type { LookedUp } from "@/lib/docList";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { chatVersion } from "@/lib/versions";
 import { askStatus, chatAsks, documentNames, explain, listNames, NOT_FOUND, usageLine, withVersion } from "@/copy";
@@ -41,7 +42,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   const open = (cite: TurnCite) => push({ kind: "chat", chat: id, pane: { cite, page: null } });
 
   const cited = pane && turns ? citationAt(turns, pane.cite) : null;
-  const { doc: citedDoc, loading: resolving } = useListedDoc(cited?.source.documentId ?? null, docs);
+  const citedDoc = useListedDoc(cited?.source.documentId ?? null, docs);
 
   const column = useRef<HTMLDivElement>(null);
   const turnCount = turns?.length ?? 0;
@@ -131,7 +132,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
       </main>
       {pane && (
         <SourcePane
-          view={sourceView(pane, turns, citedDoc, resolving)}
+          view={sourceView(pane, turns, citedDoc)} onRetry={citedDoc.reload}
           onPage={(page) => replace({ kind: "chat", chat: id, pane: { ...pane, page } })}
           onClose={() => push({ kind: "chat", chat: id, pane: null })}
         />
@@ -145,10 +146,11 @@ function citationAt(turns: readonly Turn[], cite: TurnCite): Citation | null {
   return (outcome?.kind === "answered" ? outcome.citations.find((c) => c.ref === cite.ref) : undefined) ?? null;
 }
 
-function sourceView(pane: ChatPane, turns: readonly Turn[] | null, doc: Doc | null, resolving: boolean): SourceView {
-  if (turns === null || resolving) return { kind: "resolving" };
+function sourceView(pane: ChatPane, turns: readonly Turn[] | null, { doc, loading, failed }: LookedUp): SourceView {
+  if (turns === null || loading) return { kind: "resolving" };
   const citation = citationAt(turns, pane.cite);
   if (!citation) return { kind: "unknown", message: "This citation is not in the chat's history." };
+  if (!doc && failed) return { kind: "failed", error: failed };
   if (!doc) return { kind: "unknown", message: `${citation.filename} is no longer in the vault.` };
   return citedPageView(doc, pane.page, citation.source.page, { quote: citation.source.quote, label: `source ${citation.ref}`, flag: String(citation.ref) });
 }

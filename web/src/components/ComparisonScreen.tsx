@@ -57,7 +57,7 @@ export function ComparisonScreen({ id, docs, pane, only, push, replace }: Props)
       </main>
       {pane && (
         <SourcePane
-          view={cellView(result, pane, compared.doc, compared.loading)}
+          view={cellView(result, pane, compared)} onRetry={compared.reload}
           onPage={(page) => replace(at({ ...pane, page }))}
           onClose={() => push(at(null))}
         />

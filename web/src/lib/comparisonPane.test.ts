@@ -11,13 +11,14 @@ function fixture(name: string) {
 
 const RENEWAL = "23b7e49c-b644-4ccf-8768-5716b69cb9cc" as DocumentId;
 const DEDUCTIBLE_IN_RENEWAL = { cite: { row: 9, col: 1 }, page: null };
+const NOT_READ = { doc: null, loading: false, failed: null };
 
 test("a cell's pane says why when the comparison could not be read, and waits while it loads", () => {
   assert.deepEqual(
     [
-      cellView({ ok: false, error: { kind: "offline" } }, DEDUCTIBLE_IN_RENEWAL, null, false),
-      cellView({ ok: false, error: { kind: "broken", status: 502, requestId: null } }, DEDUCTIBLE_IN_RENEWAL, null, false),
-      cellView(null, DEDUCTIBLE_IN_RENEWAL, null, true),
+      cellView({ ok: false, error: { kind: "offline" } }, DEDUCTIBLE_IN_RENEWAL, NOT_READ),
+      cellView({ ok: false, error: { kind: "broken", status: 502, requestId: null } }, DEDUCTIBLE_IN_RENEWAL, NOT_READ),
+      cellView(null, DEDUCTIBLE_IN_RENEWAL, { doc: null, loading: true, failed: null }),
     ],
     [
       { kind: "unknown", message: "Can't reach the vault. Check that the web server and the API are running." },
@@ -30,11 +31,25 @@ test("a cell's pane says why when the comparison could not be read, and waits wh
 test("a cell's pane opens its page with the quote marked, and pages away without the mark", () => {
   const comparison = { ok: true as const, value: parseComparison(fixture("compare-201-policy-quote")) };
   const renewal = parseDocumentPage(fixture("documents-page")).docs.find((d) => d.id === RENEWAL)!;
-  assert.deepEqual(cellView(comparison, DEDUCTIBLE_IN_RENEWAL, renewal, false), {
+  assert.deepEqual(cellView(comparison, DEDUCTIBLE_IN_RENEWAL, { doc: renewal, loading: false, failed: null }), {
     kind: "page", doc: renewal, page: 2, citedPage: 2,
     mark: { quote: "Property Damage Deductible $5,000 per occurrence", label: "Property Damage Deductible" },
   });
-  assert.deepEqual(cellView(comparison, { ...DEDUCTIBLE_IN_RENEWAL, page: 3 }, renewal, false), {
+  assert.deepEqual(cellView(comparison, { ...DEDUCTIBLE_IN_RENEWAL, page: 3 }, { doc: renewal, loading: false, failed: null }), {
     kind: "page", doc: renewal, page: 3, citedPage: 2, mark: null,
   });
+});
+
+test("a cell whose document could not be read offers Try again, and only a 404 says it is gone", () => {
+  const comparison = { ok: true as const, value: parseComparison(fixture("compare-201-policy-quote")) };
+  assert.deepEqual(
+    [
+      cellView(comparison, DEDUCTIBLE_IN_RENEWAL, { doc: null, loading: false, failed: { kind: "offline" } }),
+      cellView(comparison, DEDUCTIBLE_IN_RENEWAL, NOT_READ),
+    ],
+    [
+      { kind: "failed", error: { kind: "offline" } },
+      { kind: "unknown", message: "sample-renewal-quote.pdf is no longer in the vault." },
+    ],
+  );
 });

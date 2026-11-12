@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Doc, DocumentId, FamilyId, Lifecycle } from "../api/domain.ts";
-import { applyDocEvent, upsertDoc, type DocList } from "./docList.ts";
+import type { ApiError, Doc, DocumentId, FamilyId, Lifecycle, Result } from "../api/domain.ts";
+import { applyDocEvent, failedRead, upsertDoc, type DocList } from "./docList.ts";
 
 function doc(n: number, second: number, lifecycle: Lifecycle = { status: "ready" }): Doc {
   return {
@@ -88,4 +88,21 @@ test("version 1 read before version 2 was uploaded gives way to version 2's even
   const stale = upsertDoc(list(true, version(2, 80, 2, 2)), version(1, 10, 1, 1));
   const settled = upsertDoc(stale, version(2, 80, 2, 2));
   assert.deepEqual(names(settled), ["terms v2.txt"]);
+});
+
+test("a read by id that fails for any reason but a 404 is a failure to try again, not a missing document", () => {
+  const refused = (status: number, code: string): ApiError => ({
+    kind: "refused", status, code, message: "", retryable: null, retryAfterS: null, documents: [], quota: null, requestId: null,
+  });
+  const reads: (Result<Doc> | null)[] = [
+    null,
+    { ok: true, value: doc(1, 1) },
+    { ok: false, error: refused(404, "document_not_found") },
+    { ok: false, error: { kind: "offline" } },
+    { ok: false, error: refused(503, "too_many_streams") },
+    { ok: false, error: { kind: "broken", status: 502, requestId: null } },
+  ];
+  assert.deepEqual(reads.map(failedRead), [
+    null, null, null, { kind: "offline" }, refused(503, "too_many_streams"), { kind: "broken", status: 502, requestId: null },
+  ]);
 });

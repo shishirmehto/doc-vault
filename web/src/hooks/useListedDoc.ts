@@ -2,11 +2,10 @@
 
 import { api } from "@/api/client";
 import type { Doc, DocumentId, Result } from "@/api/domain";
+import { failedRead, type LookedUp } from "@/lib/docList";
 import { useFetched } from "./useFetched";
 
-export function useListedDoc(id: DocumentId | null, docs: readonly Doc[] | null): {
-  doc: Doc | null;
-  loading: boolean;
+export function useListedDoc(id: DocumentId | null, docs: readonly Doc[] | null): LookedUp & {
   lookUp: DocumentId | null;
   reload(): void;
 } {
@@ -16,6 +15,7 @@ export function useListedDoc(id: DocumentId | null, docs: readonly Doc[] | null)
   return {
     doc: listed ?? (older.result?.ok ? older.result.value : null),
     loading: docs === null || (lookUp !== null && older.result === null),
+    failed: listed ? null : failedRead(older.result),
     lookUp,
     reload: older.reload,
   };

@@ -100,7 +100,7 @@ export function Workspace() {
   const docs = documents.data?.docs ?? null;
   const complete = documents.data?.complete ?? true;
   const selectedDoc = selection.kind === "doc" ? selection.doc : null;
-  const { doc: current, loading, lookUp, reload } = useListedDoc(selectedDoc, docs);
+  const { doc: current, loading, failed, lookUp, reload } = useListedDoc(selectedDoc, docs);
   useEffect(() => {
     if (lookUp === null) return;
     return liveFeed.subscribe((event) => {
@@ -145,6 +145,8 @@ export function Workspace() {
             id={selection.doc}
             doc={current}
             loading={loading}
+            failed={failed}
+            onReload={reload}
             pane={selection.pane}
             push={push}
             replace={replace}
