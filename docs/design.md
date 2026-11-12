@@ -14,12 +14,14 @@ Postgres 16 with pgvector holds every table. `docvault/schema.sql` is the only s
 | `step_runs` | `db.pipeline_steps` | Append-only. One row per attempt of `parse`, `embed` or `analyze`, with its outcome and error code. |
 | `document_insights` | `insights.py` | One row per document once insights exist or fail. No row means pending. |
 | `chats`, `chat_documents` | `chat.py` | A chat and its fixed document scope, with a filename snapshot. |
-| `chat_turns` | `chat.py` | One row per question: the standalone query, the outcome, the answer, a citation snapshot and up to three follow-up suggestions. |
+| `chat_turns` | `chat.py` | One row per question: the standalone query, the outcome, the answer, a citation snapshot, up to three follow-up suggestions, and `cached`, true when the answer came from the answer cache with no model call. |
 | `comparisons` | `compare.py` | One row per comparison: the focus, a snapshot of its documents in column order (filename, version, page basis, pages read), the rows as jsonb with each cell's value, page and verified quote, and how many cells grounding emptied. |
 | `document_summaries` | `summaries.py` | One row per distinct summary request: the length, the normalised focus (`''` for none), the tone, the text, the sources with their pages and verified quotes, how many sources grounding dropped, and the model and prompt version. Unique on document, length, focus, tone, model and prompt version. Deleted with its document. |
-| `llm_calls` | `ai.py` | Append-only. One row per provider attempt, failed ones included: purpose, model, prompt version, tokens, cost, latency, and the document, turn, comparison or summary it is billed to (`one_owner` allows exactly one). |
+| `llm_calls` | `ai.py` | Append-only. One row per provider attempt, failed ones included: purpose, model, prompt version, tokens, cost, latency, the document, turn, comparison or summary it is billed to (`one_owner` allows exactly one), and the `request_id` of the API request that caused it. |
 
-Uploaded files live on disk at a path derived from their SHA-256 (`context.BlobStore`), so the database stores no path and the same bytes are stored once.
+Uploaded files live on disk at a path derived from their SHA-256 (`context.BlobStore`), so the database stores no path and the same bytes are stored once. The cache Redis holds embeddings and answers that the app can compute again, and its own hit and miss counts (see Caches).
+
+`llm_calls.request_id` and `chat_turns.cached` are added by `ADD COLUMN IF NOT EXISTS` in the upgrades section of `schema.sql`, with `cached` defaulting to false. An existing volume gains both on the next start, and a stored turn reads as not cached.
 
 ## Request flows
 
@@ -33,27 +35,31 @@ The migration in `schema.sql` adds `family_id` as nullable, sets it to the row's
 
 **Index.** `documents.run_index` takes a per-document advisory lock (`pg_try_advisory_lock`), so a duplicate delivery returns at once. Parsing extracts pages, cuts chunks and writes pages, chunks and parse facts in one transaction. It then enqueues insights and embeds pending chunks in batches of 128, one transaction per batch. A crash resumes at the first chunk without an embedding, and no parse or batch is paid for twice. A retryable failure raises for Celery to retry (five retries, 2 to 32 seconds apart). The last failure writes `failed` while the worker still holds the lock. `reconcile` runs every 60 seconds and re-enqueues stalled documents, at most 50 per tick.
 
-**Insights.** `insights.run_analyze` runs on the `llm` queue beside embedding, under its own lock, so a slow summary never delays `ready`. It sends the pages that fit in 240,000 characters, in order, and records how many it read (`coverage`). A key fact is kept only when `pages.find_on_page` finds its quote on the page it cites. The rest are dropped and counted.
+**Insights.** `insights.run_analyze` runs on the `llm` queue beside embedding, under its own lock, so a slow summary never delays `ready`. It sends the pages that fit in 240,000 characters, in order, and records how many it read (`coverage`). A key fact is kept only when `pages.find_on_page` finds its quote on the page it cites. The rest are dropped and counted. Over the spending cap the insights call raises `quota_exceeded` with `retryable: false`, so Celery does not retry it and the insights are stored as failed, for `POST /documents/{id}/retry` to run again after the cap resets.
 
 **Ask.** `chat.ask` runs these steps:
 
-1. After the first question, the small model rewrites each question into a standalone query from the last four turns. The first question is used as asked.
-2. Embed the query, then run one SQL statement over the chat's documents (see Retrieval).
-3. Refuse with `no_evidence`, and spend no answer call, when no chunk passes the relevance gate.
-4. Send eight sources to the main model and get back an answer with `[S#]` markers and a verbatim quote per marker.
-5. Keep a citation only when `pages.locate_quote` finds its quote in the source it names. The citation's page is the page where the quote starts inside the chunk. With nothing verified, the turn is `unverified`.
-6. Keep up to three of the model's `follow_ups` as suggestions (`chat.suggestions`): questions that end in "?", are at most 160 characters and differ from the question just asked. A turn the gate refused had no model call, so `chat.fact_suggestions` asks "What is the <label>?" for the documents' verified key-fact labels of two words or more, taken round by round across the documents.
-7. Write one `chat_turns` row. Usage is read back from `llm_calls` by turn id.
+1. Check that the chat exists and none of its documents is deleted, and read its scope and last four turns, in one connection.
+2. For a chat's first question only, look the answer up in the answer cache under `chat.answer_key` (see Caches). A hit writes a `chat_turns` row marked `cached = true` with the stored answer, citations and suggestions, and returns it. It makes no model call of any kind, the query embedding included.
+3. Check the spending cap with `AI.check_budget` (see Spending cap). Over the cap, raise 429 `quota_exceeded` before any model call, even one the gate would have saved.
+4. After the first question, the small model rewrites each question into a standalone query from the last four turns. The first question is used as asked.
+5. Embed the query, then run one SQL statement over the chat's documents (see Retrieval).
+6. Refuse with `no_evidence`, and spend no answer call, when no chunk passes the relevance gate.
+7. Send eight sources to the main model and get back an answer with `[S#]` markers and a verbatim quote per marker.
+8. Keep a citation only when `pages.locate_quote` finds its quote in the source it names. The citation's page is the page where the quote starts inside the chunk. With nothing verified, the turn is `unverified`.
+9. Keep up to three of the model's `follow_ups` as suggestions (`chat.suggestions`): questions that end in "?", are at most 160 characters and differ from the question just asked. A turn the gate refused had no model call, so `chat.fact_suggestions` asks "What is the <label>?" for the documents' verified key-fact labels of two words or more, taken round by round across the documents.
+10. Write one `chat_turns` row. Usage is read back from `llm_calls` by turn id.
+11. When the turn is a first question and `answered`, store it in the answer cache.
 
 No database transaction stays open across a model call.
 
 **Ask, streamed.** `POST /chats/{id}/messages/stream` runs the same `chat.ask`. The only difference is three optional sinks, which the plain route does not pass:
 
-- `on_stage` hears `condensing` (only when there is history), `searching` and `answering` as each step starts. The first one comes after the chat and its scope are checked.
+- `on_stage` hears `condensing` (only when there is history), `searching` and `answering` as each step starts. The first one comes after the chat, its scope, the answer cache and the spending cap are checked. An answer from the answer cache sends no stage. It sends its whole text to `on_text` once, with the `[n]` markers and the spaces before them removed.
 - `on_text` gets provisional answer text. The gateway streams the answer call's raw JSON into a `TextSink`. `answer_text.AnswerField` decodes the top-level `answer` string as it arrives, and `answer_text.MarkerFilter` removes `[S#]` markers, holding back a partial one until it resolves. `follow_ups` comes after `evidence` in the draft, so the answer streams first.
 - `on_reset` fires when a retry or the repair turn starts after text was sent, because that text is void.
 
-`api.AskInThread` runs `ask` in a worker thread that puts server-sent event frames on an unbounded queue. The route blocks until the first item arrives. If that item is an error (`chat_not_found`, `documents_deleted`), it answers with the usual status and envelope. Otherwise it streams the frames, then one `turn` or `error` event. A client that disconnects stops reading the queue, but the thread runs on, stores the turn and bills every attempt, so the history shows the answer. The provisional text is never trusted: the `turn` event carries the grounded answer, which replaces it.
+`api.AskInThread` runs `ask` in a worker thread that puts server-sent event frames on an unbounded queue. The route blocks until the first item arrives. If that item is an error (`chat_not_found`, `documents_deleted`, `quota_exceeded`), it answers with the usual status and envelope. Otherwise it streams the frames, then one `turn` or `error` event. A client that disconnects stops reading the queue, but the thread runs on, stores the turn and bills every attempt, so the history shows the answer. The provisional text is never trusted: the `turn` event carries the grounded answer, which replaces it.
 
 The response has `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`. `no-transform` matters for the web UI: its Next.js rewrite proxy gzips `text/event-stream` and so delivered every event at once when the answer ended. The proxy's compression skips a response marked `no-transform`.
 
@@ -114,6 +120,55 @@ The scan is exact, not approximate, because a chat's scope is a few documents an
 
 All five calls use strict JSON-schema output (`response_format`). The schemas are the `*Draft` models in `prompts.py`.
 
+## Spending cap
+
+`DAILY_AI_BUDGET_USD` caps what the gateway spends on model calls in one UTC day. Unset or empty means no cap. The ledger is the only meter. Today's spend is `coalesce(sum(cost_usd), 0)` over the `llm_calls` rows since midnight UTC, so every priced attempt counts, failed attempts and embeddings included.
+
+`ai.DailySpend` reads that sum at most once every 10 s (`SPEND_TTL_S`) in each process, and again when the UTC day changes. A check runs before every completion call, and the reading keeps a busy process from summing the day's rows each time. The API and each of the worker's four children are separate processes with a reading each, because each builds its `Ctx` after the fork.
+
+`AI.check_budget(purpose)` raises `VaultError(QUOTA_EXCEEDED)` when the reading is at or over the cap. `AI.complete` calls it before the first call and again before the repair turn. `chat.ask` also calls it before its first stage, so a streamed ask gets its 429 before the stream starts. `embed` never calls it. Uploads are indexed and reach `ready` over the cap, so they are ready to chat with when the cap resets. The error takes one of two shapes:
+
+- An ask, a comparison or a summary fails with `retryable: true`, HTTP 429. `details` holds `limit_usd`, `spent_today_usd`, `resets_at` (the next midnight UTC) and `retry_after_s` (whole seconds until then, at least 1), and `api.vault_error_handler` copies `retry_after_s` into `Retry-After`. `rate_limited` shares the status, so a client tells the two apart by `error.code`.
+- Insights fail with `retryable: false`, because a Celery retry seconds later would meet the same cap. `insights.fail` stores the code and the message, and `POST /documents/{id}/retry` runs them again.
+
+The cap is checked, not reserved. The gateway learns a call's cost from the provider's token counts after the call, so it cannot hold the cost back before. Calls already running when the cap is reached finish and are billed, and a reading up to 10 s old can let more start. `/health` reports `ai_budget` from the same reading, and leaves it null while Postgres is unreachable rather than failing the probe.
+
+## Caches
+
+Both caches live in the Redis that `CACHE_URL` names, which compose runs as the `cache` service: at most 256 MB, `allkeys-lru` eviction, and nothing written to disk. The broker Redis keeps Redis's default of no eviction, because an evicted broker key is a lost task. Cached embeddings and answers expire after 30 days.
+
+**Never a dependency.** `cache.Cache` wraps one client with 0.5 s connect and read timeouts and no retries. Any `RedisError` makes a lookup miss and drops a write or a count. The first failure logs one warning on `docvault.cache` and skips Redis for 60 s in that process, so an outage costs one warning a minute in each process and no wait on each call. With `CACHE_URL` unset, `Cache.off()` does nothing. `/health` pings the cache directly, outside the skip window, and never returns 503 for it.
+
+**Embedding cache.** `AI.embed` looks every text up in one `MGET` under `docvault:emb:<model>:<dimensions>:<sha256 of the text>`. The model and the dimension name the embedding space, so a model change never reads another space's vectors. Only the misses go to the provider, each distinct text once, in batches of 128. Each batch is cached as soon as it is paid for, so a later batch's failure does not lose it. Vectors come back in input order, and a call whose texts are all hits writes no `llm_calls` row. A vector is stored as little-endian float32, 6 KB at 1536 dimensions.
+
+A chunk is embedded as `<filename>\n<chunk text>` (`documents._embed_pending_chunks`), so it hits only under the same filename. A new version uploaded under the same filename hits for the chunks it shares with an earlier version. Identical bytes never get that far, because the upload dedupes them. The query embedding goes through the same cache, so a question text embedded before writes no `embed_query` row.
+
+**Answer cache.** Only a chat's first question is looked up, because a follow-up's answer depends on the turns before it. `chat.answer_key` hashes canonical JSON of every input the answer depends on: a format version, each document's id and sha256, the question casefolded with its spaces collapsed, `prompts.ANSWER_VERSION`, the main chat model and its reasoning effort, the embedding model, `retrieval_k`, `retrieval_per_doc_min` and the gate's `min_similarity`. The Redis key is `docvault:answer:<that hash>`. A change to any input is a miss, so a stored answer never goes stale. A document's content never changes, and a new version is a new id and hash. The value is the outcome, the text, the citation snapshots that `chat_turns.citations` stores, and the suggestions.
+
+Only `answered` turns are stored. A refusal asked again should get a fresh attempt from the model, and a cached refusal would pin it until the prompt version changed. A hit writes a new `chat_turns` row with `cached = true` and no `llm_calls` row, so its `usage` reads zero. It answers over the spending cap, because it makes no model call.
+
+**Counts.** One hash, `docvault:cache:stats`, holds `embedding:hits`, `embedding:misses`, `answer:hits` and `answer:misses`, and `since`, which `HSETNX` sets once at the first count. Embedding counts are per text, and answer counts are per first question. Every process adds to the same hash, from `since` on, not per metrics window. The counts outlive API restarts but not a cache restart. `GET /metrics/processing` returns them as its `cache` block, the only counts in that response that do not come from Postgres.
+
+Measured on a running stack: a first question asked again in a new chat on the same document, in another case and spacing, came back `cached: true` with zero calls, and its stream was one `delta` and then the `turn`. A new version under the same filename, with bytes that differed only in trailing newlines, raised the embedding hits from 0 to 1. With the `cache` service stopped, `/health` returned 200 with `cache: "unreachable"`, the metrics `cache` block was null, uploads still reached `ready`, and the API and the worker each logged one `docvault.cache` warning. Started again, the cache's counts began from zero with `counted_since` null.
+
+## Request ids and logs
+
+`api.RequestLog` gives every HTTP request an id. It is a pure ASGI middleware, added last so it is outermost, and so it also tags the 413 that `refuse_oversized_uploads` sends. It takes `X-Request-ID` through `logs.accept`, which keeps the value when it matches `[A-Za-z0-9._-]{1,64}` and otherwise makes a fresh `uuid4().hex`. Only a safe id is echoed and logged, so a client cannot put spaces, quotes or newlines into a log line.
+
+The middleware sets the `logs.request_id` context variable, adds the header to the response's start message, and writes one `docvault.requests` line in a `finally` when the response body ends. A `BaseHTTPMiddleware` would get a stream's response when it starts, before the body runs. Wrapping `send` instead logs a streamed ask or `GET /events/documents` once, with its whole duration, however it ends. The line has `method`, `route` (the matched template, null when no route matched), `status` (500 when the app raised before a response started), `latency_ms` and `client`. Compose turns uvicorn's access log off (`--no-access-log`), so this is the only line per request.
+
+`api.internal_error_handler` answers an exception no route expected with the usual envelope, 500 `internal_error` and `retryable: true`. Starlette sends that response from outside every middleware, so the handler adds `X-Request-ID` itself.
+
+**Across threads and tasks.** A new thread starts with an empty context, so `AskInThread` runs `chat.ask` in a copy of the request's context, and a streamed ask's ledger rows carry the id. Celery carries the id as a task header. `before_task_publish` adds `request_id` when the variable is set, and `task_prerun` sets the variable from the header, or to None, so a beat task never keeps the id of the task before it. The insights task that the index task queues carries the id on. `AI._record` writes the variable into `llm_calls.request_id`, which has a partial index, so a request's spend is one query:
+
+```sql
+SELECT purpose, model, cost_usd FROM llm_calls WHERE request_id = 'docs-check-1';
+```
+
+**Format.** `logs.configure` gives the root logger one stderr handler at INFO. A filter stamps every record with the current `request_id`. uvicorn's loggers lose their own handlers and propagate to root, so the API's lines share one format. `LOG_FORMAT=json` writes one object per line with `time`, `level`, `logger`, `message`, `request_id` and every field passed through `extra=`. `text`, the default, writes `LEVEL logger message key=value ...`. Compose sets `json` on the API, the worker and beat, and Celery's `setup_logging` signal applies it in the worker and beat. `db.PipelineSteps` writes one `docvault.pipeline` line as it closes each step row, with `document_id`, `step`, `attempt`, `outcome`, `error_code` and `duration_ms`.
+
+Measured on an isolated stack: an upload sent with `X-Request-ID: phase-f-trace-<tag>` gave five worker lines with that id. They were the parse and embed steps, both `ok`, Celery's `index_document` success line, the analyze step, and the `analyze_document` success line. The upload's `embed_chunks` and `insights` rows in `llm_calls` carry the same id.
+
 ## Assumptions
 
 - The users are insurance brokers and their clients, and the documents are policies, quotes and endorsements in English. The full-text configuration is `english`.
@@ -145,7 +200,7 @@ The 50,000-document set has 135,000 `step_runs`, 150,000 `llm_calls` and 50,000 
 - Ingest throughput is set by worker concurrency (4 in compose) and the provider's rate limits. Embedding sends 128 chunks per call, and insights make one call per document. More `worker` replicas scale ingest, and each document's lock keeps duplicates harmless.
 - `reconcile` adds at most 50 duplicate index messages a minute, however long the backlog is. It used to add one per stale document per minute.
 - Duplicate uploads cost nothing: the hash makes them one document.
-- Spend is visible per purpose and model in `GET /metrics/processing`, and per turn in each answer's `usage`.
+- Spend is visible per purpose and model in `GET /metrics/processing`, and per turn in each answer's `usage`. `DAILY_AI_BUDGET_USD` bounds it per UTC day, apart from the overshoot that Spending cap describes.
 
 ### What changes past that
 

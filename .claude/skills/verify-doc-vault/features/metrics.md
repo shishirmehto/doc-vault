@@ -10,7 +10,8 @@ Two read-only endpoints report the vault's state and its recent processing. Ever
   - p50/p95 for `time_to_ready_ms` and `queue_wait_ms`;
   - per-step runs, failures, retries and durations (`parse`, `embed`, `analyze`);
   - AI calls, tokens and cost by purpose and model;
-  - chat outcomes and latency.
+  - chat outcomes and latency;
+  - the `cache` block, which is not per window and is the one exception to "no counters". The cache Redis keeps its hits and misses since `counted_since` (see `caching.md`).
 
 ## How to get to it (user POV)
 

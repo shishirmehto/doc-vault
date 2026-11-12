@@ -40,7 +40,7 @@ Preconditions:
 
 ## Driving the stream
 
-`call.sh` saves whole bodies, so read the stream with `curl -N` and stamp each line with its arrival time:
+`call.sh` saves whole bodies, so read the stream with `curl -N` and stamp each line with its arrival time. The answer cache serves a first question that this stack has answered before on the same documents, with one `delta` and no `stage` (`caching.md`). So stream in a new chat on P before **Cited answer** asks the same question:
 
 ```bash
 curl -sN -D - http://localhost:18000/chats/<chat id>/messages/stream -H "$H" \
@@ -52,8 +52,8 @@ curl -sN -D - http://localhost:18000/chats/<chat id>/messages/stream -H "$H" \
 - Headers include `content-type: text/event-stream`, `cache-control: no-cache, no-transform` and `x-accel-buffering: no`.
 - Events come in this order: `stage` `searching`, `stage` `answering`, several `delta` events about 25 ms apart (`FAKE_STREAM_DELAY_MS` in compose), then `turn`. The deltas joined read `Property Damage Deductible $2,500 per occurrence`, without `[S1]`. The `turn` data equals the last turn of `GET /chats/<chat id>/messages`.
 - A follow-up starts with `stage` `condensing`. `Who won the 2022 football World Cup?` sends `stage` `searching`, then `turn` with `"reason": "no_evidence"`, and no `delta`.
-- **Disconnect.** Add `--max-time 0.1` to cut the stream mid-answer (curl exits 28). After a second, `GET /chats/<chat id>/messages` shows the turn as answered, and `$S/sql.sh "SELECT purpose, ok FROM llm_calls WHERE turn_id = '<turn id>'"` shows its `embed_query` and `answer` rows.
-- **Through the web proxy.** Run the same command against `http://localhost:13000/api/chats/<chat id>/messages/stream` with `-H 'accept-encoding: gzip'`. The response has no `content-encoding`, and the deltas keep their spacing. If they arrive in one burst at the end, the proxy is compressing the stream.
+- **Disconnect.** Start a new chat on Q alone, a scope no step above has asked, and run the same command with `--max-time 0.1` to cut the stream mid-answer (curl exits 28). After a second, `GET /chats/<that chat id>/messages` shows the turn as answered, and `$S/sql.sh "SELECT purpose, ok FROM llm_calls WHERE turn_id = '<turn id>'"` shows its `answer` row. It has no `embed_query` row, because the first stream embedded the same question text and the embedding cache serves it.
+- **Through the web proxy.** In the chat from the first stream, where the question is now a follow-up that the answer cache does not serve, run the same command against `http://localhost:13000/api/chats/<chat id>/messages/stream` with `-H 'accept-encoding: gzip'`. The response has no `content-encoding`, and the deltas keep their spacing. If they arrive in one burst at the end, the proxy is compressing the stream.
 
 ## Gotchas
 
@@ -63,3 +63,4 @@ curl -sN -D - http://localhost:18000/chats/<chat id>/messages/stream -H "$H" \
 - The fake never produces `unverified`, because it quotes its sources word for word.
 - The fake's suggestions are "What is the <label>?" for label-and-value passages in its sources, so most policy questions suggest the policy number, the named insured and the mailing address.
 - Chats have no delete route. Runs on the isolated stack are removed by `cleanup.sh`.
+- The answer cache is on in the isolated stack. A new chat whose first question this stack already answered on the same documents comes back `cached: true` and writes no `llm_calls` row. **Cited answer** still passes on a cached answer, because the cache keeps its citations.

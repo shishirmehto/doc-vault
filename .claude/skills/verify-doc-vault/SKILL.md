@@ -12,7 +12,7 @@ Every helper is in `.claude/skills/verify-doc-vault/scripts/`. Run them from the
 ## Launch
 
 ```bash
-.claude/skills/verify-doc-vault/scripts/launch.sh            # API, worker, beat, db, redis and web
+.claude/skills/verify-doc-vault/scripts/launch.sh            # API, worker, beat, db, redis, cache and web
 .claude/skills/verify-doc-vault/scripts/launch.sh api worker beat   # API only, skips the UI build
 ```
 
@@ -37,7 +37,7 @@ Run it first whenever a result looks wrong. A stale image means the stack runs o
 
 ## Drive
 
-Use the real user path: the public HTTP routes, or the UI in a browser. Never call Python functions, insert rows, or use test-only routes to make a feature "work".
+Use the real user path: the public HTTP routes, or the UI in a browser. Never call Python functions, insert rows, or use test-only routes to make a feature "work". The one exception is the priced `llm_calls` row that `features/quota-and-logs.md` inserts on a stack launched with a spending cap. The fake provider costs $0, so no route can bring the day's spend up to a cap.
 
 API helpers. Each one saves what it sees in the run's evidence folder.
 

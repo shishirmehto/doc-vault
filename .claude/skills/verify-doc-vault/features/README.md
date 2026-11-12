@@ -12,7 +12,7 @@ This folder is the maintained source for verifying what a doc-vault user sees an
 
 ## Driving conventions
 
-- Use only public routes (`/documents`, `/chats`, `/comparisons`, `/metrics`, `/health`) and the UI. Never call Python, insert rows, or edit the database to reach a state.
+- Use only public routes (`/documents`, `/chats`, `/comparisons`, `/metrics`, `/health`) and the UI. Never call Python, insert rows, or edit the database to reach a state. The one exception is the priced `llm_calls` row in `quota-and-logs.md`, on the isolated `docvault-verify` stack only.
 - Take expected values from `samples/facts.yaml` (document, page, exact text). Never take them from an earlier response.
 - In the browser, find elements by role and accessible name, not position.
 - A fresh upload is a fresh hash. To watch processing again, upload a new file. Do not delete a sample just to re-upload it.
@@ -66,4 +66,6 @@ A clean result does not prove that text does not wrap where it should not, or th
 | [summaries.md](summaries.md) | `summary-run`, `summary-options`, `summary-cached`, `summary-refuse`, `summary-list`, `ui-summary` |
 | [live-status.md](live-status.md) | `live-stream`, `live-cap`, `live-resync`, `live-ui`, `live-paused` |
 | [versions.md](versions.md) | `version-new`, `version-dedupe`, `version-replaces`, `version-list`, `version-delete`, `version-live`, `ui-versions` |
+| [caching.md](caching.md) | `cache-health`, `cache-answer`, `cache-answer-stream`, `cache-answer-skip`, `cache-embedding`, `cache-metrics`, `cache-unreachable` |
+| [quota-and-logs.md](quota-and-logs.md) | `log-request-id`, `log-request-line`, `log-trace`, `log-web-proxy`, `quota-health`, `quota-refuse`, `quota-cached`, `quota-insights` |
 | [web-ui.md](web-ui.md) | `ui-upload`, `ui-status`, `ui-insights`, `ui-chat`, `ui-chat-stream`, `ui-suggestions`, `ui-citation-open`, `ui-metrics`, `ui-delete`, `ui-find`, `ui-missing`, `ui-layout` |

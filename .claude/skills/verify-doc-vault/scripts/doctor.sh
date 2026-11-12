@@ -4,7 +4,7 @@ set -uo pipefail
 source "$(dirname "$0")/env.sh"
 ok=0
 say() { printf '%-6s %s\n' "$1" "$2"; if [ "$1" = FAIL ]; then ok=1; fi; }
-for s in db redis api worker beat; do
+for s in db redis cache api worker beat; do
   state=$(compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | awk -v s="$s" '$1==s{print $2}')
   [ "$state" = running ] && say OK "$s running" || say FAIL "$s is '${state:-absent}' in project $PROJECT"
 done
