@@ -99,7 +99,7 @@ def upload(ctx: Ctx, stream: BinaryIO, filename: str, *, replaces: DocumentId | 
     Bytes stored before return Existing, whatever the name or `replaces`. New bytes become the next version of
     `replaces`'s family, or else of the family of the newest document with the same name (ignoring case, after the
     name is sanitised), or else version 1 of a new family. An unknown `replaces` raises DOCUMENT_NOT_FOUND before
-    the upload is read.
+    the upload is read, and so does one deleted while the upload is stored, after its blob is deleted.
 
     Two concurrent uploads of the same bytes write the same blob path and race on the unique index; one gets Created,
     the other Existing. A crash after the blob write leaves an orphan file that the next identical upload reuses.
@@ -107,13 +107,10 @@ def upload(ctx: Ctx, stream: BinaryIO, filename: str, *, replaces: DocumentId | 
     deletes its blob.
     A lost enqueue (crash after commit) is caught by reconcile().
     """
-    family = None
     if replaces is not None:
         with ctx.db.connection() as conn:
-            row = conn.execute("SELECT family_id FROM documents WHERE id = %s", (replaces,)).fetchone()
-        if row is None:
-            raise not_found(replaces)
-        family = FamilyId(row["family_id"])
+            if conn.execute("SELECT 1 FROM documents WHERE id = %s", (replaces,)).fetchone() is None:
+                raise not_found(replaces)
     sha, size = ctx.blobs.put(stream, max_bytes=ctx.settings.max_upload_bytes)
     try:
         kind = pages.sniff_kind(ctx.blobs.path(sha))
@@ -123,7 +120,7 @@ def upload(ctx: Ctx, stream: BinaryIO, filename: str, *, replaces: DocumentId | 
     name = PurePath(filename.replace("\x00", "")).name[:255] or "upload"
     try:
         with ctx.db.connection() as conn:
-            doc_id, created = _insert_version(conn, sha, name, kind, size, family)
+            doc_id, created = _insert_version(conn, sha, name, kind, size, replaces)
     except VaultError:
         ctx.blobs.delete(sha)   # its last attempt found no document with these bytes
         raise
@@ -134,18 +131,20 @@ def upload(ctx: Ctx, stream: BinaryIO, filename: str, *, replaces: DocumentId | 
 
 
 # ON CONFLICT names no index, so it covers both unique keys: the bytes (sha256) and the version number
-# (documents_family_version).
+# (documents_family_version). `replaces` is read in the same statement as the version number, so a delete that
+# commits first leaves no family to join and inserts nothing.
 _INSERT_VERSION_SQL = """
 WITH new AS (SELECT gen_random_uuid() AS id),
 family AS (
-  SELECT %(family)s::uuid AS id WHERE %(family)s::uuid IS NOT NULL
+  SELECT family_id AS id FROM documents WHERE id = %(replaces)s::uuid
   UNION ALL
-  (SELECT family_id FROM documents WHERE %(family)s::uuid IS NULL AND lower(filename) = lower(%(filename)s)
+  (SELECT family_id FROM documents WHERE %(replaces)s::uuid IS NULL AND lower(filename) = lower(%(filename)s)
    ORDER BY created_at DESC, id DESC LIMIT 1))
 INSERT INTO documents (id, sha256, filename, kind, size_bytes, family_id, version)
 SELECT new.id, %(sha)s, %(filename)s, %(kind)s, %(size)s, coalesce(family.id, new.id),
        coalesce((SELECT max(d.version) FROM documents d WHERE d.family_id = family.id), 0) + 1
 FROM new LEFT JOIN family ON true
+WHERE %(replaces)s::uuid IS NULL OR family.id IS NOT NULL
 ON CONFLICT DO NOTHING RETURNING id
 """
 
@@ -153,16 +152,19 @@ VERSION_ATTEMPTS = 10
 
 
 def _insert_version(conn: Connection, sha: Sha256, filename: str, kind: DocKind, size: int,
-                    family: FamilyId | None) -> tuple[DocumentId, bool]:
-    """No row back means the bytes exist, or a concurrent upload committed this version number first. Each attempt is
-    its own statement and snapshot, so the next one sees that version and takes the number after it.
+                    replaces: DocumentId | None) -> tuple[DocumentId, bool]:
+    """No row back means the bytes exist, `replaces` was deleted, or a concurrent upload committed this version number
+    first. Each attempt is its own statement and snapshot, so the next one sees that version and takes the number
+    after it.
     """
-    params = {"sha": sha, "filename": filename, "kind": kind, "size": size, "family": family}
+    params = {"sha": sha, "filename": filename, "kind": kind, "size": size, "replaces": replaces}
     for _ in range(VERSION_ATTEMPTS):
         if created := conn.execute(_INSERT_VERSION_SQL, params).fetchone():
             return DocumentId(created["id"]), True
         if same := conn.execute("SELECT id FROM documents WHERE sha256 = %s", (sha,)).fetchone():
             return DocumentId(same["id"]), False
+        if replaces is not None and conn.execute("SELECT 1 FROM documents WHERE id = %s", (replaces,)).fetchone() is None:
+            raise not_found(replaces)
     raise VaultError(ErrorCode.VERSION_CONFLICT, "Too many versions of this document arrived at once. Upload it again.",
                      retryable=True)
 

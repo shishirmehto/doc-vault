@@ -14,6 +14,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from docvault import db as dbmod
 from docvault import documents
+from docvault.context import BlobStore
 from docvault.domain import Created, Document, DocumentId, ErrorCode, Existing, FamilyId, VaultError, Version
 
 from .conftest import scalar
@@ -59,6 +60,23 @@ def test_replaces_makes_a_file_with_another_name_the_next_version(ctx):
 def test_replaces_an_unknown_document_is_not_found_and_stores_nothing(ctx):
     with pytest.raises(VaultError) as raised:
         upload(ctx, "Policy period: 2026", "renewal.txt", replaces=DocumentId(uuid4()))
+
+    assert raised.value.failure.code is ErrorCode.DOCUMENT_NOT_FOUND
+    assert scalar(ctx.db, "SELECT count(*) FROM documents") == 0
+    assert [p for p in ctx.blobs.root.rglob("*") if p.is_file()] == []
+
+
+def test_replaces_a_document_deleted_while_the_upload_is_stored_is_not_found_and_stores_nothing(ctx):
+    target = created(upload(ctx, "Policy period: 2025", "policy-2025.txt"))
+
+    class DeletedDuringPut(BlobStore):
+        def put(self, stream, *, max_bytes):
+            documents.delete(ctx, target.id)
+            return super().put(stream, max_bytes=max_bytes)
+
+    racing = dataclasses.replace(ctx, blobs=DeletedDuringPut(ctx.blobs.root))
+    with pytest.raises(VaultError) as raised:
+        upload(racing, "Policy period: 2026", "renewal.txt", replaces=target.id)
 
     assert raised.value.failure.code is ErrorCode.DOCUMENT_NOT_FOUND
     assert scalar(ctx.db, "SELECT count(*) FROM documents") == 0
