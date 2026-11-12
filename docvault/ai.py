@@ -283,7 +283,7 @@ class AI:
 
         An interactive purpose fails retryable, with details naming the cap, the spend, the next midnight UTC and
         the seconds until it. Insights fail for good: a Celery retry seconds later would meet the same cap, and
-        the document page offers its own Retry. embed() never checks, so indexing and search keep working.
+        the document page offers its own Retry. embed() never checks, so uploads are still indexed.
         """
         limit = self.settings.daily_ai_budget_usd
         if limit is None:
