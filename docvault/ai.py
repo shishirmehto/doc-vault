@@ -1,10 +1,10 @@
 """The single door to every model provider, and the ledger behind it.
 
 Callers get one object, AI, with two methods: embed() and complete(). Behind
-them sit provider choice, batching, timeouts, retries with backoff,
-JSON-schema output, validation with one repair turn (none for a comparison
-or a summary), cost pricing, the daily spending cap on completions, and one
-llm_calls row per provider attempt (failed attempts included). No module can
+them sit provider choice, batching, the embedding cache, timeouts, retries with
+backoff, JSON-schema output, validation with one repair turn (none for a
+comparison or a summary), cost pricing, the daily spending cap on completions,
+and one llm_calls row per provider attempt (failed attempts included). No module can
 reach a provider without going through here, so token and cost accounting
 cannot be skipped.
 """
@@ -17,6 +17,7 @@ import itertools
 import json
 import math
 import re
+import struct
 import threading
 import time
 from collections import Counter
@@ -40,6 +41,7 @@ from openai.types import CompletionUsage
 from pydantic import BaseModel, ValidationError
 
 from . import logs, prompts
+from .cache import Cache
 from .config import ReasoningEffort, Settings
 from .db import Db
 from .domain import (
@@ -96,6 +98,7 @@ ONE_ATTEMPT = BACKGROUND | {Purpose.COMPARE, Purpose.SUMMARY}
 NO_REPAIR = frozenset({Purpose.COMPARE, Purpose.SUMMARY})
 
 SPEND_TTL_S = 10.0   # how stale today's spend may be when a budget check reads it
+EMBEDDING_TTL_S = 30 * 24 * 3600
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,6 +255,7 @@ class AI:
     settings: Settings
     sleep: Callable[[float], None] = time.sleep
     spend: DailySpend = field(default_factory=DailySpend)
+    cache: Cache = field(default_factory=Cache.off)
 
     @property
     def mode(self) -> Literal["live", "fake", "mixed"]:
@@ -299,19 +303,34 @@ class AI:
     def embed(self, texts: Sequence[str], *, purpose: Purpose, owner: Owner) -> list[Vector]:
         """Embed any number of texts. Output order matches input order.
 
-        Splits into batches of embed_batch_size and writes one ledger row per
-        attempt per batch. Raises VaultError(AI_UNAVAILABLE) when a batch fails
-        (after the gateway's retries for interactive purposes); the pipeline
-        turns a retryable one into a Celery retry.
+        Every text is looked up in the cache first. Only the misses go to the
+        provider, each distinct text once, in batches of embed_batch_size, with
+        one ledger row per attempt per batch; texts that are all hits write no
+        row. Each batch is cached as soon as it is paid for, so a later batch's
+        failure does not lose it. Raises VaultError(AI_UNAVAILABLE) when a batch
+        fails (after the gateway's retries for interactive purposes); the
+        pipeline turns a retryable one into a Celery retry.
         """
+        keys = {text: self._embedding_key(text) for text in texts}
+        cached = dict(zip(keys, self.cache.get_many(list(keys.values())), strict=True))
+        hits = sum(cached[text] is not None for text in texts)
+        self.cache.count("embedding", hits, len(texts) - hits)
+        vectors = {text: _unpacked(value) for text, value in cached.items() if value is not None}
+        misses = [text for text, value in cached.items() if value is None]
         billing = _Billing(purpose, owner, self.embedder.provider, self.embedder.model)
         size = self.settings.embed_batch_size
-        vectors: list[Vector] = []
-        for at in range(0, len(texts), size):
-            batch = texts[at:at + size]
-            vectors += self._call(lambda timeout_s, batch=batch: self.embedder.embed(batch, timeout_s=timeout_s),
-                                  billing)
-        return vectors
+        for at in range(0, len(misses), size):
+            batch = misses[at:at + size]
+            fresh = dict(zip(batch, self._call(
+                lambda timeout_s, batch=batch: self.embedder.embed(batch, timeout_s=timeout_s), billing), strict=True))
+            self.cache.set_many({keys[text]: _packed(vector) for text, vector in fresh.items()}, EMBEDDING_TTL_S)
+            vectors |= fresh
+        return [vectors[text] for text in texts]
+
+    def _embedding_key(self, text: str) -> str:
+        """The model and the dimension name the embedding space, so a changed one never reads another's vectors."""
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        return f"docvault:emb:{self.embedder.model}:{self.embedder.dimensions}:{digest}"
 
     def complete[T: BaseModel](self, prompt: Prompt, output: type[T], *, owner: Owner,
                                stream: TextSink | None = None) -> T:
@@ -426,7 +445,15 @@ def _elapsed_ms(started: float) -> int:
     return round((time.perf_counter() - started) * 1000)
 
 
-def build(settings: Settings, ledger: Db) -> AI:
+def _packed(vector: Vector) -> bytes:
+    return struct.pack(f"<{len(vector)}f", *vector)
+
+
+def _unpacked(value: bytes) -> Vector:
+    return list(struct.unpack(f"<{len(value) // 4}f", value))
+
+
+def build(settings: Settings, ledger: Db, cache: Cache | None = None) -> AI:
     """Pick backends from resolved settings: OpenAIChat | FakeChat and OpenAIEmbedder | FakeEmbedder."""
 
     @functools.cache
@@ -442,7 +469,7 @@ def build(settings: Settings, ledger: Db) -> AI:
     embedder: EmbedBackend = OpenAIEmbedder(
         client(), settings.openai_embed_model, settings.embed_dimensions,
     ) if settings.embed_provider == "openai" else FakeEmbedder(settings.embed_dimensions)
-    return AI(chat, embedder, ledger, settings)
+    return AI(chat, embedder, ledger, settings, cache=Cache.off() if cache is None else cache)
 
 
 # ------------------------------------------------------------------ backends

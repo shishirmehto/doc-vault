@@ -10,6 +10,13 @@ services:
   redis:
     image: redis:7-alpine
     healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 2s, retries: 30}
+  # The broker above keeps Redis's default of no eviction, because an evicted broker key is a lost task.
+  # This one holds only caches, so it may evict anything, and keeps nothing on disk.
+  cache:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", "",
+              "--appendonly", "no"]
+    healthcheck: {test: ["CMD", "redis-cli", "ping"], interval: 2s, retries: 30}
   api:
     build: .
     # Open live-status streams never end on their own, so a stop gives requests 5 s and then cancels them.
@@ -18,17 +25,21 @@ services:
     env_file: [{path: .env, required: false}]
     # The fake chat streams its answer a word every 25 ms, so the demo shows streaming without a key.
     # DAILY_AI_BUDGET_USD comes from the shell or .env; empty means no cap.
-    environment: {FAKE_STREAM_DELAY_MS: "25", LOG_FORMAT: json, DAILY_AI_BUDGET_USD: "${DAILY_AI_BUDGET_USD:-}"}
+    environment: {FAKE_STREAM_DELAY_MS: "25", LOG_FORMAT: json, DAILY_AI_BUDGET_USD: "${DAILY_AI_BUDGET_USD:-}",
+                  CACHE_URL: "redis://cache:6379/0"}
     ports: ["${API_PORT:-8000}:8000"]
     volumes: [blobs:/data/blobs]
-    depends_on: {db: {condition: service_healthy}, redis: {condition: service_healthy}}
+    # service_started only for the cache: the app runs without it.
+    depends_on: {db: {condition: service_healthy}, redis: {condition: service_healthy},
+                 cache: {condition: service_started}}
   worker:
     build: .
     command: celery -A docvault.tasks worker -Q ingest,llm,celery --concurrency 4 --loglevel info
     env_file: [{path: .env, required: false}]
-    environment: {LOG_FORMAT: json, DAILY_AI_BUDGET_USD: "${DAILY_AI_BUDGET_USD:-}"}
+    environment: {LOG_FORMAT: json, DAILY_AI_BUDGET_USD: "${DAILY_AI_BUDGET_USD:-}", CACHE_URL: "redis://cache:6379/0"}
     volumes: [blobs:/data/blobs]
-    depends_on: {db: {condition: service_healthy}, redis: {condition: service_healthy}}
+    depends_on: {db: {condition: service_healthy}, redis: {condition: service_healthy},
+                 cache: {condition: service_started}}
   beat:
     build: .
     command: celery -A docvault.tasks beat --loglevel info --schedule /tmp/celerybeat-schedule

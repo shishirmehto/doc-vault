@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import BinaryIO, Protocol
 
 from . import ai, db
+from .cache import Cache
 from .config import Settings
 from .domain import DocumentId, ErrorCode, Sha256, VaultError
 from .ratelimit import RateLimiter
@@ -86,10 +87,12 @@ class Ctx:
     blobs: BlobStore
     jobs: Jobs
     limiter: RateLimiter = field(default_factory=RateLimiter)
+    cache: Cache = field(default_factory=Cache.off)   # the same object as ai.cache
 
 
 def build_ctx(settings: Settings, jobs: Jobs) -> Ctx:
     """Called by the API lifespan and once per worker process."""
     db.migrate(settings.database_url)
     pool = db.open_pool(settings.database_url)
-    return Ctx(settings, pool, ai.build(settings, pool), BlobStore(settings.storage_dir), jobs)
+    cache = Cache.from_url(settings.cache_url)
+    return Ctx(settings, pool, ai.build(settings, pool, cache), BlobStore(settings.storage_dir), jobs, cache=cache)

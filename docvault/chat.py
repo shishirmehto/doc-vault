@@ -6,6 +6,8 @@ one function a reader can follow top to bottom:
   question -> condense with history -> retrieve (hybrid, scoped, per-document quota)
            -> gate -> answer prompt -> ground (verify quotes, resolve pages) -> suggest -> persist turn
 
+A chat's first question is looked up in the answer cache before any of that.
+
 Pure decisions (select_sources, gate, ground, suggestions) are separate functions with
 no I/O, so the grounding and refusal rules are unit-tested without a model
 or a database. A caller that shows progress (the stream route) passes sinks
@@ -14,7 +16,9 @@ to ask(); the pipeline is the same with or without them.
 
 from __future__ import annotations
 
+import hashlib
 import itertools
+import json
 import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
@@ -30,6 +34,7 @@ from psycopg.types.json import Jsonb
 from . import pages, prompts
 from .ai import TurnOwner, Vector
 from .answer_text import AnswerField, MarkerFilter
+from .cache import Cache
 from .context import Ctx
 from .db import Db, decode_cursor, encode_cursor
 from .domain import (
@@ -65,6 +70,9 @@ MAX_SUGGESTIONS = 3
 MAX_SUGGESTION_CHARS = 160
 UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify an answer against their text, "
                    "so I am not giving one.")
+ANSWER_CACHE_FORMAT = 1     # part of every answer key: a change to the cached value's shape bumps it
+ANSWER_TTL_S = 30 * 24 * 3600
+_CITATION_MARKER = re.compile(r"[ \t]*\[\d+\]")   # "[1]" in a grounded answer, and the spaces before it
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,11 +164,17 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
     Retry-After when retryable) and writes no turn; the failed calls stay in llm_calls. No
     connection or transaction is held across a model call.
 
+    A chat's first question is looked up in the answer cache under answer_key. A hit makes
+    no model call of any kind, sends no stage, sends its text once to on_text, and stores a
+    turn marked cached. Only answered turns go into the cache: a refusal asked again should
+    get a fresh attempt from a live model, and a cached refusal would pin it until the prompt
+    version changes. A follow-up depends on the turns before it, so it is never looked up or stored.
+
     Over today's AI spending cap it raises VaultError(QUOTA_EXCEEDED) (HTTP 429) before
-    any model call, even one the gate would have saved.
+    any model call, even one the gate would have saved. A cache hit still answers.
 
     The optional sinks report progress. on_stage hears each step as it starts, after the
-    chat, its scope and the spending cap are checked, so a missing chat, a deleted document
+    chat, its scope, the cache and the spending cap are checked, so a missing chat, a deleted document
     or a used-up cap raises before any of them. on_text gets provisional answer text, markers removed, while
     the answer model writes it, and on_reset means "discard the text sent so far"
     (a retry or repair follows). The returned turn replaces all provisional text.
@@ -173,6 +187,12 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
         _require_chat(conn, chat_id)
         documents = _scope(conn, chat_id)
         past = _turns(conn, chat_id, limit=ctx.settings.history_turns)
+        key = None if past else answer_key(ctx, _hashes(conn, documents), question)
+    if key is not None and (hit := _cached_answer(ctx.cache, key)) is not None:
+        answer, suggested = hit
+        if on_text is not None:
+            on_text(_CITATION_MARKER.sub("", answer.text))
+        return _store_turn(ctx, turn_id, chat_id, question, question, answer, suggested, started, cached=True)
     ctx.ai.check_budget(Purpose.ANSWER)
 
     if past:
@@ -198,12 +218,56 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
         with ctx.db.connection() as conn:
             suggested = fact_suggestions(_key_fact_labels(conn, documents), question)
 
+    turn = _store_turn(ctx, turn_id, chat_id, question, standalone, answer, suggested, started, cached=False)
+    if key is not None and isinstance(answer, Answered):
+        ctx.cache.set_many({key: json.dumps({
+            "outcome": answer.outcome, "text": answer.text, "citations": [_snapshot(c) for c in answer.citations],
+            "suggestions": list(suggested)}).encode()}, ANSWER_TTL_S)
+    return turn
+
+
+def answer_key(ctx: Ctx, documents: Mapping[DocumentId, bytes], question: str) -> str:
+    """The answer cache key for a first question over `documents` (id -> sha256): a hash of every input the
+    answer depends on, so a change to any of them is a miss. The question is compared without case or extra spaces."""
+    inputs = {
+        "format": ANSWER_CACHE_FORMAT,
+        "documents": sorted([str(doc_id), sha.hex()] for doc_id, sha in documents.items()),
+        "question": _same_question(question),
+        "prompt_version": prompts.ANSWER_VERSION,
+        "chat_model": ctx.ai.chat.models["main"],
+        "reasoning_effort": ctx.settings.openai_chat_reasoning_effort,
+        "embed_model": ctx.ai.embed_model,
+        "retrieval_k": ctx.settings.retrieval_k,
+        "retrieval_per_doc_min": ctx.settings.retrieval_per_doc_min,
+        "min_similarity": ctx.ai.min_similarity,
+    }
+    return "docvault:answer:" + hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
+
+
+def _hashes(conn: Connection, documents: Sequence[DocRef]) -> dict[DocumentId, bytes]:
+    rows = conn.execute("SELECT id, sha256 FROM documents WHERE id = ANY(%s)", ([doc.id for doc in documents],))
+    return {DocumentId(row["id"]): bytes(row["sha256"]) for row in rows}
+
+
+def _cached_answer(cache: Cache, key: str) -> tuple[Answered, tuple[str, ...]] | None:
+    """The stored answer and suggestions, counting one hit or one miss."""
+    [value] = cache.get_many([key])
+    cache.count("answer", hits=int(value is not None), misses=int(value is None))
+    if value is None:
+        return None
+    stored = json.loads(value)
+    first, *rest = (_citation(snapshot) for snapshot in stored["citations"])
+    return Answered(stored["text"], (first, *rest)), tuple(stored["suggestions"])
+
+
+def _store_turn(ctx: Ctx, turn_id: TurnId, chat_id: ChatId, question: str, standalone: str, answer: Answer,
+                suggested: Sequence[str], started: datetime, *, cached: bool) -> Turn:
     with ctx.db.connection() as conn:
         conn.execute(
             "INSERT INTO chat_turns (id, chat_id, question, standalone_query, outcome, answer, citations,"
-            " suggestions, started_at, finished_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            " suggestions, cached, started_at, finished_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (turn_id, chat_id, question, standalone, answer.outcome, answer.text,
-             Jsonb([_snapshot(citation) for citation in answer.citations]), Jsonb(list(suggested)), started,
+             Jsonb([_snapshot(citation) for citation in answer.citations]), Jsonb(list(suggested)), cached, started,
              datetime.now(UTC)))
         return _row_to_turn(conn.execute(_TURN_SQL + "WHERE t.id = %s GROUP BY t.id", (turn_id,)).fetchone())
 
@@ -252,7 +316,7 @@ def history(db: Db, chat_id: ChatId, *, limit: int = 50) -> list[Turn]:
 # count(cost_usd) skips NULLs: when it falls short of count(id), some call was unpriced and the total is unknown.
 _TURN_SQL = """
 SELECT t.id, t.chat_id, t.question, t.standalone_query, t.outcome, t.answer, t.citations, t.suggestions,
-       t.started_at, t.finished_at, count(l.id) AS calls, coalesce(sum(l.input_tokens), 0) AS input_tokens,
+       t.cached, t.started_at, t.finished_at, count(l.id) AS calls, coalesce(sum(l.input_tokens), 0) AS input_tokens,
        coalesce(sum(l.output_tokens), 0) AS output_tokens,
        CASE WHEN count(l.cost_usd) = count(l.id) THEN coalesce(sum(l.cost_usd), 0) END AS cost_usd
 FROM chat_turns t LEFT JOIN llm_calls l ON l.turn_id = t.id
@@ -323,7 +387,7 @@ def _row_to_turn(row: Mapping[str, Any]) -> Turn:
                 standalone_query=row["standalone_query"], answer=answer, started_at=row["started_at"],
                 finished_at=row["finished_at"],
                 usage=Usage(row["calls"], row["input_tokens"], row["output_tokens"], row["cost_usd"]),
-                suggestions=tuple(row["suggestions"]))
+                suggestions=tuple(row["suggestions"]), cached=row["cached"])
 
 
 def _key_fact_labels(conn: Connection, documents: Sequence[DocRef]) -> list[list[str]]:

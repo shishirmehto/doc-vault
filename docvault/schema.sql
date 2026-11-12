@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS chat_turns (
   answer           text NOT NULL,
   citations        jsonb NOT NULL DEFAULT '[]',
   suggestions      jsonb NOT NULL DEFAULT '[]',     -- follow-up questions offered under the answer, at most 3
+  cached           boolean NOT NULL DEFAULT false,  -- served from the answer cache, with no model call
   started_at       timestamptz NOT NULL,
   finished_at      timestamptz NOT NULL,
   CONSTRAINT chat_turns_outcome_values CHECK (outcome IN ('answered', 'no_evidence', 'model_declined', 'unverified')),
@@ -323,6 +324,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS documents_family_version ON documents (family_
 CREATE INDEX IF NOT EXISTS documents_filename ON documents (lower(filename));   -- an upload's family by its name
 
 ALTER TABLE chat_turns ADD COLUMN IF NOT EXISTS suggestions jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE chat_turns ADD COLUMN IF NOT EXISTS cached boolean NOT NULL DEFAULT false;
 
 -- Comparisons and summaries are billed to their own owners. Each guard tests for the newest owner and purpose,
 -- so a database at any earlier version upgrades in one step, and the constraints are replaced only while they lack

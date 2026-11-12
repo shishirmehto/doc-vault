@@ -15,6 +15,7 @@ from uuid import UUID
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
 from . import pages
+from .cache import CacheStats
 from .domain import (
     Answered,
     Cell,
@@ -73,6 +74,7 @@ class HealthOut(BaseModel):
     embed_model: str
     max_upload_bytes: int              # POST /documents refuses larger files with 413 file_too_large
     ai_budget: AIBudgetOut | None      # null when no daily cap is set, or while Postgres is unreachable
+    cache: Literal["ok", "unreachable", "off"]   # off: no CACHE_URL; unreachable still answers 200, uncached
 
 
 # ------------------------------------------------------------------ documents
@@ -238,6 +240,7 @@ class TurnOut(BaseModel):
     usage: UsageOut
     latency_ms: int
     created_at: datetime
+    cached: bool                       # the same first question on the same documents, answered with no model call
 
 
 class HistoryOut(BaseModel):
@@ -400,6 +403,17 @@ class ChatMetricsOut(BaseModel):
     latency_ms: PercentilesOut
 
 
+class CacheCountsOut(BaseModel):
+    hits: int
+    misses: int
+
+
+class CacheMetricsOut(BaseModel):
+    embedding: CacheCountsOut          # per text embedded
+    answer: CacheCountsOut             # per first question in a chat
+    counted_since: datetime | None     # the first count; the counters outlive the window and API restarts
+
+
 class ProcessingMetricsOut(BaseModel):
     window: str
     since: datetime
@@ -410,6 +424,7 @@ class ProcessingMetricsOut(BaseModel):
     steps: dict[Step, StepMetricsOut]
     ai: AIMetricsOut
     chat: ChatMetricsOut
+    cache: CacheMetricsOut | None      # null when the cache is off or unreachable
 
 
 # ------------------------------------------------------------------ mapping
@@ -506,7 +521,8 @@ def turn_out(turn: Turn) -> TurnOut:
                    for ref, c in enumerate(answer.citations, start=1)],
         suggestions=list(turn.suggestions),
         usage=UsageOut.model_validate(turn.usage, from_attributes=True),
-        latency_ms=round((turn.finished_at - turn.started_at).total_seconds() * 1000), created_at=turn.started_at)
+        latency_ms=round((turn.finished_at - turn.started_at).total_seconds() * 1000), created_at=turn.started_at,
+        cached=turn.cached)
 
 
 def comparison_out(comparison: Comparison) -> ComparisonOut:
@@ -549,5 +565,8 @@ def document_metrics_out(stats: DocumentStats) -> DocumentMetricsOut:
     return DocumentMetricsOut.model_validate(dataclasses.asdict(stats))
 
 
-def processing_metrics_out(window: str, stats: ProcessingStats) -> ProcessingMetricsOut:
-    return ProcessingMetricsOut.model_validate({"window": window, **dataclasses.asdict(stats)})
+def processing_metrics_out(window: str, stats: ProcessingStats, cache: CacheStats | None) -> ProcessingMetricsOut:
+    return ProcessingMetricsOut.model_validate({
+        "window": window, **dataclasses.asdict(stats),
+        "cache": None if cache is None else {"embedding": dataclasses.asdict(cache.embedding),
+                                             "answer": dataclasses.asdict(cache.answer), "counted_since": cache.since}})

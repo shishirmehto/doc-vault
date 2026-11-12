@@ -56,11 +56,13 @@ class Settings(BaseSettings):
     log_format: Literal["json", "text"] = "text"   # json: one object per line, for compose and log shippers
     # Model calls stop for the rest of the UTC day once the ledger's spend reaches it. Unset: no cap.
     daily_ai_budget_usd: Annotated[Decimal, Field(gt=0)] | None = None
+    cache_url: str | None = None   # a Redis for the embedding and answer caches (cache.py); unset: no cache
 
-    @field_validator("daily_ai_budget_usd", mode="before")
+    @field_validator("daily_ai_budget_usd", "cache_url", mode="before")
     @classmethod
     def _empty_is_unset(cls, value: object) -> object:
-        """Compose passes DAILY_AI_BUDGET_USD through from the shell, as an empty string when it is not set there."""
+        """Compose passes DAILY_AI_BUDGET_USD through from the shell, as an empty string when it is not set there,
+        and .env.example ships CACHE_URL empty."""
         return None if value == "" else value
 
 

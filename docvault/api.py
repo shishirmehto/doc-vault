@@ -385,6 +385,8 @@ STREAM_EVENTS = """\
 Asks like `POST /chats/{chat_id}/messages` and spends from the same rate-limit budget, but answers with
 server-sent events while the answer is written. A refusal found before the stream starts (404, 409, 422, 429,
 including `quota_exceeded` when today's AI spending cap is used up) is the usual status with the error envelope.
+A chat's first question that was answered before on the same documents comes from the answer cache, over the cap
+too: its events are one `delta` with the whole answer, markers removed, then `turn` with `cached: true`.
 After a 200, the events are:
 
 - `stage`, data `{"stage": "condensing" | "searching" | "answering"}`, as each step starts. `condensing` comes
@@ -534,13 +536,14 @@ WINDOW_UNITS = {"h": "hours", "d": "days"}
 @router.get("/metrics/processing", response_model=wire.ProcessingMetricsOut, responses=errors(ErrorCode.INVALID_REQUEST))
 def processing_metrics(ctx: Deps, window: Window = "24h") -> wire.ProcessingMetricsOut:
     span = timedelta(**{WINDOW_UNITS[window[-1]]: int(window[:-1])})
-    return wire.processing_metrics_out(window, metrics.processing_stats(ctx.db, span))
+    return wire.processing_metrics_out(window, metrics.processing_stats(ctx.db, span), ctx.cache.stats())
 
 
 @router.get("/health", response_model=wire.HealthOut,
             responses={503: {"model": wire.HealthOut, "description": "Postgres or Redis is unreachable"}})
 def health(ctx: Deps, response: Response) -> wire.HealthOut:
-    """503 when Postgres or Redis is unreachable, so compose and load balancers can gate on it."""
+    """503 when Postgres or Redis is unreachable, so compose and load balancers can gate on it. The cache never
+    makes it 503: the app answers without it."""
     db = _probe(lambda: _ping_db(ctx))
     broker = _probe(lambda: redis.Redis.from_url(ctx.settings.redis_url, socket_timeout=2).ping())
     if "unreachable" in (db, broker):
@@ -548,7 +551,7 @@ def health(ctx: Deps, response: Response) -> wire.HealthOut:
     # The spend is read from Postgres, so it is left out rather than failing the probe when Postgres is down.
     budget = ctx.ai.budget() if db == "ok" else None
     return wire.HealthOut(db=db, redis=broker, ai_mode=ctx.ai.mode, embed_model=ctx.ai.embed_model,
-                          max_upload_bytes=ctx.settings.max_upload_bytes,
+                          max_upload_bytes=ctx.settings.max_upload_bytes, cache=ctx.cache.probe(),
                           ai_budget=None if budget is None else wire.AIBudgetOut(limit_usd=float(budget[0]),
                                                                                  spent_today_usd=float(budget[1])))
 

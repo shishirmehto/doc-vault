@@ -176,7 +176,7 @@ def test_health_reports_the_upload_limit_and_503_when_the_broker_is_down(client,
     response = client.get("/health")
     assert (response.status_code, response.json()) == (503, {
         "db": "ok", "redis": "unreachable", "ai_mode": "fake", "embed_model": "fake-hash-1536",
-        "max_upload_bytes": 1024 * 1024, "ai_budget": None})
+        "max_upload_bytes": 1024 * 1024, "ai_budget": None, "cache": "off"})
 
 
 def test_a_nul_in_the_uploaded_filename_is_dropped(client):

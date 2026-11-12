@@ -141,6 +141,7 @@ def test_processing_metrics_over_a_day_and_a_week(client, seeded):
         },
         "chat": {"turns": 3, "outcomes": {"answered": 1, "no_evidence": 1, "model_declined": 1, "unverified": 0},
                  "latency_ms": {"p50": 90, "p95": 117}},             # 30, 90 and 120 ms
+        "cache": None,                                       # no CACHE_URL
     }
 
     week = client.get("/metrics/processing", params={"window": "7d"}).json()

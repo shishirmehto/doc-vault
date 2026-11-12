@@ -421,6 +421,7 @@ class Turn:
     finished_at: datetime
     usage: Usage                # aggregated from llm_calls WHERE turn_id = id
     suggestions: tuple[str, ...]        # at most 3 follow-up questions, each ending in "?"
+    cached: bool                # served from the answer cache: no model call, usage all zero
 
 
 # ---------------------------------------------------------------- comparison
