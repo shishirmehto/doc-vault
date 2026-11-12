@@ -2,7 +2,7 @@
 
 With `CACHE_URL` set, two caches in the `cache` Redis save model calls. Compose sets it on the `api` and `worker`, so a stack from `launch.sh` has both caches on. The embedding cache sends the provider only texts that no earlier call embedded with the same model. The answer cache returns a chat's first question, answered before on the same documents, as a new turn marked `cached` with no model call. Neither cache is a dependency: with the cache down, the app runs as before, without the savings.
 
-This recipe drives the API only.
+This recipe drives the API, then the UI's cached turn and Metrics.
 
 ## Sub-features
 
@@ -12,6 +12,8 @@ This recipe drives the API only.
 - `cache-answer-skip`: a follow-up, a refused first question and a first question on another document set each come back `cached: false`.
 - `cache-embedding`: a new version under the same filename, whose chunk text is unchanged, is an embedding hit and writes no `embed_chunks` row. The same text under another filename is a miss.
 - `cache-metrics`: `GET /metrics/processing` has a `cache` block with `embedding` and `answer` hits and misses and `counted_since`.
+- `ui-cached-turn`: in the UI, a cached first question's turn reads "Saved earlier, no new model call." where a model-written turn gives its calls, tokens and cost, both as it streams and when the chat is opened again.
+- `ui-caches`: Metrics has a Caches section: Embeddings and First answers with hits, misses and hit rate, under a line giving `counted_since` in the reader's time. With the cache stopped, it says every request goes to the model and still works.
 - `cache-unreachable`: with the `cache` service stopped, `/health` returns 200 with `"cache": "unreachable"`, the metrics `cache` block is null, uploads reach `ready`, and each process logs one `docvault.cache` warning a minute.
 
 ## How to get to it (user POV)
@@ -20,6 +22,7 @@ This recipe drives the API only.
 - `$S/call.sh POST /chats -H "$H" -d '{"document_ids": ["<id>"]}'`, then `$S/call.sh POST /chats/<chat id>/messages -H "$H" -d '{"question": "..."}'`.
 - `curl -sN $API/chats/<chat id>/messages/stream -H "$H" -d '{"question": "..."}'`, with `API=http://localhost:18000`.
 - The outage: `docker compose -p docvault-verify --project-directory . stop cache`, and `start cache` to end it.
+- In the browser at `http://localhost:13000`: "Ask about this document" on a document page, a chat from Recent chats, and the "Metrics" link in the header. Run `scripts/visible.js` on each at 1440x900, 1024x768 and 375x812.
 
 ## Driving it
 
@@ -49,11 +52,13 @@ $2,500 per occurrence
 - **Other documents.** Upload a second throwaway file with another tag, wait for it, then start a chat on both documents and ask `What is the property damage deductible?`. `cached: false`: the document set is part of the key.
 - **Embedding hit.** Upload a file with the same name, `cache-<tag>.txt`, whose bytes add two blank lines at the end. It becomes version 2. Once it is `ready`, `embedding.hits` has gone up by 1, and `$S/sql.sh "SELECT count(*) FROM llm_calls WHERE purpose = 'embed_chunks' AND document_id = '<v2 id>'"` reads 0.
 - **Embedding miss.** Upload the original text with one blank line added at the end, under another name, `cache-<tag>-copy.txt`. Its bytes are new, so the upload is not deduplicated, and its chunk text is the same as version 1's. `embedding.misses` goes up by 1, and the new document has one `embed_chunks` row, because a chunk is embedded with its filename in front.
-- **Outage.** Run `docker compose -p docvault-verify --project-directory . stop cache`. `GET /health` returns 200 with `"cache": "unreachable"`. `GET /metrics/processing?window=1h` has `cache: null`. Upload another throwaway file: it reaches `ready`. Ask a first question in a new chat: it answers with `cached: false`. Read the warnings with `docker compose -p docvault-verify --project-directory . logs --no-log-prefix api worker | grep docvault.cache`. Each process that touched the cache logged one line, "cache unreachable; skipping the cache for 60 s", and no more within that minute.
+- **In the UI.** On the document page, press "Ask about this document" and ask the cached question: the streamed turn reads "Saved earlier, no new model call." Open chat B from its link or from Recent chats: its first turn reads the same. On Metrics, the Caches table matches `GET /metrics/processing` and the Spending cap section shows the cap. visible.js returns `[]` on each.
+- **Outage.** Run `docker compose -p docvault-verify --project-directory . stop cache`. `GET /health` returns 200 with `"cache": "unreachable"`. `GET /metrics/processing?window=1h` has `cache: null`. Upload another throwaway file: it reaches `ready`. Ask a first question in a new chat: it answers with `cached: false`. Read the warnings one container at a time, `docker compose -p docvault-verify --project-directory . logs --no-log-prefix api | grep docvault.cache` and the same for `worker`. Each process that touched the cache logged one line, "cache unreachable; skipping the cache for 60 s", and no more within that minute.
 - **Back.** Run `docker compose -p docvault-verify --project-directory . start cache`. `GET /health` reads `"cache": "ok"` at once. Wait 61 s for each process's skip window to end. `GET /metrics/processing?window=1h` then has `cache` with every count 0 and `counted_since` null, because the cache keeps nothing on disk. The next ask sets `counted_since`, and no new warning is logged.
 
 ## Gotchas
 
+- Every ask also moves an embedding counter: a question embedded before is an embedding hit, a new one a miss. The steps above name only the answer counters.
 - `doctor.sh` checks that `cache` is running, so it fails while the outage step has the cache stopped. Run it before the outage or after **Back**.
 - After the cache is started again, a process that saw it fail still skips it until its 60 s window ends, while `/health` already reads `ok`. Assert hits only after waiting that out.
 - Each worker child is its own process with its own skip window. So an outage can log up to one warning a minute from the API and from each of the four children that touched the cache.

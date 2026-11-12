@@ -56,6 +56,7 @@ Preconditions:
 
 ## Gotchas
 
+- The answer cache is on in the isolated stack. If this stack already answered **Chat**'s first question on the same two documents (for example in `chat-with-citations.md`), the answer comes back as one piece of text with no "Writing the answer" status, and its usage line reads "Saved earlier, no new model call." Run this recipe first, or ask a first question the stack has not seen, for **Watch it stream**.
 - The Playwright MCP browser is headed and visible on the desktop. A stray click there changes the URL. Log input events with an init script (`pointerdown`, `click`, `keydown`, `popstate`) and redo any step with input you did not make.
 - A browser that once visited another app on the same port may hold a cached redirect (for example to `/sign-in`). Add a query string (`/?fresh=1`) to get past it.
 - The page pane slides in. Wait for the `mark` before you take the screenshot.

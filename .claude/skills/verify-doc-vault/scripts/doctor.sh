@@ -17,7 +17,8 @@ case "$h" in
   *'"db":"ok"'*'"redis":"ok"'*' 200') say OK "health $h";;
   *) say FAIL "health ${h:-no answer}";;
 esac
-compose logs worker 2>/dev/null | grep -q 'ready\.' && say OK "worker consuming" || say FAIL "worker never logged 'ready.'"
+# Not grep -q: it closes the pipe at the first match, and under pipefail the writer's SIGPIPE fails the check.
+compose logs worker 2>/dev/null | grep 'ready\.' >/dev/null && say OK "worker consuming" || say FAIL "worker never logged 'ready.'"
 img=$(docker image inspect -f '{{.Created}}' "$PROJECT-api" 2>/dev/null | cut -c1-19)
 src=$(TZ=UTC git -C "$REPO" log -1 --format=%cd --date=iso-strict-local -- docvault | cut -c1-19)
 dirty=$(git -C "$REPO" status --short -- docvault | wc -l | tr -d ' ')

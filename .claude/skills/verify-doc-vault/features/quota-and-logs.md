@@ -2,7 +2,7 @@
 
 Two features for the person who runs the service. Every request gets an id, which the API returns in `X-Request-ID` and writes on its log line, the worker's lines for the tasks the request queued, and the request's `llm_calls` rows. A daily AI spending cap, `DAILY_AI_BUDGET_USD`, refuses model calls for the rest of the UTC day once the ledger's spend reaches it, while uploads keep indexing.
 
-This recipe drives the API, the logs and the web proxy's header passing. It has no UI steps.
+This recipe drives the API, the logs, the web proxy's header passing and the UI over the cap.
 
 ## Sub-features
 
@@ -14,6 +14,8 @@ This recipe drives the API, the logs and the web proxy's header passing. It has 
 - `quota-refuse`: over the cap, an ask, a streamed ask (before any event), a comparison and a new summary each return 429 `quota_exceeded`, with `Retry-After` and the `details` `limit_usd`, `spent_today_usd`, `resets_at` and `retry_after_s`. None of them writes an `llm_calls` row.
 - `quota-cached`: over the cap, a first question answered before still comes back from the answer cache with `cached: true`. A first question not answered before gets 429.
 - `quota-insights`: over the cap, a new upload reaches `ready`, and its insights fail with `quota_exceeded` and `retryable: false`.
+- `ui-quota`: over the cap, the UI's Ask (a follow-up in an existing chat), Compare and "Rewrite the summary" each say "Today's AI spending cap of $0.000001 is used up. Asking, comparing and rewriting start again at <time> on <day>, when it resets.", in the reader's time zone, with no Try again button. The ask keeps "Edit the question". The page of the document whose insights hit the cap shows the API's sentence under "The summary failed", with "Retry anyway".
+- `ui-spending-cap`: Metrics has a Spending cap section: the cap per day (UTC), spent today, left and the reset. Over the cap, a red line above the table starts "The cap is used up."
 
 ## How to get to it (user POV)
 
@@ -21,6 +23,7 @@ This recipe drives the API, the logs and the web proxy's header passing. It has 
 - `docker compose -p docvault-verify --project-directory . logs --no-log-prefix api | grep <id>`, and the same for `worker`.
 - `$S/sql.sh "SELECT purpose, request_id FROM llm_calls WHERE request_id = '<id>' ORDER BY id"`.
 - `DAILY_AI_BUDGET_USD=0.000001 $S/launch.sh` launches a capped stack. `$S/call.sh GET /health` shows the cap.
+- In the browser at `http://localhost:13000`: the chat's question box, "Compare with..." on a document page, "Rewrite the summary" under a ready document's summary, and the "Metrics" link in the header. Run `scripts/visible.js` on each of these screens over the cap at 1440x900, 1024x768 and 375x812.
 
 ## The one write
 
@@ -43,7 +46,7 @@ Preconditions: no `docvault-verify` stack is up. Launch the capped stack with th
 
 ```bash
 DAILY_AI_BUDGET_USD=0.000001 $S/launch.sh
-R=/tmp/doc-vault-verify/$(cat /tmp/doc-vault-verify/current)
+R=${EVIDENCE_ROOT:-/tmp/doc-vault-verify}/$(cat "${EVIDENCE_ROOT:-/tmp/doc-vault-verify}/current")
 H='content-type: application/json'
 L() { docker compose -p docvault-verify --project-directory . logs --no-log-prefix "$@"; }
 ```
