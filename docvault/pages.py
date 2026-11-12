@@ -117,7 +117,25 @@ def _extract_pdf(path: Path, max_pages: int) -> ExtractedText:
                          "This PDF is password-protected. Remove the password and upload it again.")
     _check_page_count(len(reader.pages), max_pages)   # before extraction, which is the slow part
     return ExtractedText(PageBasis.PHYSICAL, tuple(
-        Page(number, _tidy(page.extract_text())) for number, page in enumerate(reader.pages, start=1)))
+        Page(number, _undouble(_tidy(page.extract_text()))) for number, page in enumerate(reader.pages, start=1)))
+
+
+_TOKEN = re.compile(r"\S{4,}")
+
+
+def _undouble(text: str) -> str:
+    """Read "fake bold" once. Some PDFs draw bold by printing each glyph twice, and pypdf then reads
+    "PPoolliiccyy" for "Policy". A token with every character doubled in place and at least 2 letters is halved; a
+    token with no letters, such as 1100, is never touched."""
+    return _TOKEN.sub(_undouble_token, text)
+
+
+def _undouble_token(match: re.Match[str]) -> str:
+    token = match.group()
+    once = token[::2]
+    if len(token) % 2 or token[1::2] != once or sum(ch.isalpha() for ch in token) < 2:
+        return token
+    return once
 
 
 def _tidy(text: str) -> str:

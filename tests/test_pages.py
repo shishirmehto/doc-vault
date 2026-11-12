@@ -165,13 +165,18 @@ def test_other_pdf_failures_are_vault_errors(tmp_path):
     assert codes == {"locked.pdf": "encrypted_pdf", "broken.pdf": "unreadable_file", POLICY: "too_many_pages"}
 
 
-def aes_pdf(tmp_path, user_password: str):
-    plain = tmp_path / "plain.pdf"
-    canvas = Canvas(str(plain), pagesize=letter)
-    canvas.drawString(72, 700, "Each Occurrence Limit: $1,000,000")
-    canvas.showPage()
-    canvas.drawString(72, 700, "Second page text.")
+def text_pdf(path, *pages_of_lines: list[str]):
+    canvas = Canvas(str(path), pagesize=letter)
+    for lines in pages_of_lines:
+        for row, line in enumerate(lines):
+            canvas.drawString(72, 700 - 20 * row, line)
+        canvas.showPage()
     canvas.save()
+    return path
+
+
+def aes_pdf(tmp_path, user_password: str):
+    plain = text_pdf(tmp_path / "plain.pdf", ["Each Occurrence Limit: $1,000,000"], ["Second page text."])
     writer = PdfWriter(clone_from=PdfReader(plain))
     writer.encrypt(user_password=user_password, owner_password="owner-secret", algorithm="AES-256")
     path = tmp_path / "aes.pdf"
@@ -188,6 +193,16 @@ def test_an_aes_pdf_that_needs_a_password_to_open_is_refused_as_encrypted(tmp_pa
     with pytest.raises(VaultError) as raised:
         pages.extract(DocKind.PDF, aes_pdf(tmp_path, user_password="reader-secret"), max_pages=10)
     assert raised.value.failure.code is ErrorCode.ENCRYPTED_PDF
+
+
+def test_fake_bold_in_a_pdf_is_read_once_and_amounts_keep_their_digits(tmp_path):
+    lines = ["PPoolliiccyy NNuummbbeerr:: SAMPLE-0001", "11sstt Named Insured", "Committee balloon 1100 $5500 Page 22 of 22"]
+    pdf = pages.extract(DocKind.PDF, text_pdf(tmp_path / "bold.pdf", lines), max_pages=10)
+    assert pdf.pages[0].text == "Policy Number: SAMPLE-0001\n1st Named Insured\nCommittee balloon 1100 $5500 Page 22 of 22"
+
+    txt = tmp_path / "bold.txt"
+    txt.write_text("\n".join(lines), encoding="utf-8")
+    assert pages.extract(DocKind.TXT, txt, max_pages=10).pages[0].text == "\n".join(lines)
 
 
 def test_kind_comes_from_the_bytes_not_the_name(tmp_path):
