@@ -78,7 +78,7 @@ The app uses neither LangChain nor LlamaIndex. Every citation must point at the 
 - `pages.chunk` cuts the text into chunks and records the page of every character, so a chunk that crosses a page break still knows where each word came from.
 - `chat.ground` keeps a quoted passage only when `pages.locate_quote` finds it in the source the model named, and cites the page where that passage starts.
 
-Retrieval is one SQL statement, `chat.EXACT_SQL`, that ranks the chat's chunks by pgvector distance and Postgres full-text rank. A framework would put its own chunking and retrieval in place of these steps. Kept in the repo, each step has its own tests and can be explained line by line. `docs/design.md` covers the other choices.
+Retrieval is one SQL statement, `chat.EXACT_SQL`, that ranks the chat's chunks by pgvector distance and Postgres full-text rank. A framework would put its own chunking and retrieval in place of these steps. Kept in the repo, each step is tested and can be explained line by line. `docs/design.md` covers the other choices.
 
 ## API
 
