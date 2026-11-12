@@ -7,7 +7,7 @@ import { useFetched } from "@/hooks/useFetched";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { threads } from "@/hooks/useThread";
 import { useCompareRun } from "@/hooks/useCompareRun";
-import { COMPARE_MIN, columns, type CompareRequest } from "@/lib/compare";
+import { COMPARE_MIN, columns, compareRequest, type CompareRequest } from "@/lib/compare";
 import { CHAT_MAX_DOCUMENTS } from "@/lib/find";
 import { COMPARE_BUSY, COMPARE_FOCUS_HINT, compareBlocked, documentNames, explain, formatWhen, listNames, notReadyNames } from "@/copy";
 import { Composer } from "./Composer";
@@ -85,7 +85,7 @@ export function NewChat({ docs, failed, deleted, onDismiss, onOpen, onFiles, onC
             }
             extra={comparable && (
               <button type="button" className="button secondary" disabled={busy || compareBlock !== null}
-                onClick={() => onCompare({ documents: picked.map((d) => ({ id: d.id, filename: d.filename })), focus: question || null })}>
+                onClick={() => onCompare(compareRequest(picked, question))}>
                 Compare
               </button>
             )}

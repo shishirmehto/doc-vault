@@ -8,7 +8,7 @@ import { useListedDoc } from "@/hooks/useListedDoc";
 import { useLongRun } from "@/hooks/useLongRun";
 import { compareRuns, useCompareRun } from "@/hooks/useCompareRun";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
-import { COMPARE_MAX, FOCUS_MAX, columns, withDoc, type CompareRequest, type Run } from "@/lib/compare";
+import { COMPARE_MAX, FOCUS_MAX, columns, compareRequest, withDoc, type CompareRequest, type Run } from "@/lib/compare";
 import {
   COMPARE_FULL, LONG_DOCUMENT, NO_COMPARISONS, NOTHING_TO_COMPARE, compareBlocked, compareFailed, comparedNames, comparing,
   differCount, documentNames, explain, focusLine, formatWhen, notReadyNames,
@@ -39,7 +39,7 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
   const picked = columns(chosen, docs ?? []);
   const blocked = compareBlocked(picked.length, focus);
   const submit = () => {
-    if (blocked === null) onCompare({ documents: picked.map((d) => ({ id: d.id, filename: d.filename })), focus: focus || null });
+    if (blocked === null) onCompare(compareRequest(picked, focus));
   };
   const change = (request: CompareRequest) => {
     setChosen(new Set(request.documents.map((d) => d.id)));

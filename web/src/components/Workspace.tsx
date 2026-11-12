@@ -69,6 +69,10 @@ export function Workspace() {
       }),
     [replace],
   );
+  const compareAndShow = (request: CompareRequest) => {
+    compare(request);
+    push({ kind: "compare", with: null });
+  };
 
   const [deleted, setDeleted] = useState<string | null>(null);
   const [screen, setScreen] = useState(selection.kind);
@@ -116,10 +120,7 @@ export function Workspace() {
         return (
           <NewChat docs={docs} failed={documents.error} deleted={deleted} onDismiss={() => setDeleted(null)}
             onFiles={(files) => uploads.add(files, uploadLimit)} onOpen={(chat) => push({ kind: "chat", chat, pane: null })}
-            onCompare={(request) => {
-              compare(request);
-              push({ kind: "compare", with: null });
-            }} />
+            onCompare={compareAndShow} />
         );
       case "missing":
         return <main className="centre">{{ doc: <MissingDocument />, chat: <MissingChat />, comparison: <MissingComparison /> }[selection.what]}</main>;
@@ -150,10 +151,7 @@ export function Workspace() {
             onRetry={retry}
             onAsk={askAbout}
             onDelete={remove}
-            onCompareVersions={(request) => {
-              compare(request);
-              push({ kind: "compare", with: null });
-            }}
+            onCompareVersions={compareAndShow}
             onUploadVersion={(files) => uploads.add(files, uploadLimit, selection.doc)}
           />
         );

@@ -3,11 +3,13 @@
 import type { Doc, Lifecycle } from "../api/domain.ts";
 
 /** A document is settled when polling again cannot change what the user sees. */
+export function settled(d: Doc): boolean {
+  const s = d.lifecycle.status;
+  return s === "failed" || (s === "ready" && d.insights !== "pending");
+}
+
 export function isSettled(docs: Iterable<Doc>): boolean {
-  for (const d of docs) {
-    const s = d.lifecycle.status;
-    if (s !== "failed" && !(s === "ready" && d.insights !== "pending")) return false;
-  }
+  for (const d of docs) if (!settled(d)) return false;
   return true;
 }
 

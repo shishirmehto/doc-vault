@@ -13,25 +13,29 @@ import type { SseMessage } from "./sse.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function uuid<T extends string>(raw: string): T | null {
+  return UUID.test(raw) ? (raw as T) : null;
+}
+
 /** The only constructor of a DocumentId. */
 export function asDocumentId(raw: string): DocumentId | null {
-  return UUID.test(raw) ? (raw as DocumentId) : null;
+  return uuid<DocumentId>(raw);
 }
 
 export function asChatId(raw: string): ChatId | null {
-  return UUID.test(raw) ? (raw as ChatId) : null;
+  return uuid<ChatId>(raw);
 }
 
 function asTurnId(raw: string): TurnId | null {
-  return UUID.test(raw) ? (raw as TurnId) : null;
+  return uuid<TurnId>(raw);
 }
 
 function asComparisonId(raw: string): ComparisonId | null {
-  return UUID.test(raw) ? (raw as ComparisonId) : null;
+  return uuid<ComparisonId>(raw);
 }
 
 function asSummaryId(raw: string): SummaryId | null {
-  return UUID.test(raw) ? (raw as SummaryId) : null;
+  return uuid<SummaryId>(raw);
 }
 
 function documentId(raw: string): DocumentId {
@@ -89,7 +93,7 @@ export function parseDoc(w: W.DocumentOut): Doc {
 }
 
 function versionOf(w: W.DocumentOut): DocVersion {
-  const family = UUID.test(w.family_id) ? (w.family_id as FamilyId) : null;
+  const family = uuid<FamilyId>(w.family_id);
   if (!Number.isInteger(w.version) || w.version < 1 || w.latest_version < w.version) {
     throw new TypeError(`not a version: ${w.version} of ${w.latest_version}`);
   }

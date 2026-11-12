@@ -41,6 +41,10 @@ export function step(run: Run, e: RunEvent): Run {
   }
 }
 
+export function compareRequest(docs: readonly Doc[], focus: string): CompareRequest {
+  return { documents: docs.map((d) => ({ id: d.id, filename: d.filename })), focus: focus || null };
+}
+
 export function withDoc(docs: readonly Doc[], doc: Doc | null): readonly Doc[] {
   return doc === null || docs.some((d) => d.id === doc.id) ? docs : [...docs, doc];
 }

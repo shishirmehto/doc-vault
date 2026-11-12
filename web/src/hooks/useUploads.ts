@@ -8,8 +8,7 @@ import { admit, nextToSend, type Upload } from "@/lib/uploads";
 /** The queue outlives renders, so it is a small store rather than component state. */
 class UploadQueue {
   private items: readonly Upload[] = [];
-  private files = new Map<string, File>();
-  private replaces = new Map<string, DocumentId>();
+  private pending = new Map<string, { file: File; replaces: DocumentId | null }>();
   private listeners = new Set<() => void>();
   private seq = 0;
   private readonly onDocument: (doc: Doc) => void;
@@ -28,8 +27,7 @@ class UploadQueue {
   add(files: Iterable<File>, limitBytes: number | null, replaces: DocumentId | null = null): void {
     for (const file of files) {
       const upload = admit(`u${++this.seq}`, file.name, file.size, limitBytes);
-      if (upload.phase === "waiting") this.files.set(upload.key, file);
-      if (upload.phase === "waiting" && replaces !== null) this.replaces.set(upload.key, replaces);
+      if (upload.phase === "waiting") this.pending.set(upload.key, { file, replaces });
       this.items = [...this.items, upload];
     }
     this.pump();
@@ -41,21 +39,19 @@ class UploadQueue {
 
   private set(key: string, next: Upload | null): void {
     this.items = next === null ? this.items.filter((u) => u.key !== key) : this.items.map((u) => (u.key === key ? next : u));
-    if (next === null || next.phase === "rejected" || next.phase === "duplicate") {
-      this.files.delete(key);
-      this.replaces.delete(key);
-    }
+    if (next === null || next.phase === "rejected" || next.phase === "duplicate") this.pending.delete(key);
     this.listeners.forEach((l) => l());
   }
 
   private pump(): void {
     for (const upload of nextToSend(this.items)) {
-      const file = this.files.get(upload.key);
-      if (!file) continue;
+      const sending = this.pending.get(upload.key);
+      if (!sending) continue;
+      const { file, replaces } = sending;
       const { key, filename } = upload;
       this.set(key, { key, filename, phase: "sending", sent: 0, total: file.size });
       void api
-        .upload(file, (sent, total) => this.set(key, { key, filename, phase: "sending", sent, total }), this.replaces.get(key) ?? null)
+        .upload(file, (sent, total) => this.set(key, { key, filename, phase: "sending", sent, total }), replaces)
         .then((result) => {
           if (!result.ok) this.set(key, { key, filename, phase: "rejected", error: result.error });
           else if (result.value.duplicate) this.set(key, { key, filename, phase: "duplicate", doc: result.value.doc });

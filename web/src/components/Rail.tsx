@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import type { ApiError, Doc, DocumentId, Failure } from "@/api/domain";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { FIND_AFTER, findDocs } from "@/lib/find";
-import { isSettled } from "@/lib/lifecycle";
+import { settled } from "@/lib/lifecycle";
 import { laterVersion } from "@/lib/versions";
 import type { Upload } from "@/lib/uploads";
 import { docMeta, explain, formatBytes, retrying, statusLine } from "@/copy";
@@ -45,7 +45,7 @@ export function Rail({ docs, complete, connection, uploads, selected, onFiles, o
     onOpen(id);
   };
   const toggle = useRef<HTMLButtonElement>(null);
-  const inFlight = open || docs === null ? [] : docs.filter((d) => !isSettled([d]));
+  const inFlight = open || docs === null ? [] : docs.filter((d) => !settled(d));
 
   return (
     <aside className="rail" aria-label="Documents" data-open={open} data-dragging={drop.dragging || undefined} {...drop.handlers}>
