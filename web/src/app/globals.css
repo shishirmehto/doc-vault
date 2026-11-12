@@ -277,6 +277,7 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .compare-row .find input { padding: 8px var(--s3); }
 .compare-row .button { padding: 10px 18px; }
 .run { display: grid; gap: var(--s2); }
+.run:focus { outline: none; }
 
 .start-refusal, .ask-failed { border-left: 3px solid var(--stamp); padding-left: var(--s3); display: grid; gap: var(--s2); overflow-wrap: anywhere; }
 .start-refusal { color: var(--stamp); }

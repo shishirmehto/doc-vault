@@ -94,11 +94,13 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
 function RunStatus({ run }: { run: Extract<Run, { phase: "running" }> }) {
   const long = useLongRun(run.startedAt);
   const box = useRef<HTMLDivElement>(null);
+  // The control that started the run is gone or disabled, so focus would fall to the page.
   useEffect(() => {
     box.current?.scrollIntoView({ block: "nearest" });
+    box.current?.focus({ preventScroll: true });
   }, []);
   return (
-    <div className="run" aria-busy="true" ref={box}>
+    <div className="run" aria-busy="true" ref={box} tabIndex={-1}>
       <div role="status">
         <p className="quiet">{comparing(documentNames(run.request.documents))}</p>
         {long && <p className="quiet">{LONG_DOCUMENT}</p>}
