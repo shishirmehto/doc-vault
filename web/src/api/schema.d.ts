@@ -176,8 +176,11 @@ export interface paths {
         /**
          * Ask Stream
          * @description Asks like `POST /chats/{chat_id}/messages` and spends from the same rate-limit budget, but answers with
-         *     server-sent events while the answer is written. A refusal found before the stream starts (404, 409, 422, 429)
-         *     is the usual status with the error envelope. After a 200, the events are:
+         *     server-sent events while the answer is written. A refusal found before the stream starts (404, 409, 422, 429,
+         *     including `quota_exceeded` when today's AI spending cap is used up) is the usual status with the error envelope.
+         *     A chat's first question that was answered before on the same documents comes from the answer cache, over the cap
+         *     too: its events are one `delta` with the whole answer, markers removed, then `turn` with `cached: true`.
+         *     After a 200, the events are:
          *
          *     - `stage`, data `{"stage": "condensing" | "searching" | "answering"}`, as each step starts. `condensing` comes
          *       only when the chat has earlier turns.
@@ -338,7 +341,8 @@ export interface paths {
         };
         /**
          * Health
-         * @description 503 when Postgres or Redis is unreachable, so compose and load balancers can gate on it.
+         * @description 503 when Postgres or Redis is unreachable, so compose and load balancers can gate on it. The cache never
+         *     makes it 503: the app answers without it.
          */
         get: operations["health_health_get"];
         put?: never;
@@ -353,6 +357,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AIBudgetOut */
+        AIBudgetOut: {
+            /** Limit Usd */
+            limit_usd: number;
+            /** Spent Today Usd */
+            spent_today_usd: number;
+        };
         /** AIMetricsOut */
         AIMetricsOut: {
             /** Calls */
@@ -398,6 +409,20 @@ export interface components {
         Body_upload_documents_post: {
             /** File */
             file: string;
+        };
+        /** CacheCountsOut */
+        CacheCountsOut: {
+            /** Hits */
+            hits: number;
+            /** Misses */
+            misses: number;
+        };
+        /** CacheMetricsOut */
+        CacheMetricsOut: {
+            embedding: components["schemas"]["CacheCountsOut"];
+            answer: components["schemas"]["CacheCountsOut"];
+            /** Counted Since */
+            counted_since: string | null;
         };
         /** CellOut */
         CellOut: {
@@ -692,6 +717,12 @@ export interface components {
             embed_model: string;
             /** Max Upload Bytes */
             max_upload_bytes: number;
+            ai_budget: components["schemas"]["AIBudgetOut"] | null;
+            /**
+             * Cache
+             * @enum {string}
+             */
+            cache: "ok" | "unreachable" | "off";
         };
         /** HistoryOut */
         HistoryOut: {
@@ -829,6 +860,7 @@ export interface components {
             };
             ai: components["schemas"]["AIMetricsOut"];
             chat: components["schemas"]["ChatMetricsOut"];
+            cache: components["schemas"]["CacheMetricsOut"] | null;
         };
         /** Progress */
         Progress: {
@@ -994,6 +1026,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Cached */
+            cached: boolean;
         };
         /**
          * TurnOutcome
@@ -1623,7 +1657,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
-            /** @description rate_limited */
+            /** @description rate_limited, quota_exceeded */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -1703,7 +1737,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
-            /** @description rate_limited */
+            /** @description rate_limited, quota_exceeded */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -1833,7 +1867,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
-            /** @description rate_limited */
+            /** @description rate_limited, quota_exceeded */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -2014,7 +2048,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
-            /** @description rate_limited */
+            /** @description rate_limited, quota_exceeded */
             429: {
                 headers: {
                     [name: string]: unknown;

@@ -3,10 +3,10 @@
 
 import type * as W from "./wire.ts";
 import type {
-  AnswerPart, ApiError, AskProgress, AskStage, CellCite, Chat, ChatId, Citation, CodeCount, CompareCell, ComparedDoc,
-  Comparison, ComparisonId, Doc, DocEvent, DocumentId, DocumentMetrics, DocVersion, FactCite, Failure, FamilyId, Health,
-  Insights, Lifecycle,
-  Outcome, Page, PaneRequest, ProcessingMetrics, RefusedDocument, Selection, Spread, Step, Summary, SummaryCite,
+  AnswerPart, ApiError, AskProgress, AskStage, CacheFigures, CellCite, Chat, ChatId, Citation, CodeCount, CompareCell,
+  ComparedDoc, Comparison, ComparisonId, Doc, DocEvent, DocumentId, DocumentMetrics, DocVersion, FactCite, Failure,
+  FamilyId, Health, Insights, Lifecycle, Outcome, Page, PaneRequest, ProcessingMetrics, Quota, RefusedDocument,
+  Selection, Spread, Step, Summary, SummaryCite,
   SummaryId, SummaryLength, SummaryList, SummaryTone, Turn, TurnCite, TurnId, TurnOutcome, Usage,
 } from "./domain.ts";
 import type { SseMessage } from "./sse.ts";
@@ -172,7 +172,9 @@ export function parseChatPage(w: W.ChatPage): Chat[] {
   return w.items.map(parseChat);
 }
 
+/** Throws on a `cached` that is not a boolean. */
 export function parseTurn(w: W.TurnOut): Turn {
+  if (typeof w.cached !== "boolean") throw new TypeError(`not a cached flag: ${JSON.stringify(w.cached)}`);
   const citations: Citation[] = w.citations.map((c) => ({
     ref: c.ref,
     filename: c.filename,
@@ -187,6 +189,7 @@ export function parseTurn(w: W.TurnOut): Turn {
     usage: usage(w.usage),
     latencyMs: w.latency_ms,
     suggestions: w.suggestions,
+    cached: w.cached,
   };
 }
 
@@ -197,9 +200,9 @@ export type AskEvent = AskProgress | { kind: "turn"; turn: Turn } | { kind: "err
 
 /**
  * The stream answered 200, so an `error` event is a refusal whose status is that 200; its code and
- * `retryable` say what failed. Throws on an event or data the contract does not name.
+ * `retryable` say what failed, and `requestId` is the 200's. Throws on an event or data the contract does not name.
  */
-export function parseAskEvent(m: SseMessage): AskEvent {
+export function parseAskEvent(m: SseMessage, requestId: string | null): AskEvent {
   const data: unknown = JSON.parse(m.data);
   switch (m.event) {
     case "stage": {
@@ -214,7 +217,7 @@ export function parseAskEvent(m: SseMessage): AskEvent {
     case "turn":
       return { kind: "turn", turn: parseTurn(data as W.TurnOut) };
     case "error":
-      return { kind: "error", error: parseError(200, data, null) };
+      return { kind: "error", error: parseError(200, data, null, requestId) };
     default:
       throw new TypeError(`unknown stream event: ${m.event}`);
   }
@@ -348,14 +351,19 @@ export function parseHealth(w: W.HealthOut): Health {
     aiMode: w.ai_mode,
     unreachable: (["db", "redis"] as const).filter((k) => w[k] !== "ok"),
     maxUploadBytes: w.max_upload_bytes,
+    aiBudget: w.ai_budget && { limitUsd: w.ai_budget.limit_usd, spentTodayUsd: w.ai_budget.spent_today_usd },
+    cache: w.cache,
   };
 }
 
-/** Any non-2xx. `body` is the parsed JSON, or null when the body was not JSON. */
-export function parseError(status: number, body: unknown, retryAfter: string | null): ApiError {
+/**
+ * Any non-2xx. `body` is the parsed JSON, or null when the body was not JSON. `requestId` is the response's
+ * X-Request-ID, or the one the request sent.
+ */
+export function parseError(status: number, body: unknown, retryAfter: string | null, requestId: string | null = null): ApiError {
   const envelope = isRecord(body) && isRecord(body.error) ? body.error : null;
   if (envelope === null || typeof envelope.code !== "string" || typeof envelope.message !== "string") {
-    return { kind: "broken", status };
+    return { kind: "broken", status, requestId };
   }
   const seconds = retryAfter === null ? NaN : Number(retryAfter);
   const details = isRecord(envelope.details) ? envelope.details : {};
@@ -367,7 +375,21 @@ export function parseError(status: number, body: unknown, retryAfter: string | n
     retryable: typeof envelope.retryable === "boolean" ? envelope.retryable : null,
     retryAfterS: Number.isFinite(seconds) ? seconds : null,
     documents: ["not_ready", "missing", "deleted"].flatMap((key) => refusedDocuments(details[key])),
+    quota: envelope.code === "quota_exceeded" ? quota(details) : null,
+    requestId,
   };
+}
+
+/** details of quota_exceeded: the cap and the spend in dollars, and the reset as ISO 8601. Null when malformed. */
+function quota(details: Record<string, unknown>): Quota | null {
+  const { limit_usd: limit, spent_today_usd: spent, resets_at: resets } = details;
+  const resetsAt = typeof resets === "string" ? new Date(resets) : null;
+  if (!isDollars(limit) || !isDollars(spent) || resetsAt === null || Number.isNaN(resetsAt.getTime())) return null;
+  return { limitUsd: limit, spentTodayUsd: spent, resetsAt };
+}
+
+function isDollars(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0;
 }
 
 /** details.not_ready and details.deleted list {id, filename, status}; details.missing lists bare ids. */
@@ -438,6 +460,17 @@ export function parseProcessingMetrics(w: W.ProcessingMetricsOut): ProcessingMet
       outcomes: Object.fromEntries(OUTCOMES.map((o) => [o, w.chat.outcomes[o] ?? 0])) as Record<TurnOutcome, number>,
       latency: spread(w.chat.latency_ms),
     },
+    cache: cacheFigures(w.cache),
+  };
+}
+
+function cacheFigures(w: W.ProcessingMetricsOut["cache"]): CacheFigures | null {
+  if (w === null) return null;
+  const counts = ({ hits, misses }: { hits: number; misses: number }) => ({ hits, misses });
+  return {
+    embedding: counts(w.embedding),
+    answer: counts(w.answer),
+    countedSince: w.counted_since === null ? null : new Date(w.counted_since),
   };
 }
 

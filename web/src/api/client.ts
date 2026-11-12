@@ -1,5 +1,6 @@
 // One function per endpoint. Browser only: every call goes to same-origin /api/*, which
-// next.config.ts rewrites to the API. Every call returns Result<T> and never throws.
+// next.config.ts rewrites to the API. Every call returns Result<T> and never throws. Each request sends a fresh
+// X-Request-ID, and a failure carries the id the API echoed, so a reader can quote it.
 
 import type {
   AskProgress, Chat, ChatId, Comparison, ComparisonId, Doc, DocumentId, DocumentMetrics, Health, Insights, MetricsWindow,
@@ -94,21 +95,21 @@ export const api = {
    * event are "refused". A body that ends without a turn or an error is "offline", like a lost response.
    */
   askStream: async (chat: ChatId, question: string, onProgress: (p: AskProgress) => void): Promise<Result<Turn>> => {
+    const id = newRequestId();
     let res: Response;
     try {
       res = await fetch(`${BASE}/chats/${chat}/messages/stream`, {
         method: "POST",
         cache: "no-store",
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        headers: { ...idHeader(id), "Content-Type": "application/json", Accept: "text/event-stream" },
         body: JSON.stringify({ question } satisfies W.AskIn),
       });
     } catch {
       return { ok: false, error: { kind: "offline" } };
     }
-    if (res.status !== 200 || res.body === null) {
-      return settle(res.status, await res.text(), res.headers.get("Retry-After"), P.parseTurn);
-    }
-    return readAskStream(res.body, onProgress);
+    const headers = heard((name) => res.headers.get(name), id);
+    if (res.status !== 200 || res.body === null) return settle(res.status, await res.text(), headers, P.parseTurn);
+    return readAskStream(res.body, onProgress, headers.requestId);
   },
 
   /** Oldest first. 200 is the API's maximum. */
@@ -124,13 +125,15 @@ export const api = {
     new Promise((resolve) => {
       const form = new FormData();
       form.append("file", file, file.name);
+      const id = newRequestId();
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${BASE}/documents${replaces ? `?replaces=${replaces}` : ""}`);
+      Object.entries(idHeader(id)).forEach(([name, value]) => xhr.setRequestHeader(name, value));
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress(e.loaded, e.total);
       };
       xhr.onload = () =>
-        resolve(settle(xhr.status, xhr.responseText, xhr.getResponseHeader("Retry-After"),
+        resolve(settle(xhr.status, xhr.responseText, heard((name) => xhr.getResponseHeader(name), id),
           (w: W.DocumentOut) => ({ doc: P.parseDoc(w), duplicate: xhr.status === 200 })));
       xhr.onerror = () => resolve({ ok: false, error: { kind: "offline" } });
       xhr.send(form);
@@ -143,24 +146,47 @@ async function call<WireT, T>(
   parse: (w: WireT) => T,
   { body, dataStatuses = [] }: { body?: object; dataStatuses?: readonly number[] } = {},
 ): Promise<Result<T>> {
+  const id = newRequestId();
   let res: Response;
   try {
     res = await fetch(BASE + path, {
       method,
       cache: "no-store",
-      ...(body && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+      headers: { ...idHeader(id), ...(body && { "Content-Type": "application/json" }) },
+      ...(body && { body: JSON.stringify(body) }),
     });
   } catch {
     return { ok: false, error: { kind: "offline" } };
   }
-  return settle(res.status, await res.text(), res.headers.get("Retry-After"), parse, dataStatuses);
+  return settle(res.status, await res.text(), heard((name) => res.headers.get(name), id), parse, dataStatuses);
+}
+
+/** A page served over plain HTTP from another host has no randomUUID. The API then makes the id, and echoes it. */
+function newRequestId(): string | null {
+  return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : null;
+}
+
+function idHeader(id: string | null): Record<string, string> {
+  return id === null ? {} : { "X-Request-ID": id };
+}
+
+/** What settle reads from a response's headers. */
+export type ReplyHeaders = { retryAfter: string | null; requestId: string | null };
+
+/** The id the API echoed, else the one the request sent. */
+function heard(header: (name: string) => string | null, sent: string | null): ReplyHeaders {
+  return { retryAfter: header("Retry-After"), requestId: header("X-Request-ID") ?? sent };
 }
 
 /**
  * Reads a streamed ask's body to its turn or error event. Bytes are decoded in stream mode, so a character
- * split across network chunks arrives whole.
+ * split across network chunks arrives whole. `requestId` is the 200's, which an error event carries.
  */
-export async function readAskStream(body: ReadableStream<Uint8Array>, onProgress: (p: AskProgress) => void): Promise<Result<Turn>> {
+export async function readAskStream(
+  body: ReadableStream<Uint8Array>,
+  onProgress: (p: AskProgress) => void,
+  requestId: string | null,
+): Promise<Result<Turn>> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   const sse = createSseReader();
@@ -175,7 +201,7 @@ export async function readAskStream(body: ReadableStream<Uint8Array>, onProgress
     for (const message of sse.push(decoder.decode(chunk.value, { stream: true }))) {
       let event: P.AskEvent;
       try {
-        event = P.parseAskEvent(message);
+        event = P.parseAskEvent(message, requestId);
       } catch (err) {
         void reader.cancel();
         return { ok: false, error: { kind: "unexpected", detail: err instanceof Error ? err.message : String(err) } };
@@ -193,7 +219,7 @@ export async function readAskStream(body: ReadableStream<Uint8Array>, onProgress
 export function settle<WireT, T>(
   status: number,
   text: string,
-  retryAfter: string | null,
+  headers: ReplyHeaders,
   parse: (w: WireT) => T,
   dataStatuses: readonly number[] = [],
 ): Result<T> {
@@ -211,5 +237,5 @@ export function settle<WireT, T>(
   } catch {
     // A proxy error page or an empty body: parseError reads null as "broken".
   }
-  return { ok: false, error: P.parseError(status, body, retryAfter) };
+  return { ok: false, error: P.parseError(status, body, headers.retryAfter, headers.requestId) };
 }

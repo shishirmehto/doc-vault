@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseComparison, parseDocumentPage } from "../api/parse.ts";
+import { parseComparison, parseDocumentPage, parseError } from "../api/parse.ts";
 import type { ApiError, Comparison, Doc, DocumentId } from "../api/domain.ts";
 import {
   cellAt, columns, columnVersion, idle, step, visibleRows, withDoc, worthRetrying, type CompareRequest, type Run,
@@ -19,7 +19,7 @@ const REQUEST: CompareRequest = {
 };
 const LIMITED: ApiError = {
   kind: "refused", status: 429, code: "rate_limited", message: "Too many requests. Try again in 2 seconds.",
-  retryable: true, retryAfterS: 2, documents: [],
+  retryable: true, retryAfterS: 2, documents: [], quota: null, requestId: null,
 };
 
 test("a run starts once, and a success forgets it", () => {
@@ -77,7 +77,7 @@ test("a cell's URL resolves to its field, its document and its page; an empty or
 
 test("Try again is offered unless the refusal is final; a document that is not ready becomes ready on its own", () => {
   const refused = (code: string, retryable: boolean | null): ApiError => ({
-    kind: "refused", status: 400, code, message: "", retryable, retryAfterS: null, documents: [],
+    kind: "refused", status: 400, code, message: "", retryable, retryAfterS: null, documents: [], quota: null, requestId: null,
   });
   assert.deepEqual(
     [
@@ -87,7 +87,7 @@ test("Try again is offered unless the refusal is final; a document that is not r
       worthRetrying(refused("invalid_request", false)),
       worthRetrying(refused("ai_unavailable", null)),
       worthRetrying({ kind: "offline" }),
-      worthRetrying({ kind: "broken", status: 502 }),
+      worthRetrying({ kind: "broken", status: 502, requestId: null }),
     ],
     [true, true, false, false, true, true, true],
   );
@@ -133,4 +133,21 @@ test("a column header marks any version after the first, and version 1 when anot
   assert.deepEqual(twins.map((d) => columnVersion(twins, d)), [1, 2]);
   assert.deepEqual(strangers.map((d) => columnVersion(strangers, d)), [null, 3]);
   assert.deepEqual(before.map((d) => columnVersion(before, d)), [null, null]);
+});
+
+test("a used-up spending cap is not worth retrying until it resets, and is from that instant on", () => {
+  const { status, headers, body } = JSON.parse(readFileSync(new URL("../api/fixtures/compare-429-quota-exceeded.json", import.meta.url), "utf8"));
+  const capped = parseError(status, body, headers["retry-after"], headers["x-request-id"]);
+  const malformed = parseError(status, { error: { ...body.error, details: {} } }, headers["retry-after"]);
+  const at = (iso: string) => new Date(iso);
+  assert.deepEqual(
+    [
+      worthRetrying(capped, at("2026-11-12T02:01:22Z")),
+      worthRetrying(capped, at("2026-11-12T23:59:59.999Z")),
+      worthRetrying(capped, at("2026-11-13T00:00:00Z")),
+      worthRetrying(capped, at("2026-11-13T00:00:01Z")),
+      worthRetrying(malformed, at("2026-11-12T02:01:22Z")),
+    ],
+    [false, false, true, true, true],
+  );
 });

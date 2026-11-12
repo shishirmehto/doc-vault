@@ -1,0 +1,37 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "id": "b04ce02d-0272-4291-b71f-fa385c114b2f",
+    "question": "what is the PROPERTY damage deductible?",
+    "interpreted_as": "what is the PROPERTY damage deductible?",
+    "status": "answered",
+    "reason": null,
+    "answer": "Property Damage Deductible: $2,500 per occurrence [1]",
+    "citations": [
+      {
+        "ref": 1,
+        "document_id": "056ba6c3-8e83-46dc-991c-6ef42eb52e56",
+        "filename": "phase-f-cache-2a8d27.txt",
+        "page": 1,
+        "page_label": "section 1",
+        "quote": "Property Damage Deductible: $2,500 per occurrence",
+        "chunk_id": "29953bde-ba73-4432-b3f6-2efa920c65c7",
+        "page_url": "/documents/056ba6c3-8e83-46dc-991c-6ef42eb52e56/pages/1"
+      }
+    ],
+    "suggestions": [
+      "What is the Named Insured?",
+      "What is the Policy Number?"
+    ],
+    "usage": {
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0
+    },
+    "latency_ms": 1,
+    "created_at": "2026-11-12T02:00:56.431053Z",
+    "cached": true
+  }
+}

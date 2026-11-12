@@ -100,7 +100,7 @@ test("a 409 names each document that is not ready with its status now, or the fi
   const docs = parseDocumentPage(page.body).docs;
   const error: ApiError = {
     kind: "refused", status: 409, code: "documents_not_ready", message: "2 of 3 documents are not ready.", retryable: false,
-    retryAfterS: null,
+    retryAfterS: null, quota: null, requestId: null,
     documents: [
       { id: "3e7c685f-ac8e-4c9f-8a86-f65e5f0a21a7" as DocumentId, filename: "live-scan.pdf" },
       { id: "41474e86-1b59-46ad-980b-c0355948cd08" as DocumentId, filename: "phase-c-large-86f623.txt" },
@@ -113,7 +113,7 @@ test("a 409 names each document that is not ready with its status now, or the fi
 test("a failed comparison says it was not made, why, and which documents are not ready", () => {
   const busy: ApiError = {
     kind: "refused", status: 409, code: "documents_not_ready", message: "1 of 2 documents are not ready.", retryable: false,
-    retryAfterS: null, documents: [],
+    retryAfterS: null, documents: [], quota: null, requestId: null,
   };
   assert.deepEqual(compareFailed(busy, ["big.txt (reading pages)"]), [
     "The comparison was not made. 1 of 2 documents are not ready.",

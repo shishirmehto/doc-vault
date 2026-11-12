@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "db": "ok",
+    "redis": "ok",
+    "ai_mode": "fake",
+    "embed_model": "fake-hash-1536",
+    "max_upload_bytes": 52428800,
+    "ai_budget": null,
+    "cache": "off"
+  }
+}

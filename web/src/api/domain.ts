@@ -86,8 +86,21 @@ export type Insights =
   | { status: "failed"; failure: Failure }
   | { status: "unavailable"; reason: string };
 
-/** maxUploadBytes: the API answers 413 for anything larger, so the browser refuses it before sending. */
-export type Health = { aiMode: "live" | "fake" | "mixed"; unreachable: readonly ("db" | "redis")[]; maxUploadBytes: number };
+/** Today's AI spend against the daily cap, in US dollars. The day is UTC's. */
+export type AiBudget = { limitUsd: number; spentTodayUsd: number };
+
+/** off: no CACHE_URL is set. unreachable: every request goes to the model, and still works. */
+export type CacheState = "ok" | "unreachable" | "off";
+
+export type Health = {
+  aiMode: "live" | "fake" | "mixed";
+  unreachable: readonly ("db" | "redis")[];
+  /** The API answers 413 for anything larger, so the browser refuses it before sending. */
+  maxUploadBytes: number;
+  /** Null when no daily cap is set, and while the database is unreachable. */
+  aiBudget: AiBudget | null;
+  cache: CacheState;
+};
 
 // ------------------------------------------------------------------ chat
 
@@ -121,6 +134,8 @@ export type Turn = {
   latencyMs: number;
   /** Up to three follow-up questions to offer under the turn, each ending in "?". */
   suggestions: readonly string[];
+  /** Stored for the same first question on the same documents and served with no model call; usage reads 0 calls. */
+  cached: boolean;
 };
 
 /** The step a streamed answer is on. "condensing" reads a follow-up against the turns before it. */
@@ -242,8 +257,15 @@ export type Selection =
   /** The URL names a document, chat or comparison by something that cannot be an id. */
   | { kind: "missing"; what: "doc" | "chat" | "comparison" };
 
+/** Today's AI spending cap is used up: the cap, the spend, and the next 00:00 UTC, when asking works again. */
+export type Quota = { limitUsd: number; spentTodayUsd: number; resetsAt: Date };
+
+/**
+ * `requestId` is the X-Request-ID the API echoed, else the one the request sent, so a reader can quote it and an
+ * operator can find its log lines. Null when neither is known.
+ */
 export type ApiError =
-  /** The backend's error envelope: 404, 409, 413, 415, 422, and 429 and 503 with Retry-After. */
+  /** The backend's error envelope: 404, 409, 413, 415, 422, 429 and 503 with Retry-After, and 500 internal_error. */
   | {
       kind: "refused";
       status: number;
@@ -253,9 +275,12 @@ export type ApiError =
       retryAfterS: number | null;
       /** The documents a refusal names: not ready (409), missing (404) or deleted from a chat (409). */
       documents: readonly RefusedDocument[];
+      /** Set only for quota_exceeded whose details parse. */
+      quota: Quota | null;
+      requestId: string | null;
     }
-  /** A non-2xx without the envelope: an unhandled 500, or the proxy failing to reach the API. */
-  | { kind: "broken"; status: number }
+  /** A non-2xx without the envelope: the proxy failing to reach the API, or an error page in front of it. */
+  | { kind: "broken"; status: number; requestId: string | null }
   /** A 2xx whose body did not match the contract. Regenerate schema.d.ts. */
   | { kind: "unexpected"; detail: string }
   /** No HTTP response at all. */
@@ -308,6 +333,11 @@ export type AiUsage = {
   unpricedCalls: number;
 };
 
+export type Counts = { hits: number; misses: number };
+
+/** Counted since `countedSince` (null before the first lookup), across windows and API restarts. */
+export type CacheFigures = { embedding: Counts; answer: Counts; countedSince: Date | null };
+
 export type ProcessingMetrics = {
   window: string;
   since: Date;
@@ -318,4 +348,6 @@ export type ProcessingMetrics = {
   steps: readonly StepMetrics[];
   ai: AiUsage & { rows: readonly (AiUsage & { purpose: Purpose; model: string; latency: Spread })[] };
   chat: { turns: number; outcomes: Record<TurnOutcome, number>; latency: Spread };
+  /** Embeddings are counted per text, answers per chat's first question. Null when the cache is off or unreachable. */
+  cache: CacheFigures | null;
 };

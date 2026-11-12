@@ -35,7 +35,8 @@
           "cost_usd": 0.0
         },
         "latency_ms": 13,
-        "created_at": "2026-11-11T11:48:56.478578Z"
+        "created_at": "2026-11-11T11:48:56.478578Z",
+        "cached": false
       },
       {
         "id": "47c45f97-4e6b-4d20-a22f-0ac133e121f4",
@@ -68,7 +69,8 @@
           "cost_usd": 0.0
         },
         "latency_ms": 6,
-        "created_at": "2026-11-11T11:48:56.497268Z"
+        "created_at": "2026-11-11T11:48:56.497268Z",
+        "cached": false
       },
       {
         "id": "3cdb5c92-61bb-482d-8bc1-0515c5f5708c",
@@ -90,7 +92,8 @@
           "cost_usd": 0.0
         },
         "latency_ms": 3,
-        "created_at": "2026-11-11T11:48:56.507890Z"
+        "created_at": "2026-11-11T11:48:56.507890Z",
+        "cached": false
       },
       {
         "id": "9192e75a-1038-4322-85d7-fd6311f1a41a",
@@ -112,7 +115,8 @@
           "cost_usd": 0.0
         },
         "latency_ms": 4,
-        "created_at": "2026-11-11T11:48:56.514079Z"
+        "created_at": "2026-11-11T11:48:56.514079Z",
+        "cached": false
       }
     ]
   }

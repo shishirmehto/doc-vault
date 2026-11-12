@@ -4,16 +4,20 @@ import { readFileSync } from "node:fs";
 import { settle } from "./client.ts";
 import {
   parseChat, parseChatPage, parseComparison, parseComparisonPage, parseDoc, parseDocumentMetrics, parseDocumentPage,
-  parseHealth, parseHistory, parseInsights, parsePage, parseProcessingMetrics, parseSelection, parseSummary,
+  parseError, parseHealth, parseHistory, parseInsights, parsePage, parseProcessingMetrics, parseSelection, parseSummary,
   parseSummaryPage, parseTurn, parseVersionList, selectionQuery,
 } from "./parse.ts";
-import type { ChatId, ComparisonId, DocumentId, Selection, SummaryId, TurnId } from "./domain.ts";
+import type { ApiError, ChatId, ComparisonId, DocumentId, Selection, SummaryId, TurnId } from "./domain.ts";
 
 /** A captured response: the API's real status, headers and JSON body. */
 function replay<T>(name: string, parse: (w: never) => T, dataStatuses: readonly number[] = []) {
   const { status, headers, body } = JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
-  return settle(status, JSON.stringify(body), headers["retry-after"] ?? null, parse as (w: unknown) => T, dataStatuses);
+  const heard = { retryAfter: headers["retry-after"] ?? null, requestId: headers["x-request-id"] ?? null };
+  return settle(status, JSON.stringify(body), heard, parse as (w: unknown) => T, dataStatuses);
 }
+
+/** A response with neither Retry-After nor X-Request-ID. */
+const NO_HEADERS = { retryAfter: null, requestId: null };
 
 const MEMO = "5958a67a-0fe6-4c0a-92fb-231c5fa72b87" as DocumentId;
 const POLICY = "6e67edc4-27c9-4d1b-9090-4b47a40b3c29" as DocumentId;
@@ -78,7 +82,7 @@ test("the versions list is the family oldest first; an unknown id or an unknown 
 
 test("a document whose version is past its family's latest, or whose family is no id, is not parsed", () => {
   const { body } = JSON.parse(readFileSync(new URL("./fixtures/upload-202-version-2.json", import.meta.url), "utf8"));
-  const parsed = (patch: object) => settle(202, JSON.stringify({ ...body, ...patch }), null, parseDoc);
+  const parsed = (patch: object) => settle(202, JSON.stringify({ ...body, ...patch }), NO_HEADERS, parseDoc);
   assert.deepEqual([parsed({ latest_version: 1 }), parsed({ family_id: "family" }), parsed({ version: 0 })].map((r) => r.ok), [
     false, false, false,
   ]);
@@ -118,7 +122,7 @@ test("upload answers: 202 is new, 200 is the same bytes seen before, 415 is the 
       code: "unsupported_type",
       message: "This looks like a binary file of an unknown type. Upload a PDF, a Word .docx file or a plain text file.",
       retryable: false,
-      retryAfterS: null,
+      retryAfterS: null, quota: null, requestId: null,
       documents: [],
     },
   });
@@ -191,7 +195,7 @@ test("a page keeps its label and text; a missing page is the backend's 404", () 
       code: "page_not_found",
       message: "This document has no page 99. It has 7.",
       retryable: false,
-      retryAfterS: null,
+      retryAfterS: null, quota: null, requestId: null,
       documents: [],
     },
   });
@@ -206,7 +210,7 @@ test("a 422 carries the envelope; a 503 and a 429 carry Retry-After", () => {
       code: "invalid_request",
       message: "The request is not valid. path.doc_id: Input should be a valid UUID, invalid character: found `n` at 0",
       retryable: false,
-      retryAfterS: null,
+      retryAfterS: null, quota: null, requestId: null,
       documents: [],
     },
   });
@@ -218,7 +222,7 @@ test("a 422 carries the envelope; a 503 and a 429 carry Retry-After", () => {
       code: "rate_limited",
       message: "Too many requests. Try again in 2 seconds.",
       retryable: true,
-      retryAfterS: 2,
+      retryAfterS: 2, quota: null, requestId: null,
       documents: [],
     },
   });
@@ -229,37 +233,143 @@ test("a 422 carries the envelope; a 503 and a 429 carry Retry-After", () => {
     code: "ai_unavailable",
     message: "The AI provider could not complete the request (timeout).",
     retryable: true,
-    retryAfterS: 5,
+    retryAfterS: 5, quota: null, requestId: null,
     documents: [],
   });
 });
 
+const CAP_MESSAGE = "Today's AI spending cap of $0.000001 is used up. It resets at midnight UTC.";
+const QUOTA = { limitUsd: 0.000001, spentTodayUsd: 0.01, resetsAt: new Date("2026-11-13T00:00:00Z") };
+
+test("a used-up spending cap is a 429 with the cap, the spend, the reset and the request id, from all four routes", () => {
+  const refusal = (name: string) => {
+    const r = replay(name, parseTurn);
+    return r.ok ? null : r.error;
+  };
+  const quotaError = (requestId: string) => ({
+    kind: "refused", status: 429, code: "quota_exceeded", message: CAP_MESSAGE, retryable: true, retryAfterS: 79118,
+    documents: [], quota: QUOTA, requestId,
+  });
+  assert.deepEqual(
+    ["ask-429-quota-exceeded", "ask-stream-429-quota-exceeded", "compare-429-quota-exceeded", "summary-429-quota-exceeded"].map(refusal),
+    [
+      quotaError("phase-f-ask-f00ef6"),
+      quotaError("0ed48ac56b3a4b04a2f27815b1eb4b28"),
+      quotaError("15bc27734df149428ab3525945fc8537"),
+      quotaError("59f57582d6d94b28b0429392156ee616"),
+    ],
+  );
+});
+
+test("quota details that are missing, negative or not a date leave the refusal without a quota; other codes never have one", () => {
+  const { body } = JSON.parse(readFileSync(new URL("./fixtures/ask-429-quota-exceeded.json", import.meta.url), "utf8"));
+  const withDetails = (details: object, code = "quota_exceeded") =>
+    parseError(429, { error: { ...body.error, code, details: { ...body.error.details, ...details } } }, "79118");
+  const quotaOf = (e: ApiError) => (e.kind === "refused" ? e.quota : "not refused");
+  assert.deepEqual(
+    [
+      withDetails({}),
+      withDetails({ limit_usd: "5" }),
+      withDetails({ spent_today_usd: -1 }),
+      withDetails({ resets_at: "midnight" }),
+      withDetails({ resets_at: null }),
+      withDetails({}, "rate_limited"),
+      parseError(429, { error: { ...body.error, details: undefined } }, null),
+    ].map(quotaOf),
+    [QUOTA, null, null, null, null, null, null],
+  );
+});
+
+test("an unhandled error is a 500 with the envelope and the id the API logged it under", () => {
+  assert.deepEqual(replay("constructed/error-500-internal", parseDoc), {
+    ok: false,
+    error: {
+      kind: "refused", status: 500, code: "internal_error", message: "The request failed unexpectedly.", retryable: true,
+      retryAfterS: null, documents: [], quota: null, requestId: "phase-f-500-probe",
+    },
+  });
+});
+
+test("the id a response echoes is the error's; a page in front of the API keeps the id the request sent", () => {
+  assert.deepEqual(
+    [
+      settle(503, "<html>Bad gateway</html>", { retryAfter: null, requestId: "sent-1" }, parseDoc),
+      settle(404, JSON.stringify({ error: { code: "document_not_found", message: "Gone." } }), { retryAfter: null, requestId: "echoed-2" }, parseDoc),
+    ],
+    [
+      { ok: false, error: { kind: "broken", status: 503, requestId: "sent-1" } },
+      {
+        ok: false,
+        error: {
+          kind: "refused", status: 404, code: "document_not_found", message: "Gone.", retryable: null, retryAfterS: null,
+          documents: [], quota: null, requestId: "echoed-2",
+        },
+      },
+    ],
+  );
+});
+
+test("insights that hit the cap fail for good with the backend's sentence, on a document that is otherwise ready", () => {
+  const doc = replay("document-txt-ready-insights-quota", parseDoc);
+  assert.deepEqual(doc.ok && [doc.value.lifecycle, doc.value.insights], [{ status: "ready" }, "failed"]);
+  assert.deepEqual(replay("insights-failed-quota-exceeded", (w: never) => parseInsights(w, MEMO)), {
+    ok: true,
+    value: {
+      status: "failed",
+      failure: {
+        code: "quota_exceeded",
+        message: "Insights were not written because today's AI spending cap of $0.000001 is used up. Retry after midnight UTC.",
+        retryable: false,
+      },
+    },
+  });
+});
+
 test("a 2xx body in the wrong shape is unexpected, a proxy error page is broken", () => {
-  assert.deepEqual(settle(200, '{"status":"archived"}', null, parseDoc), {
+  assert.deepEqual(settle(200, '{"status":"archived"}', NO_HEADERS, parseDoc), {
     ok: false,
     error: { kind: "unexpected", detail: "not a document id: undefined" },
   });
-  assert.deepEqual(settle(500, "Internal Server Error", null, parseDoc), { ok: false, error: { kind: "broken", status: 500 } });
+  assert.deepEqual(settle(500, "Internal Server Error", NO_HEADERS, parseDoc), { ok: false, error: { kind: "broken", status: 500, requestId: null } });
 });
 
-test("health names the fake provider, the upload limit and anything unreachable", () => {
+test("health names the fake provider, the upload limit, anything unreachable, no cap and the cache", () => {
   assert.deepEqual(replay("health", parseHealth, [503]), {
     ok: true,
-    value: { aiMode: "fake", unreachable: [], maxUploadBytes: 52428800 },
+    value: { aiMode: "fake", unreachable: [], maxUploadBytes: 52428800, aiBudget: null, cache: "ok" },
   });
   assert.deepEqual(
-    parseHealth({ db: "unreachable", redis: "ok", ai_mode: "live", embed_model: "text-embedding-3-small", max_upload_bytes: 1024 }),
-    { aiMode: "live", unreachable: ["db"], maxUploadBytes: 1024 },
+    parseHealth({
+      db: "unreachable", redis: "ok", ai_mode: "live", embed_model: "text-embedding-3-small", max_upload_bytes: 1024,
+      ai_budget: null, cache: "off",
+    }),
+    { aiMode: "live", unreachable: ["db"], maxUploadBytes: 1024, aiBudget: null, cache: "off" },
+  );
+});
+
+test("health with a cap gives the cap and today's spend, under it and over it; the cache may be off or unreachable", () => {
+  const read = (name: string) => {
+    const r = replay(name, parseHealth, [503]);
+    return r.ok ? [r.value.aiBudget, r.value.cache] : r.error;
+  };
+  assert.deepEqual(
+    ["health-ai-budget-under", "health-ai-budget-over", "constructed/health-cache-off", "constructed/health-cache-unreachable"].map(read),
+    [
+      [{ limitUsd: 0.000001, spentTodayUsd: 0 }, "ok"],
+      [{ limitUsd: 0.000001, spentTodayUsd: 0.01 }, "ok"],
+      [null, "off"],
+      [null, "unreachable"],
+    ],
   );
 });
 
 test("a delete answers 204 with no body; a 404 names the document the vault no longer has", () => {
-  assert.deepEqual(settle(204, "", null, () => null), { ok: true, value: null });
+  assert.deepEqual(settle(204, "", NO_HEADERS, () => null), { ok: true, value: null });
   const gone = replay("delete-404-not-found", () => null);
   assert.deepEqual(gone.ok ? null : gone.error, {
     kind: "refused", status: 404, code: "document_not_found",
     message: "No document has the id 00000000-0000-4000-8000-000000000000.",
-    retryable: false, retryAfterS: null, documents: [],
+    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
   });
 });
 
@@ -328,7 +438,7 @@ test("a chat read back marks a document deleted since it started, and asking it 
     code: "documents_deleted",
     message: "1 of 2 documents in this chat were deleted. Start a new chat with the documents you want to ask about.",
     retryable: false,
-    retryAfterS: null,
+    retryAfterS: null, quota: null, requestId: null,
     documents: [{ id: "8b3527b2-b23c-4561-b6f1-f8d8351b1cad", filename: "u5-check2.txt" }],
   });
 });
@@ -357,7 +467,7 @@ test("a 409 names the documents that are not ready", () => {
       code: "documents_not_ready",
       message: "1 of 2 documents are not ready.",
       retryable: false,
-      retryAfterS: null,
+      retryAfterS: null, quota: null, requestId: null,
       documents: [{ id: TEXTLESS, filename: "ui-textless.pdf" }],
     },
   });
@@ -396,8 +506,38 @@ test("a cited answer becomes text and a citation pointing at its page and quote"
       usage: { calls: 2, inputTokens: 1994, outputTokens: 23, costUsd: 0 },
       latencyMs: 13,
       suggestions: ["What is the Policy Number?", "What is the Named Insured?", "What is the Mailing Address?"],
+      cached: false,
     },
   });
+});
+
+const CACHE_DOC = "056ba6c3-8e83-46dc-991c-6ef42eb52e56" as DocumentId;
+
+test("a first question answered before comes back cached, with no model call, and history keeps the mark", () => {
+  const cached = (r: ReturnType<typeof parseTurn>) => [r.cached, r.usage, r.latencyMs, r.outcome.kind === "answered" && r.outcome.citations[0]?.source];
+  const turn = replay("turn-answered-cached", parseTurn);
+  const history = replay("history-cached-turn", parseHistory);
+  const expected = [
+    true,
+    { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 },
+    1,
+    { documentId: CACHE_DOC, page: 1, quote: "Property Damage Deductible: $2,500 per occurrence" },
+  ];
+  assert.deepEqual(turn.ok && cached(turn.value), expected);
+  assert.deepEqual(history.ok && history.value.map(cached), [expected]);
+});
+
+test("a turn whose cached flag is missing or not a boolean is a body in the wrong shape", () => {
+  const { body } = JSON.parse(readFileSync(new URL("./fixtures/turn-answered-cached.json", import.meta.url), "utf8"));
+  const older = { ...body };
+  delete older.cached;
+  assert.deepEqual(
+    [settle(200, JSON.stringify(older), NO_HEADERS, parseTurn), settle(200, JSON.stringify({ ...body, cached: "yes" }), NO_HEADERS, parseTurn)],
+    [
+      { ok: false, error: { kind: "unexpected", detail: "not a cached flag: undefined" } },
+      { ok: false, error: { kind: "unexpected", detail: 'not a cached flag: "yes"' } },
+    ],
+  );
 });
 
 test("a follow-up keeps the standalone question it was read as", () => {
@@ -502,34 +642,50 @@ test("processing metrics keep the step order, the AI rows and the chat outcomes"
   assert.ok(r.ok);
   const m = r.value;
   assert.deepEqual([m.window, m.uploaded, m.indexed, m.timeToReady, m.queueWait], [
-    "24h", 11, 10, { p50Ms: 438, p95Ms: 617 }, { p50Ms: 114, p95Ms: 592 },
+    "24h", 9, 76, { p50Ms: 360, p95Ms: 568 }, { p50Ms: 92, p95Ms: 576 },
   ]);
   assert.deepEqual(m.steps[0], {
     step: "parse",
-    runs: 13,
-    failed: 3,
+    runs: 89,
+    failed: 13,
     retries: 0,
-    duration: { p50Ms: 20, p95Ms: 174 },
-    failures: [{ code: "no_extractable_text", count: 3 }],
+    duration: { p50Ms: 8, p95Ms: 1077 },
+    failures: [{ code: "too_many_pages", count: 8 }, { code: "no_extractable_text", count: 5 }],
   });
   assert.deepEqual(m.steps.map((s) => s.step), ["parse", "embed", "analyze"]);
-  assert.deepEqual([m.ai.calls, m.ai.costUsd, m.ai.unpricedCalls, m.ai.rows.length], [130, 0, 0, 6]);
+  assert.deepEqual([m.ai.calls, m.ai.costUsd, m.ai.unpricedCalls, m.ai.rows.length], [771, 0, 0, 7]);
   assert.deepEqual(m.ai.rows[0], {
     purpose: "answer",
     model: "fake-chat",
-    calls: 34,
+    calls: 90,
     errors: 0,
-    inputTokens: 74451,
-    outputTokens: 500,
+    inputTokens: 186023,
+    outputTokens: 2158,
     costUsd: 0,
     unpricedCalls: 0,
-    latency: { p50Ms: 3, p95Ms: 8 },
+    latency: { p50Ms: 500, p95Ms: 774 },
   });
   assert.deepEqual(m.chat, {
-    turns: 43,
-    outcomes: { answered: 28, no_evidence: 9, model_declined: 6, unverified: 0 },
-    latency: { p50Ms: 12, p95Ms: 155 },
+    turns: 103,
+    outcomes: { answered: 85, no_evidence: 11, model_declined: 7, unverified: 0 },
+    latency: { p50Ms: 133, p95Ms: 839 },
   });
+});
+
+test("processing metrics carry the cache's hits and misses since they were first counted, or null with no cache", () => {
+  const cache = (name: string) => {
+    const r = replay(name, parseProcessingMetrics);
+    return r.ok ? r.value.cache : r.error;
+  };
+  assert.deepEqual(
+    ["metrics-processing-24h", "metrics-processing-24h-capped", "constructed/metrics-processing-24h-cache-off", "metrics-processing-1h"].map(cache),
+    [
+      { embedding: { hits: 0, misses: 2 }, answer: { hits: 2, misses: 1 }, countedSince: new Date("2026-11-12T02:00:55.418Z") },
+      { embedding: { hits: 0, misses: 4 }, answer: { hits: 0, misses: 1 }, countedSince: new Date("2026-11-12T02:01:09.109Z") },
+      null,
+      null,
+    ],
+  );
 });
 
 test("an empty window has no samples, so every spread is null", () => {
@@ -632,7 +788,7 @@ test("a document that does not state a field has an empty cell in its column", (
 test("a compared document carries its version, or null when the comparison predates versions", () => {
   const { body } = JSON.parse(readFileSync(new URL("./fixtures/compare-201-policy-quote.json", import.meta.url), "utf8"));
   const versioned = { ...body, documents: body.documents.map((d: object, i: number) => ({ ...d, version: i + 1 })) };
-  const r = settle(201, JSON.stringify(versioned), null, parseComparison);
+  const r = settle(201, JSON.stringify(versioned), NO_HEADERS, parseComparison);
   const stored = replay("compare-201-policy-quote", parseComparison);
   assert.deepEqual(r.ok && r.value.documents.map((d) => d.version), [1, 2]);
   assert.deepEqual(stored.ok && stored.value.documents.map((d) => d.version), [null, null]);
@@ -684,19 +840,19 @@ test("comparing refuses one document, a document that is not ready, and an unkno
   assert.deepEqual(one.ok ? null : one.error, {
     kind: "refused", status: 422, code: "invalid_request",
     message: "The request is not valid. body.document_ids: List should have at least 2 items after validation, not 1",
-    retryable: false, retryAfterS: null, documents: [],
+    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
   });
   const busy = replay("compare-409-not-ready", parseComparison);
   assert.deepEqual(busy.ok ? null : busy.error, {
     kind: "refused", status: 409, code: "documents_not_ready", message: "1 of 2 documents are not ready.",
-    retryable: false, retryAfterS: null,
+    retryable: false, retryAfterS: null, quota: null, requestId: null,
     documents: [{ id: "41474e86-1b59-46ad-980b-c0355948cd08", filename: "phase-c-large-86f623.txt" }],
   });
   const missing = replay("comparison-404-not-found", parseComparison);
   assert.deepEqual(missing.ok ? null : missing.error, {
     kind: "refused", status: 404, code: "comparison_not_found",
     message: "No comparison has the id 00000000-0000-4000-8000-000000000000.",
-    retryable: false, retryAfterS: null, documents: [],
+    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
   });
 });
 
@@ -705,7 +861,7 @@ test("a row that does not line up with the columns is a body in the wrong shape"
   const broken = (edit: (row: { cells: Record<string, unknown>[] }) => void) => {
     const body = structuredClone(captured);
     edit(body.rows[9]);
-    return settle(201, JSON.stringify(body), null, parseComparison);
+    return settle(201, JSON.stringify(body), NO_HEADERS, parseComparison);
   };
   assert.equal(broken(() => {}).ok, true);
   assert.deepEqual(broken((row) => row.cells.pop()), {
@@ -807,7 +963,7 @@ test("a document's summaries come newest first, and the list is complete when th
   );
   assert.equal(r.value.complete, true);
   const captured = JSON.parse(readFileSync(new URL("./fixtures/summaries-page.json", import.meta.url), "utf8")).body;
-  const more = settle(200, JSON.stringify({ ...captured, next_cursor: "abc" }), null, parseSummaryPage);
+  const more = settle(200, JSON.stringify({ ...captured, next_cursor: "abc" }), NO_HEADERS, parseSummaryPage);
   assert.deepEqual(more.ok ? more.value.complete : more.error, false);
 });
 
@@ -815,20 +971,20 @@ test("summarising refuses a document that is not ready and an unknown length; li
   const busy = replay("summary-409-not-ready", parseSummary);
   assert.deepEqual(busy.ok ? null : busy.error, {
     kind: "refused", status: 409, code: "documents_not_ready", message: "1 of 1 documents are not ready.",
-    retryable: false, retryAfterS: null,
+    retryable: false, retryAfterS: null, quota: null, requestId: null,
     documents: [{ id: "2da79ec2-177a-4c59-9c06-fc2ae84f83d6", filename: "phase-d-large-1cd9f3.txt" }],
   });
   const short = replay("summary-422-length", parseSummary);
   assert.deepEqual(short.ok ? null : short.error, {
     kind: "refused", status: 422, code: "invalid_request",
     message: "The request is not valid. body.length: Input should be 'brief', 'standard' or 'detailed'",
-    retryable: false, retryAfterS: null, documents: [],
+    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
   });
   const missing = replay("summaries-404-not-found", parseSummaryPage);
   assert.deepEqual(missing.ok ? null : missing.error, {
     kind: "refused", status: 404, code: "document_not_found",
     message: "No document has the id 00000000-0000-4000-8000-000000000000.",
-    retryable: false, retryAfterS: null, documents: [],
+    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
   });
 });
 
@@ -837,7 +993,7 @@ test("a summary with no sources parses; an unknown length or tone, a source on n
   const edited = (edit: (body: Record<string, unknown> & { sources: Record<string, unknown>[] }) => void) => {
     const body = structuredClone(captured);
     edit(body);
-    const r = settle(201, JSON.stringify(body), null, parseSummary);
+    const r = settle(201, JSON.stringify(body), NO_HEADERS, parseSummary);
     return r.ok ? { sources: r.value.sources, droppedSources: r.value.droppedSources } : r.error;
   };
   assert.deepEqual(edited((b) => { b.sources = []; b.dropped_sources = 2; }), { sources: [], droppedSources: 2 });

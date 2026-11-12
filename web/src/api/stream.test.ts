@@ -16,9 +16,12 @@ function body(chunks: readonly Uint8Array[], failure?: Error): ReadableStream<Ui
   });
 }
 
+/** The X-Request-ID of the stream's 200, which an error event carries. */
+const STREAM_ID = "9f0c2d6e4b8a4f1e8c3d5a7b9e1f3a5c";
+
 async function read(chunks: readonly Uint8Array[], failure?: Error): Promise<{ progress: AskProgress[]; result: Result<Turn> }> {
   const progress: AskProgress[] = [];
-  const result = await readAskStream(body(chunks, failure), (p) => progress.push(p));
+  const result = await readAskStream(body(chunks, failure), (p) => progress.push(p), STREAM_ID);
   return { progress, result };
 }
 
@@ -59,7 +62,7 @@ test("an error event ends the stream as the backend's refusal", async () => {
     ok: false,
     error: {
       kind: "refused", status: 200, code: "ai_unavailable", retryable: true, retryAfterS: null, documents: [],
-      message: "The AI provider could not complete the request (server_error).",
+      message: "The AI provider could not complete the request (server_error).", quota: null, requestId: STREAM_ID,
     },
   });
 });
@@ -72,4 +75,32 @@ test("a body that ends or breaks before the turn is a lost response, and an unkn
     ok: false,
     error: { kind: "unexpected", detail: "unknown stream event: surprise" },
   });
+});
+
+test("a cached answer streams as one piece of text, then its turn marked cached with no model call", async () => {
+  const stream = readFileSync(new URL("./fixtures/ask-stream-cached.txt", import.meta.url));
+  for (let at = 0; at <= stream.length; at++) {
+    const { progress, result } = await read([stream.subarray(0, at), stream.subarray(at)]);
+    assert.deepEqual(progress, [{ kind: "text", text: "Property Damage Deductible: $2,500 per occurrence" }], `split at ${at}`);
+    assert.deepEqual(result.ok && [result.value.id, result.value.cached, result.value.usage.calls], [
+      "400823cd-69d1-421e-979a-d550e7f236da", true, 0,
+    ], `split at ${at}`);
+  }
+});
+
+test("the cap reached after the stream started ends it with the quota refusal and the stream's request id", async () => {
+  const stream = readFileSync(new URL("./fixtures/constructed/ask-stream-error-quota-exceeded.txt", import.meta.url));
+  for (let at = 0; at <= stream.length; at++) {
+    const { progress, result } = await read([stream.subarray(0, at), stream.subarray(at)]);
+    assert.deepEqual(progress, [{ kind: "stage", stage: "searching" }, { kind: "stage", stage: "answering" }], `split at ${at}`);
+    assert.deepEqual(result, {
+      ok: false,
+      error: {
+        kind: "refused", status: 200, code: "quota_exceeded", retryable: true, retryAfterS: null, documents: [],
+        message: "Today's AI spending cap of $0.000001 is used up. It resets at midnight UTC.",
+        quota: { limitUsd: 0.000001, spentTodayUsd: 0.01, resetsAt: new Date("2026-11-13T00:00:00Z") },
+        requestId: STREAM_ID,
+      },
+    }, `split at ${at}`);
+  }
 });

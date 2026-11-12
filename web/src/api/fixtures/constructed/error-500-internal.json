@@ -1,0 +1,14 @@
+{
+  "status": 500,
+  "headers": {
+    "x-request-id": "phase-f-500-probe"
+  },
+  "body": {
+    "error": {
+      "code": "internal_error",
+      "message": "The request failed unexpectedly.",
+      "retryable": true,
+      "details": {}
+    }
+  }
+}

@@ -58,9 +58,10 @@ export function columns(chosen: ReadonlySet<DocumentId>, docs: readonly Doc[]): 
 
 /**
  * Whether sending the same request again can succeed. A refusal the backend marks final would only fail again, except
- * documents_not_ready: a document becomes ready on its own.
+ * documents_not_ready: a document becomes ready on its own. A used-up spending cap fails again until it resets.
  */
-export function worthRetrying(error: ApiError): boolean {
+export function worthRetrying(error: ApiError, now: Date = new Date()): boolean {
+  if (error.kind === "refused" && error.code === "quota_exceeded" && error.quota !== null) return now >= error.quota.resetsAt;
   return !(error.kind === "refused" && error.retryable === false && error.code !== "documents_not_ready");
 }
 

@@ -1,0 +1,20 @@
+{
+  "status": 429,
+  "headers": {
+    "retry-after": "79118",
+    "x-request-id": "59f57582d6d94b28b0429392156ee616"
+  },
+  "body": {
+    "error": {
+      "code": "quota_exceeded",
+      "message": "Today's AI spending cap of $0.000001 is used up. It resets at midnight UTC.",
+      "retryable": true,
+      "details": {
+        "limit_usd": 1e-06,
+        "spent_today_usd": 0.01,
+        "resets_at": "2026-11-13T00:00:00+00:00",
+        "retry_after_s": 79118
+      }
+    }
+  }
+}

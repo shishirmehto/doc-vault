@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "headers": {
+    "x-request-id": "f55f964ed8be4a669410f7331ae3c7fc"
+  },
+  "body": {
+    "status": "failed",
+    "error": {
+      "code": "quota_exceeded",
+      "message": "Insights were not written because today's AI spending cap of $0.000001 is used up. Retry after midnight UTC.",
+      "retryable": false,
+      "details": {}
+    }
+  }
+}

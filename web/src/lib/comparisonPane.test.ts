@@ -16,7 +16,7 @@ test("a cell's pane says why when the comparison could not be read, and waits wh
   assert.deepEqual(
     [
       cellView({ ok: false, error: { kind: "offline" } }, DEDUCTIBLE_IN_RENEWAL, null, false),
-      cellView({ ok: false, error: { kind: "broken", status: 502 } }, DEDUCTIBLE_IN_RENEWAL, null, false),
+      cellView({ ok: false, error: { kind: "broken", status: 502, requestId: null } }, DEDUCTIBLE_IN_RENEWAL, null, false),
       cellView(null, DEDUCTIBLE_IN_RENEWAL, null, true),
     ],
     [

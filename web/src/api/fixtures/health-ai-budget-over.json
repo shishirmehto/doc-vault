@@ -1,0 +1,18 @@
+{
+  "status": 200,
+  "headers": {
+    "x-request-id": "e1a873d99e944d999cc2070433928d68"
+  },
+  "body": {
+    "db": "ok",
+    "redis": "ok",
+    "ai_mode": "fake",
+    "embed_model": "fake-hash-1536",
+    "max_upload_bytes": 52428800,
+    "ai_budget": {
+      "limit_usd": 1e-06,
+      "spent_today_usd": 0.01
+    },
+    "cache": "ok"
+  }
+}

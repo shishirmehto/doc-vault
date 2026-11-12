@@ -61,7 +61,7 @@ test("when history cannot be read either, only a recheck is offered, never a sec
   const unconfirmed = run([
     { type: "sent", question: worldCup.question },
     lost,
-    { type: "history", result: { ok: false, error: { kind: "broken", status: 502 } } },
+    { type: "history", result: { ok: false, error: { kind: "broken", status: 502, requestId: null } } },
   ]);
   assert.deepEqual([seen(unconfirmed).ask, canAsk(unconfirmed)], ["unconfirmed", false]);
   assert.equal(step(unconfirmed, { type: "sent", question: worldCup.question }).ask.phase, "unconfirmed");

@@ -29,3 +29,21 @@ predates versions, so its compared documents read `version: null`. The same scri
 running API: `upload-202-version-2.json` (new bytes under a stored name), `document-version-1-of-2.json`,
 `versions-two.json`, `versions-404-not-found.json` and `upload-404-replaces-unknown.json`. It deleted both documents
 it uploaded afterwards.
+
+At phase F, `TurnOut` gained `cached` and `ProcessingMetricsOut` gained `cache`. A script added `"cached": false` to
+every stored turn (`turn-*`, `history-policy-four-turns.json`, the turn event of `ask-stream-deductible.txt` and the two
+constructed turns), which is what the migrated API returns for a turn answered by the model, and `"cache": null` to
+`metrics-processing-1h.json`, captured when there was no cache. The fixtures new at phase F were captured at `b5c649c`:
+the cached turn, its history and its stream, `health.json` and `metrics-processing-24h.json` from the dev API, and the
+`*-429-quota-exceeded.json` bodies, the capped health, metrics and insights from a stack with
+`DAILY_AI_BUDGET_USD=0.000001` and one priced ledger row. These were built by hand:
+
+- `ask-stream-error-quota-exceeded.txt`. The cap reached in the race between the check before the stream and the
+  answer call: the `stage` events of a first question, then `error` with the captured 429 envelope, serialised as
+  `error_out` in `docvault/api.py` writes it (compact, `1e-6`).
+- `error-500-internal.json`. The envelope `internal_error_handler` in `docvault/api.py` sends for an exception no route
+  expected, with the request id it adds. No request on a healthy stack reaches it.
+- `health-cache-off.json` and `health-cache-unreachable.json`. The captured `health.json` with `cache` set to `off` (no
+  `CACHE_URL`) and to `unreachable`, which a stopped cache gave on an isolated stack.
+- `metrics-processing-24h-cache-off.json`. The captured `metrics-processing-24h.json` with `cache: null`, which the same
+  stopped cache gave on `/metrics/processing`, and which an unset `CACHE_URL` gives too.

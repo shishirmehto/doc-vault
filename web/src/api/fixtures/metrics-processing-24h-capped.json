@@ -1,0 +1,164 @@
+{
+  "status": 200,
+  "headers": {
+    "x-request-id": "f3e1ed7971e24295b158a70ae0d4461a"
+  },
+  "body": {
+    "window": "24h",
+    "since": "2026-11-11T02:01:23.155291Z",
+    "uploaded": 3,
+    "indexed": 3,
+    "time_to_ready_ms": {
+      "p50": 246,
+      "p95": 562
+    },
+    "queue_wait_ms": {
+      "p50": 127,
+      "p95": 414
+    },
+    "steps": {
+      "parse": {
+        "runs": 3,
+        "ok": 3,
+        "failed": 0,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": 23,
+          "p95": 23
+        },
+        "failures_by_code": {}
+      },
+      "embed": {
+        "runs": 3,
+        "ok": 3,
+        "failed": 0,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": 34,
+          "p95": 55
+        },
+        "failures_by_code": {}
+      },
+      "analyze": {
+        "runs": 3,
+        "ok": 2,
+        "failed": 1,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": 31,
+          "p95": 38
+        },
+        "failures_by_code": {
+          "quota_exceeded": 1
+        }
+      }
+    },
+    "ai": {
+      "calls": 8,
+      "errors": 0,
+      "input_tokens": 859,
+      "output_tokens": 91,
+      "cost_usd": 0.01,
+      "unpriced_calls": 0,
+      "by_purpose_and_model": [
+        {
+          "purpose": "answer",
+          "model": "fake-chat",
+          "calls": 1,
+          "errors": 0,
+          "input_tokens": 367,
+          "output_tokens": 19,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 1,
+            "p95": 1
+          }
+        },
+        {
+          "purpose": "answer",
+          "model": "seeded-cap-proof",
+          "calls": 1,
+          "errors": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.01,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 1,
+            "p95": 1
+          }
+        },
+        {
+          "purpose": "embed_chunks",
+          "model": "fake-hash",
+          "calls": 3,
+          "errors": 0,
+          "input_tokens": 48,
+          "output_tokens": 0,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 2,
+            "p95": 5
+          }
+        },
+        {
+          "purpose": "embed_query",
+          "model": "fake-hash",
+          "calls": 1,
+          "errors": 0,
+          "input_tokens": 6,
+          "output_tokens": 0,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 8,
+            "p95": 8
+          }
+        },
+        {
+          "purpose": "insights",
+          "model": "fake-chat",
+          "calls": 2,
+          "errors": 0,
+          "input_tokens": 438,
+          "output_tokens": 72,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 4,
+            "p95": 6
+          }
+        }
+      ]
+    },
+    "chat": {
+      "turns": 1,
+      "outcomes": {
+        "answered": 1,
+        "no_evidence": 0,
+        "model_declined": 0,
+        "unverified": 0
+      },
+      "latency_ms": {
+        "p50": 35,
+        "p95": 35
+      }
+    },
+    "cache": {
+      "embedding": {
+        "hits": 0,
+        "misses": 4
+      },
+      "answer": {
+        "hits": 0,
+        "misses": 1
+      },
+      "counted_since": "2026-11-12T02:01:09.109624Z"
+    }
+  }
+}

@@ -1,0 +1,181 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "window": "24h",
+    "since": "2026-11-11T02:00:56.454981Z",
+    "uploaded": 9,
+    "indexed": 76,
+    "time_to_ready_ms": {
+      "p50": 360,
+      "p95": 568
+    },
+    "queue_wait_ms": {
+      "p50": 92,
+      "p95": 576
+    },
+    "steps": {
+      "parse": {
+        "runs": 89,
+        "ok": 76,
+        "failed": 13,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": 8,
+          "p95": 1077
+        },
+        "failures_by_code": {
+          "no_extractable_text": 5,
+          "too_many_pages": 8
+        }
+      },
+      "embed": {
+        "runs": 76,
+        "ok": 76,
+        "failed": 0,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": 9,
+          "p95": 1069
+        },
+        "failures_by_code": {}
+      },
+      "analyze": {
+        "runs": 76,
+        "ok": 76,
+        "failed": 0,
+        "abandoned": 0,
+        "retries": 0,
+        "duration_ms": {
+          "p50": 5,
+          "p95": 20
+        },
+        "failures_by_code": {}
+      }
+    },
+    "ai": {
+      "calls": 771,
+      "errors": 0,
+      "input_tokens": 11110304,
+      "output_tokens": 9838,
+      "cost_usd": 0.0,
+      "unpriced_calls": 0,
+      "by_purpose_and_model": [
+        {
+          "purpose": "answer",
+          "model": "fake-chat",
+          "calls": 90,
+          "errors": 0,
+          "input_tokens": 186023,
+          "output_tokens": 2158,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 500,
+            "p95": 774
+          }
+        },
+        {
+          "purpose": "compare",
+          "model": "fake-chat",
+          "calls": 28,
+          "errors": 0,
+          "input_tokens": 152176,
+          "output_tokens": 2422,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 2,
+            "p95": 14
+          }
+        },
+        {
+          "purpose": "condense",
+          "model": "fake-chat",
+          "calls": 61,
+          "errors": 0,
+          "input_tokens": 7879,
+          "output_tokens": 397,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 0,
+            "p95": 1
+          }
+        },
+        {
+          "purpose": "embed_chunks",
+          "model": "fake-hash",
+          "calls": 394,
+          "errors": 0,
+          "input_tokens": 9884651,
+          "output_tokens": 0,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 22,
+            "p95": 28
+          }
+        },
+        {
+          "purpose": "embed_query",
+          "model": "fake-hash",
+          "calls": 101,
+          "errors": 0,
+          "input_tokens": 661,
+          "output_tokens": 0,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 0,
+            "p95": 2
+          }
+        },
+        {
+          "purpose": "insights",
+          "model": "fake-chat",
+          "calls": 76,
+          "errors": 0,
+          "input_tokens": 805452,
+          "output_tokens": 2477,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 1,
+            "p95": 13
+          }
+        },
+        {
+          "purpose": "summary",
+          "model": "fake-chat",
+          "calls": 21,
+          "errors": 0,
+          "input_tokens": 73462,
+          "output_tokens": 2384,
+          "cost_usd": 0.0,
+          "unpriced_calls": 0,
+          "latency_ms": {
+            "p50": 3,
+            "p95": 8
+          }
+        }
+      ]
+    },
+    "chat": {
+      "turns": 103,
+      "outcomes": {
+        "answered": 85,
+        "no_evidence": 11,
+        "model_declined": 7,
+        "unverified": 0
+      },
+      "latency_ms": {
+        "p50": 133,
+        "p95": 839
+      }
+    },
+    "cache": null
+  }
+}

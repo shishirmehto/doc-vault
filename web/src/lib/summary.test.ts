@@ -89,7 +89,16 @@ test("a failed rewrite offers Try again for a refusal that can pass on a second 
       badOutput,
       parseError(502, null, null),
       { kind: "offline" } as const,
-    ].map(worthRetrying),
+    ].map((e) => worthRetrying(e)),
     [false, false, true, true, true, true, true, true],
+  );
+});
+
+test("a rewrite refused by the spending cap offers Try again only once the cap has reset", () => {
+  const { status, body, headers } = captured("summary-429-quota-exceeded");
+  const capped = parseError(status, body, headers["retry-after"], headers["x-request-id"]);
+  assert.deepEqual(
+    [worthRetrying(capped, new Date("2026-11-12T18:29:59Z")), worthRetrying(capped, new Date("2026-11-13T00:00:00Z"))],
+    [false, true],
   );
 });
