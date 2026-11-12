@@ -6,6 +6,7 @@ import re
 import zipfile
 
 import pytest
+from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen.canvas import Canvas
 
@@ -162,6 +163,33 @@ def test_other_pdf_failures_are_vault_errors(tmp_path):
             pages.extract(DocKind.PDF, path, max_pages=limit)
         codes[path.name] = raised.value.failure.code.value
     assert codes == {"locked.pdf": "encrypted_pdf", "broken.pdf": "unreadable_file", POLICY: "too_many_pages"}
+
+
+def aes_pdf(tmp_path, user_password: str):
+    plain = tmp_path / "plain.pdf"
+    canvas = Canvas(str(plain), pagesize=letter)
+    canvas.drawString(72, 700, "Each Occurrence Limit: $1,000,000")
+    canvas.showPage()
+    canvas.drawString(72, 700, "Second page text.")
+    canvas.save()
+    writer = PdfWriter(clone_from=PdfReader(plain))
+    writer.encrypt(user_password=user_password, owner_password="owner-secret", algorithm="AES-256")
+    path = tmp_path / "aes.pdf"
+    writer.write(path)
+    return path
+
+
+@pytest.mark.xfail(strict=True, reason="no AES backend: pypdf raises DependencyError")
+def test_an_aes_pdf_that_opens_without_a_password_is_read(tmp_path):
+    doc = pages.extract(DocKind.PDF, aes_pdf(tmp_path, user_password=""), max_pages=10)
+    assert [(p.number, p.text) for p in doc.pages] == [(1, "Each Occurrence Limit: $1,000,000"), (2, "Second page text.")]
+
+
+@pytest.mark.xfail(strict=True, reason="no AES backend: pypdf raises DependencyError")
+def test_an_aes_pdf_that_needs_a_password_to_open_is_refused_as_encrypted(tmp_path):
+    with pytest.raises(VaultError) as raised:
+        pages.extract(DocKind.PDF, aes_pdf(tmp_path, user_password="reader-secret"), max_pages=10)
+    assert raised.value.failure.code is ErrorCode.ENCRYPTED_PDF
 
 
 def test_kind_comes_from_the_bytes_not_the_name(tmp_path):
