@@ -14,7 +14,7 @@
 ## How to get to it (user POV)
 
 - `$S/call.sh POST /documents/<id>/summaries -H 'content-type: application/json' -d '{"length": "brief", "focus": "deductibles", "tone": "formal"}'`.
-- Web UI: open a ready document (`/?doc=<id>`). Under the summary paragraph, **Rewrite the summary** opens the options: the **Length** radio group (Brief, Standard, Detailed), the **Focus (optional)** field, the **Written for** select (Plain, Formal, For the client) and **Rewrite**. A source's page lives at `&cite=sum.<summary id>.<n>` (0-based) and `&p=<n>` pages away from it. While insights are pending or failed on a ready document, the disclosure sits under that note.
+- Web UI: open a ready document (`/?doc=<id>`). Under the summary paragraph, the **Rewrite the summary** disclosure opens the options. The action bar's **Rewrite the summary** button also opens it and moves focus to it. The options are the **Length** radio group (Brief, Standard, Detailed), the **Focus (optional)** field, the **Written for** select (Plain, Formal, For the client) and **Rewrite**. A source's page lives at `&cite=sum.<summary id>.<n>` (0-based) and `&p=<n>` pages away from it. While insights are pending or failed on a ready document, the disclosure sits under that note.
 
 ## Driving it
 

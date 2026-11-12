@@ -11,21 +11,22 @@ The Next.js app on the `web` service shows the vault in a browser. A user upload
 - `ui-chat-stream` shows the answer as it is written, under a status line ("Searching 2 documents", "Writing the answer", "Checking citations"), then swaps in the cited answer.
 - `ui-suggestions` offers the latest turn's follow-up questions as buttons. A click asks one at once.
 - `ui-citation-open` opens a key fact or a source on its page with the quote marked and focused. Back closes it, and a pasted link reopens it.
-- `ui-metrics` shows the two metrics endpoints. Figures never wrap, and a table wider than its column scrolls inside its own box.
+- `ui-metrics` shows the two metrics endpoints, the spending cap and the caches, under a contents line that links each section. Figures never wrap, and a table wider than its column scrolls inside its own box.
 - `ui-delete` deletes a document from its page, after a dialog that names the file, then opens the home screen with a note.
 - `ui-find` filters the rail and the new-chat picker over six documents. "Select all ready" ticks the ready documents shown.
 - `ui-missing` shows a plain sentence and "Ask your documents" for an unknown path, and for a `?doc=` or `?chat=` the vault does not have.
 - `ui-layout` keeps the question box on screen as a footer row at every height down to 500 px, folds the rail into "Documents (n)" below 760 px, and shows numbered first steps for an empty vault.
+- `ui-actions` gives a document page one action bar: "Ask about this document", "Compare with...", "Rewrite the summary", "Read the pages" and "Versions (n)", then "Upload a new version" and "Delete" set apart. At 1440x900 they share one row.
 
 ## How to get to it (user POV)
 
-- Open `http://localhost:13000` (verify stack) in a browser. Prove a UI change at 1440x785, 1024x768 and 375x812, and run `scripts/visible.js` on every screen at each size (see `README.md`).
-- Top bar: the "Doc Vault" link, the "Ask" and "Metrics" links (the current one has `aria-current`), and the service note. Under the fake provider, the note is a "Fake AI provider" button that opens its explanation.
+- Open `http://localhost:13000` (verify stack) in a browser. Prove a UI change at 1440x900, 1024x768 and 375x812, and run `scripts/visible.js` on every screen at each size (see `README.md`). Add 1440x785 for a short window.
+- Top bar: the "Doc Vault" link, the "Ask", "Compare" and "Metrics" links (the current one has `aria-current`), and the service note. Under the fake provider, the note is a "Fake AI provider" button that opens its explanation. While the live stream is down it reads "Live updates paused, retrying".
 - Rail: the drop zone, the "Choose files" button, one link per document, and over six documents a "Find a document" searchbox. Below 760 px the rail sits behind a "Documents (n)" button with `aria-expanded`.
-- The empty home screen: three numbered steps, with a second "Choose files" button in step 1.
-- The document view: the "Read the pages" and "Ask about this document" buttons, a "Delete" button, and one button per key fact, named "<label>: show the passage on p. N".
+- The empty home screen: three numbered steps, the last "Ask a question or compare documents.", with a second "Choose files" button in step 1.
+- The document view: the action bar ("Ask about this document", "Compare with...", "Rewrite the summary", "Read the pages", "Versions (n)" when the family has more than one, then "Upload a new version" and "Delete"), and one button per key fact, named "<label>: show the passage on p. N". A family with more than one version adds "Compare with version N" to the version line.
 - The new-chat screen: the document checkboxes, "Find a document to ask about" and "Select all ready" over six documents, a "Question" textbox and an "Ask" button in the footer row.
-- The chat: a "Question" textbox and an "Ask" button in the footer row. Each source is a button named "Source N: <file>, p. N". Suggestions are buttons named "Ask: <question>" in a group named "Suggested questions".
+- The chat: a "Question" textbox and an "Ask" button in the footer row. A chat on an earlier version names it in the header and links the newer one with "Open version N". Each source is a button named "Source N: <file>, p. N". Suggestions are buttons named "Ask: <question>" in a group named "Suggested questions".
 - The page pane: "Previous", "Next" and "Close".
 
 ## Driving it with Playwright
@@ -33,10 +34,11 @@ The Next.js app on the `web` service shows the vault in a browser. A user upload
 Preconditions:
 
 - A baseline stack launched with `web` (the default for `launch.sh`), with the three samples uploaded and ready (see `upload-and-indexing.md`).
-- The browser is at 1440x785 for the steps below, then at 1024x768 and 375x812 for the layout checks.
+- The browser is at 1440x900 for the steps below, then at 1024x768 and 375x812 for the layout checks.
 
 - **Upload.** Choose "Choose files" and pick `samples/sample-renewal-quote.pdf`. If it is new, its row moves from "Waiting to start" through "Reading pages" to "Ready". If it is a duplicate, it reads "Already in the vault".
 - **Open insights.** Click the `sample-cgl-policy.pdf` link. The URL gains `?doc=<id>`, and the view lists key facts with page chips.
+- **Action bar.** On that page, every button in the action bar has the same vertical centre at 1440x900. Click "Rewrite the summary": the disclosure under the summary opens, `document.activeElement` is its `summary`, and it is inside the column's view. Click it again: the disclosure stays open.
 - **Open a fact.** Click the button "Each Occurrence Limit: show the passage on p. 2". The URL gains `&cite=fact.<n>`, and the pane shows "Page 2 of 7". There is one `mark` whose text, whitespace collapsed, is `Each Occurrence Limit $1,000,000`, and it has focus.
 - **Back.** Go back. The URL returns to `?doc=<id>` and no `mark` remains.
 - **Chat.** Tick the checkboxes for `sample-cgl-policy.pdf` and `sample-renewal-quote.pdf`, type `What is the property damage deductible?` in "Question" and press Enter. The URL becomes `?chat=<id>`. The answer lists source 1 `sample-cgl-policy.pdf, p. 2` and source 2 `sample-renewal-quote.pdf, p. 2`.
@@ -44,13 +46,13 @@ Preconditions:
 - **Ask a suggestion.** Click the first button in "Suggested questions". The question appears as a new turn at once, streams, and comes back answered with a source. New suggestions replace the old ones.
 - **Open a source.** Click "Source 2: sample-renewal-quote.pdf, p. 2". The URL gains `&cite=turn.<turn id>.2`, the pane shows "Page 2 of 3", and the `mark` text is `Property Damage Deductible $5,000 per occurrence`.
 - **Recent chats.** Open `/`. The new-chat screen lists the newest chats from `GET /chats`, each named by its documents. Click one and the URL becomes `?chat=<id>`.
-- **Metrics.** Click the "Metrics" link in the header. The URL becomes `?view=metrics`. The document counts match `GET /metrics/documents`, the "Questions" table matches `chat.outcomes` from `GET /metrics/processing?window=24h`, and under the fake provider the cost reads "fake provider, no cost".
+- **Metrics.** Click the "Metrics" link in the header. The URL becomes `?view=metrics`. The contents line reads "On this page: Documents, Processing, AI calls and cost, Chats, Spending cap, Caches.", and each link brings its heading into the column's view and focuses it. The document counts match `GET /metrics/documents`, the "Questions by outcome" table matches `chat.outcomes` from `GET /metrics/processing?window=24h`, and under the fake provider the cost reads "fake provider, no cost".
 - **Delete.** Upload a throwaway file (never a sample: other runs use their ids) and start a chat on it with `call.sh`. Open the file's page, click "Delete", and check the dialog names the file and that focus is on "Cancel". Press Escape: the dialog closes and the URL is unchanged. Click "Delete", then the dialog's "Delete". The URL becomes `/`, a status note "Deleted <file>. ..." has focus, the rail no longer lists it, `GET /documents/<id>` answers 404, and the chat's header reads "Asking <file> (deleted)".
 - **Find.** With more than six documents, type `policy` into the rail's "Find a document": the rail lists only `sample-cgl-policy.pdf`. Type it into the new-chat picker's "Find a document to ask about": the picker lists only that file. Type a word nothing matches and each says so, with a "Clear" button.
 - **Question box and suggestions.** In a three-turn chat at 1440x785, 1440x600 and 1440x500, the "Question" textbox and "Ask" button are inside the viewport. Inject a 72 px fixed element on the right, then an in-flow 72 px element as the first child of `body`; both stay inside. After an answer lands at 1024x768, the "Suggested questions" group's bottom is at or above the footer row's top.
 - **Status line.** Record the busy turn's `[role="status"]` with a `MutationObserver` while a suggested follow-up is asked. It starts with "Sending the question" and never goes back to an earlier step.
 - **Missing.** Open `/no-such-page`, `/?doc=<random uuid>` and `/?chat=<random uuid>`. Each shows a sentence and an "Ask your documents" link to `/`, and the missing chat has no "Question" textbox.
-- **Keyboard.** Tab through the top bar, rail, document page, chat and pane. Every stop shows the carbon focus ring and is on screen.
+- **Keyboard.** Tab through the top bar, rail, document page and its action bar, chat, comparison table and pane. Every stop shows the carbon focus ring and is on screen.
 - **Upload limit.** Pick a file larger than `max_upload_bytes` from `/health`. The rail refuses it before sending, and no `POST /api/documents` request is made.
 - **Proof.** Take a screenshot after each step into the run's evidence folder. Read the URL and the `mark` text with `browser_evaluate` and save them beside the screenshots.
 

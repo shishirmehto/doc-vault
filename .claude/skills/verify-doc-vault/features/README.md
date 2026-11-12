@@ -25,7 +25,7 @@ This folder is the maintained source for verifying what a doc-vault user sees an
 
 ## Visibility check: `scripts/visible.js`
 
-Every UI proof also runs `scripts/visible.js` on each screen it shows, at 1440x785, 1024x768 and 375x812. The script is one JavaScript expression that runs in the page. It returns an array with one finding per problem, and `[]` when the screen is clean:
+Every UI proof also runs `scripts/visible.js` on each screen it shows, at 1440x900, 1024x768 and 375x812. A layout change adds 1440x785, a short window where the question box and the footer rows are tightest. The script is one JavaScript expression that runs in the page. It returns an array with one finding per problem, and `[]` when the screen is clean:
 
 - `clipped`: an element with text whose content is cut off by `overflow: hidden` or `clip`, `text-overflow: ellipsis` or `line-clamp` (`scrollWidth > clientWidth` or `scrollHeight > clientHeight`). `body` and the centre column count too, so content pushed off the bottom of the window shows up as `clipped body` beside the controls it hid.
 - `unreachable`: a button, link, field or `summary` outside the viewport that no scroll container can bring into view. The check walks out from the control. An `overflow: hidden` ancestor that it falls outside hides it for good. A scroll container can bring it into view if the container is at least the control's size. From there the question is whether a control-sized box inside the container can be seen, so a sideways-scrolling table taller than its column is still reachable row by row.
@@ -68,4 +68,4 @@ A clean result does not prove that text does not wrap where it should not, or th
 | [versions.md](versions.md) | `version-new`, `version-dedupe`, `version-replaces`, `version-list`, `version-delete`, `version-live`, `ui-versions` |
 | [caching.md](caching.md) | `cache-health`, `cache-answer`, `cache-answer-stream`, `cache-answer-skip`, `cache-embedding`, `cache-metrics`, `cache-unreachable` |
 | [quota-and-logs.md](quota-and-logs.md) | `log-request-id`, `log-request-line`, `log-trace`, `log-web-proxy`, `quota-health`, `quota-refuse`, `quota-cached`, `quota-insights` |
-| [web-ui.md](web-ui.md) | `ui-upload`, `ui-status`, `ui-insights`, `ui-chat`, `ui-chat-stream`, `ui-suggestions`, `ui-citation-open`, `ui-metrics`, `ui-delete`, `ui-find`, `ui-missing`, `ui-layout` |
+| [web-ui.md](web-ui.md) | `ui-upload`, `ui-status`, `ui-insights`, `ui-chat`, `ui-chat-stream`, `ui-suggestions`, `ui-citation-open`, `ui-metrics`, `ui-delete`, `ui-find`, `ui-missing`, `ui-layout`, `ui-actions` |
