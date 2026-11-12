@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 from psycopg.types.json import Jsonb
 
-from . import chat, insights, prompts
+from . import documents, insights, prompts
 from .ai import ComparisonOwner
 from .context import Ctx
 from .db import Db, decode_cursor, encode_cursor
@@ -52,7 +52,7 @@ def create(ctx: Ctx, document_ids: Sequence[DocumentId], focus: str | None) -> C
     comparison_id = ComparisonId(uuid4())
     focus = (focus or "").strip() or None
     with ctx.db.connection() as conn, conn.transaction():
-        refs = chat.ready_documents(conn, document_ids)
+        refs = documents.ready_documents(conn, document_ids)
         ids = [ref.id for ref in refs]
         pages: dict[DocumentId, list[Page]] = {}
         for row in conn.execute("SELECT document_id, number, text FROM pages WHERE document_id = ANY(%s)"

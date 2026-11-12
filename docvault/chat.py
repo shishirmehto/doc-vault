@@ -36,6 +36,7 @@ from .answer_text import AnswerField, MarkerFilter
 from .cache import Cache
 from .context import Ctx
 from .db import Db, decode_cursor, encode_cursor
+from .documents import ready_documents
 from .domain import (
     Answer,
     Answered,
@@ -45,7 +46,6 @@ from .domain import (
     ChunkId,
     Citation,
     DocRef,
-    DocStatus,
     DocumentId,
     ErrorCode,
     NotFound,
@@ -104,30 +104,6 @@ def start(db: Db, document_ids: Sequence[DocumentId], *, title: str | None = Non
         conn.execute("INSERT INTO chat_documents (chat_id, document_id, filename)"
                      " SELECT %s, id, filename FROM documents WHERE id = ANY(%s)", (chat_id, wanted))
         return _row_to_chat(conn.execute(_CHAT_SQL + "WHERE c.id = %s GROUP BY c.id", (chat_id,)).fetchone())
-
-
-def ready_documents(conn: Connection, document_ids: Sequence[DocumentId]) -> list[DocRef]:
-    """The documents in the order given, each held FOR SHARE until the caller's transaction ends.
-
-    Unknown ids -> DOCUMENT_NOT_FOUND (404) listing them.
-    Any id not READY -> DOCUMENTS_NOT_READY (409) listing id, filename and status.
-    """
-    # SHARE holds off a delete or a status change between this check and what the caller's transaction does next.
-    found = {row["id"]: row for row in conn.execute(
-        "SELECT id, filename, status, page_basis FROM documents WHERE id = ANY(%s) FOR SHARE", (list(document_ids),))}
-    if missing := [doc_id for doc_id in document_ids if doc_id not in found]:
-        raise documents_not_found(missing, len(document_ids))
-    if not_ready := [{"id": str(doc_id), "filename": found[doc_id]["filename"], "status": found[doc_id]["status"]}
-                     for doc_id in document_ids if found[doc_id]["status"] != DocStatus.READY]:
-        raise VaultError(ErrorCode.DOCUMENTS_NOT_READY,
-                         f"{len(not_ready)} of {len(document_ids)} documents are not ready.",
-                         details={"not_ready": not_ready})
-    return [DocRef(doc_id, found[doc_id]["filename"], PageBasis(found[doc_id]["page_basis"])) for doc_id in document_ids]
-
-
-def documents_not_found(missing: Sequence[DocumentId], total: int) -> VaultError:
-    return VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"{len(missing)} of {total} documents do not exist.",
-                      details={"missing": [str(doc_id) for doc_id in missing]})
 
 
 def get(db: Db, chat_id: ChatId) -> Chat:

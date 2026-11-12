@@ -18,7 +18,7 @@ Idempotency model:
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from pathlib import PurePath
 from typing import BinaryIO
@@ -34,6 +34,7 @@ from .db import Db, Lease, PipelineSteps, decode_cursor, encode_cursor, pipeline
 from .domain import (
     Created,
     DocKind,
+    DocRef,
     DocStatus,
     Document,
     DocumentId,
@@ -109,7 +110,7 @@ def upload(ctx: Ctx, stream: BinaryIO, filename: str, *, replaces: DocumentId | 
         with ctx.db.connection() as conn:
             row = conn.execute("SELECT family_id FROM documents WHERE id = %s", (replaces,)).fetchone()
         if row is None:
-            raise _not_found(replaces)
+            raise not_found(replaces)
         family = FamilyId(row["family_id"])
     sha, size = ctx.blobs.put(stream, max_bytes=ctx.settings.max_upload_bytes)
     try:
@@ -193,7 +194,7 @@ def delete(ctx: Ctx, doc_id: DocumentId) -> None:
     with ctx.db.connection() as conn:
         deleted = conn.execute("DELETE FROM documents WHERE id = %s RETURNING sha256", (doc_id,)).fetchone()
     if not deleted:
-        raise _not_found(doc_id)
+        raise not_found(doc_id)
     ctx.blobs.delete(Sha256(deleted["sha256"]))
 
 
@@ -376,7 +377,7 @@ def get(db: Db, doc_id: DocumentId) -> Document:
     with db.connection() as conn:
         row = conn.execute(_DOCUMENT_SQL + "WHERE d.id = %s", (doc_id,)).fetchone()
     if row is None:
-        raise _not_found(doc_id)
+        raise not_found(doc_id)
     return _row_to_document(row)
 
 
@@ -406,7 +407,7 @@ def versions(db: Db, doc_id: DocumentId) -> list[Document]:
         rows = conn.execute(_DOCUMENT_SQL + "WHERE d.family_id = (SELECT family_id FROM documents WHERE id = %s)"
                             " ORDER BY d.version", (doc_id,)).fetchall()
     if not rows:
-        raise _not_found(doc_id)
+        raise not_found(doc_id)
     return [_row_to_document(row) for row in rows]
 
 
@@ -417,14 +418,38 @@ def page(db: Db, doc_id: DocumentId, number: int) -> tuple[PageBasis, Page]:
             "SELECT d.page_basis, d.page_count, p.text FROM documents d"
             " LEFT JOIN pages p ON p.document_id = d.id AND p.number = %s WHERE d.id = %s", (number, doc_id)).fetchone()
     if row is None:
-        raise _not_found(doc_id)
+        raise not_found(doc_id)
     if row["text"] is None:
         available = f"It has {row['page_count']}." if row["page_count"] else "It has not been parsed yet."
         raise VaultError(ErrorCode.PAGE_NOT_FOUND, f"This document has no page {number}. {available}")
     return PageBasis(row["page_basis"]), Page(number, row["text"])
 
 
-def _not_found(doc_id: DocumentId) -> VaultError:
+def ready_documents(conn: Connection, document_ids: Sequence[DocumentId]) -> list[DocRef]:
+    """The documents in the order given, each held FOR SHARE until the caller's transaction ends.
+
+    Unknown ids -> DOCUMENT_NOT_FOUND (404) listing them.
+    Any id not READY -> DOCUMENTS_NOT_READY (409) listing id, filename and status.
+    """
+    # SHARE holds off a delete or a status change between this check and what the caller's transaction does next.
+    found = {row["id"]: row for row in conn.execute(
+        "SELECT id, filename, status, page_basis FROM documents WHERE id = ANY(%s) FOR SHARE", (list(document_ids),))}
+    if missing := [doc_id for doc_id in document_ids if doc_id not in found]:
+        raise documents_not_found(missing, len(document_ids))
+    if not_ready := [{"id": str(doc_id), "filename": found[doc_id]["filename"], "status": found[doc_id]["status"]}
+                     for doc_id in document_ids if found[doc_id]["status"] != DocStatus.READY]:
+        raise VaultError(ErrorCode.DOCUMENTS_NOT_READY,
+                         f"{len(not_ready)} of {len(document_ids)} documents are not ready.",
+                         details={"not_ready": not_ready})
+    return [DocRef(doc_id, found[doc_id]["filename"], PageBasis(found[doc_id]["page_basis"])) for doc_id in document_ids]
+
+
+def documents_not_found(missing: Sequence[DocumentId], total: int) -> VaultError:
+    return VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"{len(missing)} of {total} documents do not exist.",
+                      details={"missing": [str(doc_id) for doc_id in missing]})
+
+
+def not_found(doc_id: DocumentId) -> VaultError:
     return VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"No document has the id {doc_id}.")
 
 

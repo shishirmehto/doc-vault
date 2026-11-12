@@ -16,7 +16,7 @@ from uuid import uuid4
 from psycopg.errors import ForeignKeyViolation
 from psycopg.types.json import Jsonb
 
-from . import chat, prompts
+from . import documents, prompts
 from .ai import SummaryOwner
 from .context import Ctx
 from .db import Db, decode_cursor, encode_cursor
@@ -55,7 +55,7 @@ def create(ctx: Ctx, document_id: DocumentId, options: SummaryOptions) -> Summar
     key = {"document_id": document_id, "length": options.length, "focus_key": options.focus or "",
            "tone": options.tone, "model": ctx.ai.chat.models["main"], "prompt_version": SUMMARY_VERSION}
     with ctx.db.connection() as conn, conn.transaction():
-        [doc] = chat.ready_documents(conn, [document_id])
+        [doc] = documents.ready_documents(conn, [document_id])
         stored = conn.execute(_SUMMARY_SQL + _BY_KEY, key).fetchone()
         if stored is not None:
             return _row_to_summary(stored, cached=True)
@@ -75,10 +75,10 @@ def create(ctx: Ctx, document_id: DocumentId, options: SummaryOptions) -> Summar
                                    "sources": Jsonb([{"page": s.page, "quote": s.quote} for s in sources]),
                                    "dropped_sources": dropped})
         except ForeignKeyViolation:
-            raise chat.documents_not_found([document_id], 1) from None
+            raise documents.documents_not_found([document_id], 1) from None
         row = conn.execute(_SUMMARY_SQL + _BY_KEY, key).fetchone()
     if row is None:
-        raise chat.documents_not_found([document_id], 1)
+        raise documents.documents_not_found([document_id], 1)
     return _row_to_summary(row, cached=False)
 
 
@@ -90,7 +90,7 @@ def list_summaries(db: Db, document_id: DocumentId, *, limit: int,
     after = decode_cursor(cursor) if cursor else None
     with db.connection() as conn:
         if conn.execute("SELECT 1 FROM documents WHERE id = %s", (document_id,)).fetchone() is None:
-            raise VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"No document has the id {document_id}.")
+            raise documents.not_found(document_id)
         rows = conn.execute(
             _SUMMARY_SQL + "WHERE s.document_id = %(document_id)s AND (%(created_at)s::timestamptz IS NULL"
             " OR (s.created_at, s.id) < (%(created_at)s::timestamptz, %(id)s::uuid))"

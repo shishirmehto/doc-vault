@@ -65,7 +65,7 @@ The response has `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering:
 
 **Compare.** `compare.create` lines up 2 to 5 ready documents field by field:
 
-1. In one transaction, `chat.ready_documents` checks the documents exist and are ready, with the 404 and 409 that `chat.start` gives. The same transaction reads each document's pages and verified key facts, then commits.
+1. In one transaction, `documents.ready_documents` checks the documents exist and are ready, with the 404 and 409 that `chat.start` gives. The same transaction reads each document's pages and verified key facts, then commits.
 2. `prompts.compare` labels the documents `D1` to `D5` in request order. Each gets an even share of the insights budget (240,000 characters), filled by the page-prefix rule that insights use, and each lists its key facts before its pages. The prompt returns how many pages of each it read.
 3. One main-model call returns rows, each with one cell per document: value, page and quote. It is billed to the comparison id, which exists before the call. The call has one attempt of at most 90 s, because the request is synchronous and the web proxy gives up at 120 s.
 4. `compare.ground` places each cell by its document id, ignoring case and spaces, and keeps it only when `pages.find_on_page` finds its quote on the page it cites. It stores the source span, not the model's copy. Any other filled cell becomes empty and counts in `dropped_cells`: a quote not on its page, a missing page or quote, or a cell naming no document or one already placed. A row left with no filled cell is removed. Rows are read until 30 are kept, and the rest are not read.
@@ -76,7 +76,7 @@ The response has `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering:
 **Summaries.** `summaries.create` writes a document's summary again at a length, about a focus, in a tone:
 
 1. `SummaryOptions.of` normalises the focus: trimmed, casefolded, spaces collapsed, blank to none. The normalised options are the cache key and also what the prompt receives, so one key always means one model input.
-2. In one transaction, `chat.ready_documents` gives the 404 and 409 that chats give. A stored summary for the same document, options, model and prompt version is returned with `cached: true`, before any page is read. Otherwise the transaction reads the pages and commits.
+2. In one transaction, `documents.ready_documents` gives the 404 and 409 that chats give. A stored summary for the same document, options, model and prompt version is returned with `cached: true`, before any page is read. Otherwise the transaction reads the pages and commits.
 3. `prompts.summary` sends the page prefix that insights read, under the same 240,000-character budget and coverage line, then the length's word target, the reader's interest and the tone's instruction.
 4. One main-model call, billed to the summary id, which exists before it. It has one attempt of at most 90 s and no repair turn, like a comparison, because the request is synchronous and the web proxy gives up at 120 s.
 5. `summaries.ground` keeps a source only when `pages.find_on_page` finds its quote on the page it cites, storing the source span. It reads sources until 6 are kept, skips a repeat of a kept span, and counts the rest in `dropped_sources`. No source surviving is allowed: a summary is not a fact claim. An empty summary text fails as a retryable 502 and is not stored.
