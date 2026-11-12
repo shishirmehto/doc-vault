@@ -72,7 +72,6 @@ UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify a
                    "so I am not giving one.")
 ANSWER_CACHE_FORMAT = 1     # part of every answer key: a change to the cached value's shape bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
-_CITATION_MARKER = re.compile(r"[ \t]*\[\d+\]")   # "[1]" in a grounded answer, and the spaces before it
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,7 +190,7 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
     if key is not None and (hit := _cached_answer(ctx.cache, key)) is not None:
         answer, suggested = hit
         if on_text is not None:
-            on_text(_CITATION_MARKER.sub("", answer.text))
+            on_text(prompts.REF_MARKER.sub("", answer.text))
         return _store_turn(ctx, turn_id, chat_id, question, question, answer, suggested, started, cached=True)
     ctx.ai.check_budget(Purpose.ANSWER)
 
@@ -220,9 +219,7 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
 
     turn = _store_turn(ctx, turn_id, chat_id, question, standalone, answer, suggested, started, cached=False)
     if key is not None and isinstance(answer, Answered):
-        ctx.cache.set_many({key: json.dumps({
-            "outcome": answer.outcome, "text": answer.text, "citations": [_snapshot(c) for c in answer.citations],
-            "suggestions": list(suggested)}).encode()}, ANSWER_TTL_S)
+        _cache_answer(ctx.cache, key, answer, suggested)
     return turn
 
 
@@ -256,8 +253,12 @@ def _cached_answer(cache: Cache, key: str) -> tuple[Answered, tuple[str, ...]] |
     if value is None:
         return None
     stored = json.loads(value)
-    first, *rest = (_citation(snapshot) for snapshot in stored["citations"])
-    return Answered(stored["text"], (first, *rest)), tuple(stored["suggestions"])
+    return _answered(stored["text"], stored["citations"]), tuple(stored["suggestions"])
+
+
+def _cache_answer(cache: Cache, key: str, answer: Answered, suggested: Sequence[str]) -> None:
+    cache.set_many({key: json.dumps({"text": answer.text, "citations": [_snapshot(c) for c in answer.citations],
+                                     "suggestions": list(suggested)}).encode()}, ANSWER_TTL_S)
 
 
 def _store_turn(ctx: Ctx, turn_id: TurnId, chat_id: ChatId, question: str, standalone: str, answer: Answer,
@@ -379,8 +380,7 @@ def _row_to_turn(row: Mapping[str, Any]) -> Turn:
     outcome = TurnOutcome(row["outcome"])
     answer: Answer
     if outcome is TurnOutcome.ANSWERED:
-        citations = [_citation(snapshot) for snapshot in row["citations"]]
-        answer = Answered(row["answer"], (citations[0], *citations[1:]))
+        answer = _answered(row["answer"], row["citations"])
     else:
         answer = NotFound(outcome, row["answer"])
     return Turn(id=TurnId(row["id"]), chat_id=ChatId(row["chat_id"]), question=row["question"],
@@ -388,6 +388,12 @@ def _row_to_turn(row: Mapping[str, Any]) -> Turn:
                 finished_at=row["finished_at"],
                 usage=Usage(row["calls"], row["input_tokens"], row["output_tokens"], row["cost_usd"]),
                 suggestions=tuple(row["suggestions"]), cached=row["cached"])
+
+
+def _answered(text: str, snapshots: Sequence[Mapping[str, Any]]) -> Answered:
+    """An answer from its stored citation snapshots, of which an answered turn always has at least one."""
+    first, *rest = (_citation(snapshot) for snapshot in snapshots)
+    return Answered(text, (first, *rest))
 
 
 def _key_fact_labels(conn: Connection, documents: Sequence[DocRef]) -> list[list[str]]:

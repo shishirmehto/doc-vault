@@ -87,12 +87,15 @@ class Ctx:
     blobs: BlobStore
     jobs: Jobs
     limiter: RateLimiter = field(default_factory=RateLimiter)
-    cache: Cache = field(default_factory=Cache.off)   # the same object as ai.cache
+
+    @property
+    def cache(self) -> Cache:
+        return self.ai.cache
 
 
 def build_ctx(settings: Settings, jobs: Jobs) -> Ctx:
     """Called by the API lifespan and once per worker process."""
     db.migrate(settings.database_url)
     pool = db.open_pool(settings.database_url)
-    cache = Cache.from_url(settings.cache_url)
-    return Ctx(settings, pool, ai.build(settings, pool, cache), BlobStore(settings.storage_dir), jobs, cache=cache)
+    return Ctx(settings, pool, ai.build(settings, pool, Cache.from_url(settings.cache_url)), BlobStore(settings.storage_dir),
+               jobs)

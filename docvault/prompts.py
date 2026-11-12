@@ -177,13 +177,13 @@ def condense(history: Sequence[Turn], question: str) -> Prompt:
                   inputs={"history": tuple(history), "question": question})
 
 
-_REF_MARKER = re.compile(r"[ \t]*\[\d+\]")
+REF_MARKER = re.compile(r"[ \t]*\[\d+\]")   # a grounded answer's "[1]", and the spaces before it
 
 
 def _conversation(history: Sequence[Turn]) -> str:
     """Q/A pairs, oldest first. Citation markers are stripped: [1] labels one turn's citations and means
     nothing in another turn, where the sources are labelled afresh."""
-    pairs = "\n\n".join(f"Q: {turn.question}\nA: {_REF_MARKER.sub('', turn.answer.text)}" for turn in history)
+    pairs = "\n\n".join(f"Q: {turn.question}\nA: {REF_MARKER.sub('', turn.answer.text)}" for turn in history)
     return f"<conversation_so_far>\n{pairs}\n</conversation_so_far>"
 
 

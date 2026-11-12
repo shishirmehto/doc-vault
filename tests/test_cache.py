@@ -7,7 +7,7 @@ import dataclasses
 import logging
 import socket
 import struct
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from uuid import UUID
 
 import pytest
@@ -23,13 +23,12 @@ from docvault.domain import DocumentId, Purpose, VaultError
 from .conftest import FACTS, POLICY, SAMPLES, RecordingJobs, scalar
 from .test_ai import OWNER, ScriptedChat, gateway, rows
 from .test_ask_stream import LIMIT_QUESTION, events
-from .test_budget import capped, spent
+from .test_budget import NOW, capped, spent
 from .test_chat import ask, ledger, normalised, ready
 from .test_documents import FailingEmbedder, with_embedder
 from .test_insights import post, with_chat
 from .test_versions import TERMS, created, upload
 
-NOW = datetime(2030, 1, 15, 21, 30, tzinfo=UTC)
 FOLLOW_UP = "Do defence costs reduce it?"
 NO_CALLS = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
 
@@ -93,8 +92,8 @@ class MemoryPipeline:
 
 
 def with_cache(ctx, cache: Cache):
-    """ctx with one cache for both the answer cache and the gateway's embedding cache, as build_ctx makes it."""
-    return dataclasses.replace(ctx, cache=cache, ai=dataclasses.replace(ctx.ai, cache=cache))
+    """ctx whose gateway holds `cache`, which the answer cache reads through ctx.cache."""
+    return dataclasses.replace(ctx, ai=dataclasses.replace(ctx.ai, cache=cache))
 
 
 def memory_cache(ctx, client) -> tuple[Cache, MemoryRedis]:
@@ -160,10 +159,10 @@ def test_inside_the_skip_window_no_call_reaches_redis_and_after_it_the_next_call
 
 
 @pytest.mark.parametrize(("url", "probed"), [(None, "off"), ("redis://127.0.0.1:1/0", "unreachable")])
-def test_the_context_gives_the_gateway_the_same_cache_it_builds_from_cache_url(ctx, url, probed):
+def test_the_context_builds_its_cache_from_cache_url(ctx, url, probed):
     built = build_ctx(ctx.settings.model_copy(update={"cache_url": url}), RecordingJobs())
     try:
-        assert (built.cache.probe(), built.ai.cache is built.cache) == (probed, True)
+        assert built.cache.probe() == probed
     finally:
         built.db.close()
 
@@ -285,7 +284,7 @@ def test_the_same_first_question_in_a_new_chat_is_answered_from_the_cache_with_n
     assert respelled["question"] == "what is the EACH   occurrence limit?"
     assert ledger(ctx) == {first["id"]: ["embed_query", "answer"]}
     assert client.get(f"/chats/{again_chat}/messages").json()["turns"] == [again]
-    assert cache.stats() == CacheStats(embedding=Counts(hits=0, misses=1), answer=Counts(hits=2, misses=1), since=NOW)
+    assert cache.stats() == CacheStats(embedding=Counts(hits=0, misses=1), answer=Counts(hits=2, misses=1), counted_since=NOW)
     assert [ttl for key, ttl in server.ttls.items() if key.startswith("docvault:answer:")] == [30 * 24 * 3600]
 
 

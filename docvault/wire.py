@@ -566,7 +566,5 @@ def document_metrics_out(stats: DocumentStats) -> DocumentMetricsOut:
 
 
 def processing_metrics_out(window: str, stats: ProcessingStats, cache: CacheStats | None) -> ProcessingMetricsOut:
-    return ProcessingMetricsOut.model_validate({
-        "window": window, **dataclasses.asdict(stats),
-        "cache": None if cache is None else {"embedding": dataclasses.asdict(cache.embedding),
-                                             "answer": dataclasses.asdict(cache.answer), "counted_since": cache.since}})
+    return ProcessingMetricsOut.model_validate({"window": window, **dataclasses.asdict(stats),
+                                                "cache": None if cache is None else dataclasses.asdict(cache)})

@@ -230,19 +230,20 @@ class DailySpend:
     def __init__(self, clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
         self.clock = clock
         self._lock = threading.Lock()
-        self._read: tuple[datetime, datetime, Decimal] | None = None   # (read at, that day's midnight, usd)
+        self._read: tuple[datetime, Decimal] | None = None   # (read at, usd since that day's midnight)
 
     def today(self, ledger: Db) -> tuple[Decimal, datetime]:
         """The spend since midnight UTC and the time it was asked for."""
         now = self.clock()
-        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        midnight = _midnight(now)
         with self._lock:
-            if self._read is None or self._read[1] != midnight or (now - self._read[0]).total_seconds() >= SPEND_TTL_S:
+            if (self._read is None or _midnight(self._read[0]) != midnight
+                    or (now - self._read[0]).total_seconds() >= SPEND_TTL_S):
                 with ledger.connection() as conn:
                     usd = conn.execute("SELECT coalesce(sum(cost_usd), 0) AS usd FROM llm_calls WHERE at >= %s",
                                        (midnight,)).fetchone()["usd"]
-                self._read = (now, midnight, usd)
-            return self._read[2], now
+                self._read = (now, usd)
+            return self._read[1], now
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,7 +291,7 @@ class AI:
         spent, now = self.spend.today(self.ledger)
         if spent < limit:
             return
-        resets_at = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        resets_at = _midnight(now) + timedelta(days=1)
         details: dict[str, object] = {
             "limit_usd": float(limit), "spent_today_usd": float(spent), "resets_at": resets_at.isoformat(),
             "retry_after_s": max(1, math.ceil((resets_at - now).total_seconds()))}
@@ -443,6 +444,10 @@ def _dollars(amount: Decimal) -> str:
 
 def _elapsed_ms(started: float) -> int:
     return round((time.perf_counter() - started) * 1000)
+
+
+def _midnight(at: datetime) -> datetime:
+    return at.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 def _packed(vector: Vector) -> bytes:

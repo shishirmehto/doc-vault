@@ -39,7 +39,7 @@ class Counts:
 class CacheStats:
     embedding: Counts
     answer: Counts
-    since: datetime | None     # the first count's time; None before any
+    counted_since: datetime | None     # the first count's time; None before any
 
 
 class Cache:
