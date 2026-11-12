@@ -13,12 +13,12 @@ The service is a FastAPI app with Celery workers. Postgres 16 with pgvector is t
 ## Run it
 
 ```bash
-cp .env.example .env      # optional. With no key the stack runs on the fake provider.
+cp .env.example .env      # then set OPENAI_API_KEY in .env. With no key the stack runs on the fake provider.
 docker compose up --build -d
 curl localhost:8000/health
 ```
 
-`GET /health` returns 200 with `"ai_mode": "fake"` when no provider key is set. Swagger is at `http://localhost:8000/docs`. The web UI is at `http://localhost:3000`: upload documents, read their insights, chat with citations that open the cited page, and see the metrics. `web/README.md` describes it.
+`GET /health` returns 200 with `"ai_mode": "live"` when `OPENAI_API_KEY` is set, and `"ai_mode": "fake"` when it is not. Swagger is at `http://localhost:8000/docs`. The web UI is at `http://localhost:3000`: upload documents, read their insights, chat with citations that open the cited page, and see the metrics. `web/README.md` describes it.
 
 The app has no login, so compose publishes every port on `127.0.0.1`, and only this machine can reach the stack. `API_PORT`, `DB_PORT` and `WEB_PORT` change the host ports, so a second stack can run beside the first:
 
@@ -62,6 +62,23 @@ uv run ruff check
 ```
 
 `TEST_DATABASE_URL` points the tests at another database. The eval test also creates `<that name>_evals`.
+
+## Assumptions and design choices
+
+The app assumes:
+
+- The users are insurance brokers and their clients, and the documents are policies, quotes and endorsements in English.
+- Files are PDF, DOCX or TXT, at most 50 MB and 2,000 pages. A scanned PDF fails with `no_extractable_text`, because OCR is out of scope. A PDF that needs a password to open fails with `encrypted_pdf`.
+- DOCX and TXT have no reliable page numbers, so their citations name a section, not a page.
+- There is one vault and no login. Rate limits apply per client address.
+- A chat's documents are fixed when the chat starts. If one of them is deleted, the chat refuses new questions with 409 `documents_deleted`.
+
+The app uses neither LangChain nor LlamaIndex. Every citation must point at the page its words are on, and two steps in the code make that hold:
+
+- `pages.chunk` cuts the text into chunks and records the page of every character, so a chunk that crosses a page break still knows where each word came from.
+- `chat.ground` keeps a quoted passage only when `pages.locate_quote` finds it in the source the model named, and cites the page where that passage starts.
+
+Retrieval is one SQL statement, `chat.EXACT_SQL`, that ranks the chat's chunks by pgvector distance and Postgres full-text rank. A framework would put its own chunking and retrieval in place of these steps. Kept in the repo, each step has its own tests and can be explained line by line. `docs/design.md` covers the other choices.
 
 ## API
 
