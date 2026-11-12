@@ -389,8 +389,9 @@ Built:
 Known limits:
 
 - On the fake provider, the answer step often quotes a neighbouring passage: citation accuracy is 7 of 34 facts while retrieval finds 21 of 34. Broker-worded questions that share few words with the text are refused by the gate (`docs/evals.md` lists each).
-- The fake gate threshold (0.184) has a margin of 0.003 on each side on the eval set. The OpenAI threshold (0.25) is uncalibrated; `docs/evals.md` gives the command that calibrates it once a key is set.
-- The OpenAI backends are tested against canned HTTP responses only. They have not run against the live API. Streaming is tested against canned server-sent chunks only, and the comparison and summary calls against canned responses.
+- The fake gate threshold (0.184) has a margin of 0.003 on each side on the eval set. The OpenAI threshold (0.20) sits below the lowest answerable turn of the calibration run, so the gate refuses only off-topic questions and the answer step declines the rest (`docs/evals.md`).
+- The tests use canned HTTP responses for the OpenAI backends. One live run on 2026-11-12 covered the eval set and 19 public insurance documents, with streaming, suggestions, comparisons and summaries (`docs/evals.md`, `AI_USAGE.md`).
+- "Differs" in a comparison compares the cells' text, not their meaning, so two wordings of the same term are marked as different.
 - The fake provider simulates a model's pacing when it streams: it sends its finished answer a word at a time, 25 ms apart in compose (`FAKE_STREAM_DELAY_MS`). The plain route has no delay.
 - Insights read a page prefix that fits 240,000 characters. Longer documents report partial coverage; map-reduce over the rest is not built.
 - A key fact is checked only for its quote being on the cited page, not for its value appearing in the quote.

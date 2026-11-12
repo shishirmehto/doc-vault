@@ -19,13 +19,15 @@ DATABASE_URL=postgresql://vault:vault@localhost:54329/vault uv run python -m doc
 
 ## Calibrate the OpenAI gate
 
-`OpenAIEmbedder.min_similarity` (0.25) is uncalibrated. To calibrate it, run the eval with a key and read the `Best threshold` line:
+`OpenAIEmbedder.min_similarity` is 0.20, set from the calibration run of 2026-11-12. To calibrate it again, run the eval with a key and read the `Best threshold` line:
 
 ```bash
 OPENAI_API_KEY=sk-... DATABASE_URL=postgresql://vault:vault@localhost:54329/vault uv run python -m docvault.evals --calibrate
 ```
 
-Set `OpenAIEmbedder.min_similarity` to that value, then rerun with `--out docs/evals.md`. The gate reads only the embedder, so `CHAT_PROVIDER=fake` in front of the command limits the spend to embeddings. The follow-up turns then use the fake condense, which rewrites them differently from the live model.
+The gate reads only the embedder, so `CHAT_PROVIDER=fake` in front of the command limits the spend to embeddings. The follow-up turns then use the fake condense, which rewrites them differently from the live model.
+
+The 2026-11-12 run did not use the best-fit value. Answerable turns scored 0.239 to 0.606 and out-of-scope turns 0.257 to 0.514, so the classes overlap and no threshold separates them. The best fit, 0.518, put 32 of 44 turns on the right side, but it refused 12 of the 28 answerable turns. A refused answerable question costs a broker more than one answer call, so the threshold sits below the lowest answerable turn, at 0.20. The gate then refuses only off-topic questions, and the answer step declines the rest: 15 of 16 out-of-scope turns came back `not_found` on the live run. Once `.env` holds a key, add `CHAT_PROVIDER=fake EMBED_PROVIDER=fake` in front of the eval command to keep a run free.
 
 ## What each number means
 
@@ -83,11 +85,28 @@ Read that margin as a warning, not a result. The fake embedder hashes words, so 
 - "How does the deductible differ between the two?" stays `no_evidence`. Its other words ("differ", "two") are in no chunk, so nothing matches every term, and its best similarity is 0.066.
 - "CG 21 47 Employment-Related Practices Exclusion" is on page 3 (the schedule) and, as a heading, on page 7. The case asks about the schedule, and a page 7 citation scores as a miss.
 - Some out-of-scope questions can be answered by inference ("no flood limit is listed"). Review not-found misses by hand after a live run.
-- The fake comparison aligns fields only when two or more documents use the same label, so the premium change ("Total Advance Premium: $18,450" on the policy's page 1, "Total Annual Premium $21,900" on the quote's page 2) gets no row: the one difference-recall miss. A live model is asked to line up fields by meaning and should catch it, but no live run has measured that.
+- The fake comparison aligns fields only when two or more documents use the same label, so the premium change ("Total Advance Premium: $18,450" on the policy's page 1, "Total Annual Premium $21,900" on the quote's page 2) gets no row: the one difference-recall miss. A live model lines up fields by meaning, and the live run found the premium change.
 - The fake also marks Estimated Annual Payroll and Rate per $1,000 of Payroll as different. Both are real differences, but `facts.yaml` does not plant them, so they count in no number. There is no precision score for differences beyond the one equal field.
 - Under the fake, suggestions are "What is the <label>?" for label-and-value passages, so they repeat across cases ("What is the Policy Number?" follows most policy questions) and 108 of 108 answered says that a label's words find its passage, not that the questions are good ones. A live run measures the model's own follow-ups.
 
 ## Results
+
+**Live run (2026-11-12, the configured OpenAI models).** One run of the full case set with a key cost $1.18 on the ledger. The results block below is still the fake run, which `tests/test_evals.py` pins and which needs no key.
+
+| Number | Live | Fake |
+|---|---|---|
+| Retrieval hit rate | 34/34 (100%) | 21/34 (62%) |
+| Citation accuracy | 30/34 (88%) | 7/34 (21%) |
+| Not-found accuracy | 15/16 (94%) | 15/16 (94%) |
+| Key-fact grounding | 36/36 (100%) | 31/31 (100%) |
+| Key-fact recall | 19/28 (68%) | 12/28 (43%) |
+| Suggestions answered | 90/90 (100%) | 108/108 (100%) |
+| Cell grounding | 45/45 (100%) | 24/24 (100%) |
+| Difference recall | 4/4 (100%) | 3/4 (75%) |
+| Summary source grounding | 54/54 (100%) | 36/36 (100%) |
+| p95 turn latency | 7.3 s | under 20 ms |
+
+The four citation misses are the two turns in `aggregate-then-medical`. The answers are right ("from $2,000,000 to $3,000,000", "from $5,000 to $10,000"), but they cite the quote's change list on page 3, as Known limits predicts. The one not-found miss is the flood question in `insured-then-fired-employee`. The answer says the documents do not establish flood cover, and it counts as answered because it cites the coverage grant.
 
 **Comparisons (2026-11-11, compare-v1).** The comparison adds one `compare` call to the spend and moves no other number. On the policy and the renewal quote the fake returns 12 rows, all 24 cells grounded. It finds 3 of the 4 planted changes, all on page 2, and keeps the each-occurrence limit equal. `tests/test_evals.py` pins these numbers.
 

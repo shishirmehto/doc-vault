@@ -99,6 +99,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 | After a delete, a capped document list shrank and stayed short | An independent review agent. The list now reads again after a delete |
 | The visibility check called every page link in a wide comparison table unreachable | A probe that reached every link. The check was fixed, and its negative probes still fail as they should |
 | The fix for doubled bold text would also have halved template placeholders, so "YYYY" read "YY" | The lead agent ran the new extraction on the real documents before accepting it. The flood manual has seven "YYYY" date fields |
+| The calibration's best-fit gate threshold (0.518) would have refused 12 of 28 answerable questions | The lead agent tabulated how many answerable and out-of-scope turns each threshold passes, and set 0.20, below the lowest answerable turn |
 | The first citation check on real documents flagged correct quotes as off the page | Reading the pages: the reference reader's layout mode had merged two columns. The check switched to reading order and word overlap |
 
 ## AI inside the product
@@ -126,11 +127,26 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 
 ## Limits
 
-- The OpenAI path has been tested against recorded responses only. It needs one run with a real key, covering:
-  - streamed answers and follow-up suggestions;
-  - comparisons and rewritten summaries, with their 90 s limits;
-  - the relevance threshold for its embeddings, calibrated with the command in `docs/evals.md`.
-- The eval numbers in `docs/evals.md` come from the fake provider. They measure the plumbing (retrieval, grounding, refusals, comparison grounding), not answer quality. The fake lines up only identical field labels, so it misses the premium in the demo comparison, where the two documents label it differently. On real policy wordings its comparison rows are noise, so comparison quality on real documents is untested until the live run.
+One live run with the OpenAI key, on 2026-11-12, cost $3.17 on the ledger. It covered:
+- **The eval set:** the numbers are in `docs/evals.md`, live and fake side by side.
+- **The 19 real documents.** Before any paid call, the lead agent wrote the expected answer and page for 31 broker questions from the documents' own text. Five of the questions have no answer in their document.
+  - 28 answers were right.
+  - 3 were partial and said what the excerpts did not show:
+    - the waiting period in the 246-page manual was not retrieved;
+    - two answers on ransomware cover missed that remediation costs include extortion costs.
+  - No answer invented a figure. That held on a certificate whose limits are blank and on each question with no answer in its document.
+  - Every citation was on the page it named.
+- **Other features on the real documents:**
+  - 7 comparisons took 15 to 28 s, inside the 90 s limit, with 1 cell dropped out of about 320;
+  - 4 summaries took 4 to 16 s, at the requested lengths and focus, with no source dropped;
+  - streamed answers arrived in about 90 pieces, the first after 2.7 s.
+
+What the run left open:
+- "Differs" in a comparison compares the cells' text, not their meaning. Two editions of one wording, which say the same thing in different words, are marked as different.
+- Retrieval sends eight passages to the answer step. On the 246-page manual, the passage that answered one question was not among them.
+- A word broken at a line end, with a stray space inside it, stays split ("se t-tlements") when the document never uses it whole. That happens in the oldest standard forms.
+- Insights read the first 240,000 characters, so they cover only part of the longest document.
+- The eval's case set was written for the sample documents. The 31 real-document questions are a hand-graded spot check, not a scored set.
 
 ## Reproduce the checks
 
