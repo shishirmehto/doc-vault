@@ -139,14 +139,14 @@ def _undouble_token(match: re.Match[str]) -> str:
 
 
 _WORD = re.compile(r"[^\W\d_]+")
-_LINE_END_HYPHEN = re.compile(r"([^\W\d_]+)-\n([^\W\d_]+)")
+_LINE_END_HYPHEN = re.compile(r"([^\W_]+)-\n([^\W\d_]+)")
 
 
 def _join_line_end_hyphens(texts: list[str]) -> list[str]:
     """Rejoin words that a PDF hyphenated at a line end: pypdf reads "infor-\\nmation". When the next line starts
     with a lower-case letter, the halves become one word if the document uses that word elsewhere, and keep the
-    hyphen otherwise, as in "single-family". The line break goes either way. The vocabulary is the whole document,
-    but no join crosses a page, so every quote stays on the page it was found on."""
+    hyphen otherwise, as in "single-family" or "30-day". The line break goes either way. The vocabulary is the whole
+    document, but no join crosses a page, so every quote stays on the page it was found on."""
     vocabulary = {word.lower() for text in texts for word in _WORD.findall(text)}
 
     def join(match: re.Match[str]) -> str:

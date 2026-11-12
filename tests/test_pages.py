@@ -209,13 +209,13 @@ def test_a_word_split_at_a_line_end_joins_when_the_document_uses_it_whole_and_ne
     path = text_pdf(
         tmp_path / "columns.pdf",
         ["We rely on the infor-", "mation you gave us, on the single-", "family dwelling and on the Policy-",
-         "Holder named above. See the defini-"],
+         "Holder named above. Give us 30-", "day notice. See the defini-"],
         ["tions of these words: information, definitions."],
     )
     doc = pages.extract(DocKind.PDF, path, max_pages=10)
     assert [p.text for p in doc.pages] == [
         "We rely on the information you gave us, on the single-family dwelling and on the Policy-\nHolder named above. "
-        "See the defini-",
+        "Give us 30-day notice. See the defini-",
         "tions of these words: information, definitions.",
     ]
 
