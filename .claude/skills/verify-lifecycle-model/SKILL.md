@@ -40,9 +40,9 @@ Run `git diff <sync commit> -- docvault/documents.py docvault/db.py docvault/tas
 
 Each model step is one atomic step in the code: one SQL statement, one transaction, or one lock call. `StartParse` and `ResumeEmbed` fold the row read into the compare-and-swap. That is sound because `parsed` changes only under the lease and the compare-and-swap re-checks `status`.
 
-**Sync commit:** `b5c649c`. The model was last confirmed against the code at this commit. Move it forward only after you have read every changed covered function and confirmed the model still describes it.
+**Sync commit:** `595bc6c`. The model was last confirmed against the code at this commit. Move it forward only after you have read every changed covered function and confirmed the model still describes it.
 
-It moved from `7f83e9c` with request logs and caches (`e93b3c4`, `b5c649c`). Between the two, `db.py` changed only in `PipelineSteps.record` and `_close`, which now log one line per closed step, `tasks.py` gained Celery signal receivers that carry the request id and configure logging, and `schema.sql` added `llm_calls.request_id` with its index and `chat_turns.cached`. `pg_try_advisory_lock`, the step rows' SQL, the delivery settings, `index_document` and `documents.py` did not change, and `check.py` and `--mutants` both passed at each of the two commits.
+It moved from `b5c649c` with the final quality pass (`8fddf2c`, `93aaeee`, `595bc6c`). Between the two, `documents.py` lost comments outside the covered functions, gained `ready_documents` and `documents_not_found` (moved from `chat.py`), renamed `_not_found` to `not_found`, and `list_documents` returns `db.next_cursor`; `db.py` gained `next_cursor`. Every covered symbol (`TRANSITIONS`, `sources_of`, `transition`, `_move`, `run_index`, `_index`, `_parse`, `_embed_pending_chunks`, `MAX_RETRIES`, `retry`, `reconcile`, `pipeline_steps`, `PipelineSteps`) has the same AST as at `b5c649c`, docstrings included, `tasks.py` and `schema.sql` did not change, and `check.py` and `--mutants` both passed at each of the three commits.
 
 ## Run
 
