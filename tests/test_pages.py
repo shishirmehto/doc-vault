@@ -179,13 +179,11 @@ def aes_pdf(tmp_path, user_password: str):
     return path
 
 
-@pytest.mark.xfail(strict=True, reason="no AES backend: pypdf raises DependencyError")
 def test_an_aes_pdf_that_opens_without_a_password_is_read(tmp_path):
     doc = pages.extract(DocKind.PDF, aes_pdf(tmp_path, user_password=""), max_pages=10)
     assert [(p.number, p.text) for p in doc.pages] == [(1, "Each Occurrence Limit: $1,000,000"), (2, "Second page text.")]
 
 
-@pytest.mark.xfail(strict=True, reason="no AES backend: pypdf raises DependencyError")
 def test_an_aes_pdf_that_needs_a_password_to_open_is_refused_as_encrypted(tmp_path):
     with pytest.raises(VaultError) as raised:
         pages.extract(DocKind.PDF, aes_pdf(tmp_path, user_password="reader-secret"), max_pages=10)

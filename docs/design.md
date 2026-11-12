@@ -173,6 +173,7 @@ Measured on an isolated stack: an upload sent with `X-Request-ID: phase-f-trace-
 
 - The users are insurance brokers and their clients, and the documents are policies, quotes and endorsements in English. The full-text configuration is `english`.
 - Files are PDF, DOCX or TXT, at most 50 MB and 2,000 pages. Scanned PDFs fail with `no_extractable_text`, because OCR is out of scope.
+- A PDF that anyone can open is read, whatever its encryption. Many insurer PDFs carry AES-256 with only an owner password, which restricts editing, so the image installs `pypdf[crypto]`. A PDF that needs a password to open fails with `encrypted_pdf`.
 - DOCX and TXT have no reliable page numbers, so they are cut into sections and cited as "section n", never "p. n".
 - One vault, one tenant, no authentication. Rate limits are per client address.
 - A chat's documents are fixed when it starts. A deleted document makes its chats refuse new questions (409 `documents_deleted`) instead of answering from fewer documents.
