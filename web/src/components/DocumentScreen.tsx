@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
 import { api } from "@/api/client";
 import type {
   ApiError, Doc, DocumentId, Insights, KeyFact, PaneRequest, Result, Selection, SummaryId, SummaryList,
@@ -54,6 +54,8 @@ export function DocumentScreen({
   const rewrites = useRewrites(id, cite, () => replace({ kind: "doc", doc: id, pane: null }));
   const versions = useVersions(doc);
   const [listOpen, setListOpen] = useState(false);
+  const [askRefused, setAskRefused] = useState<ApiError | null>(null);
+  const disclosure = useRef<HTMLElement>(null);
   const running = useCompareRun().phase === "running";
 
   if (!doc) {
@@ -76,6 +78,14 @@ export function DocumentScreen({
     const columns = [doc, other].sort((a, b) => a.version.number - b.version.number);
     onCompareVersions({ documents: columns.map((d) => ({ id: d.id, filename: withVersion(d.filename, d.version.number) })), focus: null });
   };
+  // Opens the disclosure under the summary and brings it to the top of the column, so its form shows under it.
+  const openRewrite = () => {
+    rewrites.setOpen(true);
+    disclosure.current?.focus({ preventScroll: true });
+    disclosure.current?.scrollIntoView({ block: "start" });
+  };
+  const ready = doc.lifecycle.status === "ready";
+  const versionCount = family ? family.others.length + 1 : 0;
 
   return (
     <>
@@ -87,7 +97,17 @@ export function DocumentScreen({
               {docMeta(doc)}
               {doc.processingMs !== null && `, processed in ${formatMs(doc.processingMs)}`}
             </p>
-            {hasVersions(doc) && <VersionLine doc={doc} versions={versions} family={family} onOpen={openVersion} />}
+            {hasVersions(doc) && (
+              <VersionLine doc={doc} versions={versions} family={family} onOpen={openVersion}>
+                {other && (
+                  <button type="button" className="text-button" aria-disabled={compareWhy ? true : undefined}
+                    aria-describedby={compareWhy ? "compare-version-why" : undefined} onClick={compareVersions}>
+                    Compare with version {other.version.number}
+                  </button>
+                )}
+              </VersionLine>
+            )}
+            {compareWhy && <p className="quiet" id="compare-version-why">{compareWhy}</p>}
             {doc.version.number < doc.version.latest && (
               <NewerVersionNote doc={doc} newest={family?.newest ?? null} onOpen={openVersion} />
             )}
@@ -100,43 +120,43 @@ export function DocumentScreen({
             {doc.lifecycle.status === "failed" && (
               <FailureNote failure={doc.lifecycle.failure} onRetry={() => onRetry(id)} />
             )}
+            {/* One bar: what to do with the document, then, set apart and quieter, what to do to the file. */}
             <div className="doc-actions">
-              {doc.lifecycle.status === "ready" && (
-                <>
-                  <AskButton onAsk={() => onAsk(id)} />
-                  <button type="button" className="button secondary" onClick={() => push({ kind: "compare", with: id })}>
-                    Compare with...
+              <div className="doc-actions-use">
+                {ready && (
+                  <>
+                    <AskButton onAsk={() => onAsk(id)} onRefused={setAskRefused} />
+                    <button type="button" className="button secondary" onClick={() => push({ kind: "compare", with: id })}>
+                      Compare with...
+                    </button>
+                    <button type="button" className="button secondary" onClick={openRewrite}>Rewrite the summary</button>
+                  </>
+                )}
+                {doc.layout && doc.lifecycle.status !== "failed" && (
+                  <button type="button" className="button secondary" onClick={() => push({ kind: "doc", doc: id, pane: { kind: "page", page: 1 } })}>
+                    Read the {unitName(doc.layout.unit, 2)}
                   </button>
-                </>
-              )}
-              {other && (
-                <button type="button" className="button secondary" aria-disabled={compareWhy ? true : undefined}
-                  aria-describedby={compareWhy ? "compare-version-why" : undefined} onClick={compareVersions}>
-                  Compare with version {other.version.number}
-                </button>
-              )}
-              {doc.layout && doc.lifecycle.status !== "failed" && (
-                <button type="button" className="text-button" onClick={() => push({ kind: "doc", doc: id, pane: { kind: "page", page: 1 } })}>
-                  Read the {unitName(doc.layout.unit, 2)}
-                </button>
-              )}
-              {family && family.others.length > 0 && (
-                <button type="button" className="text-button" aria-expanded={listOpen} aria-controls="version-list"
-                  onClick={() => setListOpen(!listOpen)}>
-                  Versions ({family.others.length + 1})
-                </button>
-              )}
-              <UploadVersion onFiles={onUploadVersion} />
-              <DeleteDocument doc={doc} otherVersions={(family?.others.length ?? 0) > 0} onDelete={() => onDelete(doc)} />
+                )}
+                {versionCount > 1 && (
+                  <button type="button" className="button secondary" aria-expanded={listOpen} aria-controls="version-list"
+                    onClick={() => setListOpen(!listOpen)}>
+                    Versions ({versionCount})
+                  </button>
+                )}
+              </div>
+              <div className="doc-actions-file">
+                <UploadVersion onFiles={onUploadVersion} />
+                <DeleteDocument doc={doc} otherVersions={versionCount > 1} onDelete={() => onDelete(doc)} />
+              </div>
             </div>
-            {compareWhy && <p className="quiet" id="compare-version-why">{compareWhy}</p>}
-            {listOpen && family && family.others.length > 0 && (
+            {askRefused && <p className="row-message" data-tone="failed" role="alert">{explain(askRefused)}</p>}
+            {listOpen && family && versionCount > 1 && (
               <VersionList id="version-list" doc={doc} family={family} onOpen={openVersion} />
             )}
           </header>
           <InsightsPanel doc={doc} result={insights.result} reload={insights.reload} activeFact={citedFact(pane)}
             onOpenFact={openFact} onRetry={() => onRetry(id)}
-            rewrite={doc.lifecycle.status === "ready" && <SummaryRewrite rewrites={rewrites} cite={cite} onOpenSource={openSource} />} />
+            rewrite={ready && <SummaryRewrite rewrites={rewrites} cite={cite} onOpenSource={openSource} disclosure={disclosure} />} />
         </article>
       </main>
       {pane && <SourcePane view={sourceView(doc, pane, insights.result, rewrites.paneList)}
@@ -161,22 +181,18 @@ function sourceView(doc: Doc, pane: PaneRequest, insights: Result<Insights> | nu
   return { kind: "page", doc, page, mark, citedPage: fact.source.page };
 }
 
-function AskButton({ onAsk }: { onAsk(): Promise<ApiError | null> }) {
+/** The refusal goes to `onRefused`, which shows it under the bar rather than inside the row. */
+function AskButton({ onAsk, onRefused }: { onAsk(): Promise<ApiError | null>; onRefused(error: ApiError | null): void }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
   const ask = async () => {
     setBusy(true);
-    const refused = await onAsk();
-    setError(refused);
+    onRefused(await onAsk());
     setBusy(false);
   };
   return (
-    <>
-      <button type="button" className="button" disabled={busy} onClick={() => void ask()}>
-        {busy ? "Starting a chat" : "Ask about this document"}
-      </button>
-      {error && <p className="row-message" data-tone="failed">{explain(error)}</p>}
-    </>
+    <button type="button" className="button" disabled={busy} onClick={() => void ask()}>
+      {busy ? "Starting a chat" : "Ask about this document"}
+    </button>
   );
 }
 
@@ -218,7 +234,7 @@ function InsightsPanel({ doc, result, reload, activeFact, onOpenFact, onRetry, r
         </section>
       );
     case "unavailable":
-      return <section className="insights"><p className="notice">{insights.reason}</p></section>;
+      return <section className="insights"><p className="notice">{insights.reason}</p>{slot}</section>;
     case "failed":
       return (
         <section className="insights">

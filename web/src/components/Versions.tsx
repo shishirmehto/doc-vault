@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import type { Doc, DocumentId } from "@/api/domain";
 import type { Versions } from "@/hooks/useVersions";
 import type { Family } from "@/lib/versions";
@@ -14,8 +14,17 @@ function VersionLink({ doc, onOpen, children }: { doc: Doc; onOpen: Open; childr
   return <InAppLink to={{ kind: "doc", doc: doc.id, pane: null }} onFollow={() => onOpen(doc.id)}>{children}</InAppLink>;
 }
 
-/** "Version 2 of 2. Earlier version: version 1." The links come once the family is read. */
-export function VersionLine({ doc, versions, family, onOpen }: { doc: Doc; versions: Versions; family: Family | null; onOpen: Open }) {
+/**
+ * "Version 2 of 2. Earlier version: version 1." The links come once the family is read, and `children`, the compare
+ * with another version, after them.
+ */
+export function VersionLine({ doc, versions, family, onOpen, children }: {
+  doc: Doc;
+  versions: Versions;
+  family: Family | null;
+  onOpen: Open;
+  children?: ReactNode;
+}) {
   const others = family?.others ?? [];
   return (
     <p className="doc-version">
@@ -37,6 +46,7 @@ export function VersionLine({ doc, versions, family, onOpen }: { doc: Doc; versi
           ))}
         </>
       )}
+      {children && <> {children}</>}
     </p>
   );
 }
@@ -73,7 +83,7 @@ export function UploadVersion({ onFiles }: { onFiles(files: File[]): void }) {
   const input = useRef<HTMLInputElement>(null);
   return (
     <>
-      <button type="button" className="text-button" onClick={() => input.current?.click()}>Upload a new version</button>
+      <button type="button" className="text-button quiet-action" onClick={() => input.current?.click()}>Upload a new version</button>
       <input
         ref={input}
         type="file"

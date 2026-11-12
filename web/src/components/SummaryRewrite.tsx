@@ -17,17 +17,19 @@ const LONG_AFTER_MS = 5000;
  * The document's summary written again at another length, about one topic, or for the reader's client: the options,
  * the request in flight, the summary shown with a page tab per source, and the summaries made before.
  */
-export function SummaryRewrite({ rewrites, cite, onOpenSource }: {
+export function SummaryRewrite({ rewrites, cite, onOpenSource, disclosure }: {
   rewrites: Rewrites;
   cite: SummaryCite | null;
   onOpenSource(summary: SummaryId, index: number): void;
+  /** The disclosure's summary line, which the action bar's "Rewrite the summary" moves focus to. */
+  disclosure: Ref<HTMLElement>;
 }) {
   const { run, shown, landed } = rewrites;
   const submit = useRef<HTMLButtonElement>(null);
   const retry = useWorthRetrying(run.kind === "failed" ? run.error : null);
   return (
     <details className="rewrite" open={rewrites.open} onToggle={(e) => rewrites.setOpen(e.currentTarget.open)}>
-      <summary>Rewrite the summary</summary>
+      <summary ref={disclosure}>Rewrite the summary</summary>
       <div className="rewrite-body">
         <p className="quiet">{REWRITE_LEAD}</p>
         <RewriteForm rewrites={rewrites} submit={submit} />

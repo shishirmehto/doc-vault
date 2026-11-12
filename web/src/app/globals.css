@@ -104,9 +104,10 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
   border: 0; background: none; padding: 0; color: var(--carbon); font-weight: 600; cursor: pointer;
   text-underline-offset: 3px; justify-self: start;
 }
-.text-button:hover:not(:disabled) { text-decoration: underline; }
+.text-button:hover:not(:disabled, [aria-disabled="true"]) { text-decoration: underline; }
 .text-button:disabled { color: var(--graphite); cursor: default; }
 .text-button.quiet-action { color: var(--graphite); }
+.text-button[aria-disabled="true"] { color: var(--graphite); cursor: not-allowed; }
 /* Stamp marks failures, and the one action that cannot be undone. */
 .button.danger { background: var(--stamp); }
 .button.danger:hover:not(:disabled) { background: #8a2923; }
@@ -389,11 +390,15 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ------------------------------------------------------------- document */
 
-.document { max-width: 68ch; display: grid; gap: var(--s6); }
+/* The text keeps its 68ch measure; the action bar may run the column's full width, so it holds one row on a wide screen. */
+.document { display: grid; gap: var(--s6); }
+.document > .insights, .doc-header > :not(.doc-actions) { max-width: 68ch; }
 .doc-header { display: grid; gap: var(--s2); }
 .doc-meta { color: var(--graphite); font-variant-numeric: tabular-nums; }
-.doc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s4); margin-top: var(--s2); }
-.doc-actions .quiet-action { margin-left: auto; }
+/* What to do with the document, then, set apart by space and a quieter graphite, what to do to the file. */
+.doc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s8); margin-top: var(--s2); }
+.doc-actions-use { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.doc-actions-file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s4); }
 .doc-status { display: grid; gap: 2px; }
 /* Versions. The line reads like a form's edition notice; an earlier version carries a carbon margin rule, because the
    note points at another document, as carbon points at a source everywhere else. */
@@ -419,7 +424,7 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* The summary written again for another reader: a disclosure under the summary that reads as a text button, its
    options on one row that wraps, and the result on the key-facts schedule's white paper. */
-.rewrite > summary { width: fit-content; font-weight: 600; cursor: pointer; }
+.rewrite > summary { width: fit-content; font-weight: 600; cursor: pointer; scroll-margin-top: var(--s4); }
 .rewrite > summary:hover { color: var(--carbon); }
 .rewrite-body { display: grid; gap: var(--s4); margin-top: var(--s3); }
 .rewrite h3 { margin: 0; font-size: var(--t-ui); font-weight: 600; }
