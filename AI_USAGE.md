@@ -20,10 +20,29 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
    - phase 1: scaffold, parsing, crash-safe indexing;
    - phase 2: the AI gateway, insights, chat;
    - phase 3: metrics, hardening, evals, the demo script, the docs;
-   - the web UI, in three passes, then a design pass.
+   - the web UI, in three passes, then a design pass;
+   - the bonus features, one phase each, in this order:
+     - streamed answers and follow-up suggestions;
+     - a UI audit pass;
+     - live document status;
+     - side-by-side comparison;
+     - summary options;
+     - document versions;
+     - caching, a daily spending cap and request logs;
+     - a final UI pass that brought every feature into one layout;
+   - a quality pass (`/simplify` and a comment review) over the bonus phases that had skipped it.
+
+   The phases ran one at a time because they shared files, the dev stack and the test database.
 4. **Parallel work without collisions.** The UI was built on its own branch in a separate git worktree, at the same time as the backend agent worked on `main`. The UI agents used the running API read-only and never restarted containers.
 5. **Independent acceptance.** Before accepting a phase, the lead agent reran the full test suite. It also asked the live API its own questions and compared the answers with `samples/facts.yaml`, and it used the UI in a browser. Several findings below came from this step.
-6. **Decision log.** Every decision went into a log with what was decided, why, the evidence and the result. The log holds more than 40 decisions and is kept outside the repo.
+
+   For the bonus phases, the lead agent drove each feature itself on the running stack before accepting it:
+   - it uploaded a file with `curl` and watched it reach Ready in an open browser with no reload;
+   - it compared the policy with its renewal quote and opened a cell's page;
+   - it rewrote a summary twice and counted the ledger rows;
+   - it uploaded a second version under the same name;
+   - it asked one first question in two chats and checked that the second made no model call.
+6. **Decision log.** Every decision went into a log with what was decided, why, the evidence and the result. The log holds more than 70 decisions and is kept outside the repo.
 
 ## Verification beyond unit tests
 
@@ -32,6 +51,18 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 - **An app verification skill** (`.claude/skills/verify-doc-vault/`). It starts an isolated stack on its own ports and volumes, checks it, and drives each feature through the public API or the browser. It saves the evidence and removes only what it started. Its first run found two bugs in its own health-check script, and both were fixed before it was committed.
 - **Evals** (`docs/evals.md`). Retrieval, citations, refusals and insights are scored separately, so a miss shows the step where it happened. The relevance threshold was fitted on a frozen case set, never on a single question.
 - **UI runs** with Playwright, with screenshots and a log of every input event, so a stray click could not pass as a result.
+- **A visibility check on every screen** (`.claude/skills/verify-doc-vault/scripts/visible.js`). It runs in the page and lists:
+  - any text clipped by overflow, ellipsis or line clamps;
+  - any control that sits off screen where no scroll container can reach it;
+  - any sideways page scroll.
+
+  The final UI pass ran it on 53 screens at four window sizes, on the dev stack and on a fresh one, and it returned nothing on any of them. Keyboard-only walks checked that every control in the top bar, the document actions and the comparison table takes focus with a visible ring.
+- **Behaviour pinned during the clean-up.** Before the quality pass changed any code, it saved:
+  - a byte-level dump of the API schema and the rendered prompts;
+  - the eval results;
+  - each screen's element layout.
+
+  After every commit, all three were unchanged, apart from one animation frame.
 
 ## Where the AI was wrong, and what caught it
 
@@ -46,6 +77,14 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 | A UI agent saw the page change while it was not touching it | An idle watcher with input logging showed that no code path did it. The cause was a click in the visible test browser |
 | The verification skill's health check printed FAIL after every OK, and one recipe expected progress on a finished document | Running the skill once, end to end, before committing it |
 | Below 1100 px wide, the chat's question box covered the source page it had just opened | The design pass, which checked each screen in a browser at 1024 px and on a phone |
+| The question box disappeared in my own browser on a chat with three turns, and the lead agent could not reproduce it | Anything placed above the app, such as a browser extension's bar or a margin on the page, pushed the box off screen. The UI audit pass reproduced this by injecting such elements and rebuilt the layout so the content scrolls above a fixed footer row |
+| Streamed answers arrived all at once at the end | Measuring the gap between pieces through the web server: its rewrite compressed the stream. The API now marks the stream as not to be transformed |
+| While changing comparisons, a fixer agent removed the repair turn for insights | The phase owner's review of the fixer's diff. A table test now pins every AI purpose's retries, repair and timeout |
+| An owner agent rewrote its own commit messages after the fact | The lead agent's history check. Later briefs forbid history rewrites |
+| An owner agent ran out of room and left a helper writing uncommitted code | The lead agent waited for the helper to finish, then started a fresh owner with one consolidated brief, so two agents never wrote the same files |
+| The spending-cap docs said search keeps working over the cap, but chat is the only search, and it is capped | The second owner of that phase. The docs now say uploads are still indexed |
+| After a delete, a capped document list shrank and stayed short | An independent review agent. The list now reads again after a delete |
+| The visibility check called every page link in a wide comparison table unreachable | A probe that reached every link. The check was fixed, and its negative probes still fail as they should |
 
 ## AI inside the product
 
@@ -55,17 +94,28 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 - **Follow-ups.** Each follow-up is rewritten into a standalone question, which is stored and returned as `interpreted_as`.
 - **Ledger.** Every provider call is written to an append-only ledger with its tokens and cost. The metrics endpoints read it, so cost and latency are measured, not estimated.
 - **Fake provider.** A deterministic fake makes the tests, the evals and a no-key run possible.
+- **Streaming.** Answers stream as they are written. The grounded answer replaces the draft once it has been checked.
+- **Comparisons.** Every comparison cell must quote its page, or it is dropped. Whether two values differ is computed in code, not by the model.
+- **Rewritten summaries** keep only the sources found on their pages.
+- **Caches** are keyed by content. Embeddings are keyed by the exact text, and answers by every input that shapes them, so a cached answer can never be stale.
+- **A daily spending cap** refuses new generation once the day's measured spend reaches it.
+- **Request ids.** Every request gets an id that follows it into background jobs and onto every ledger row it caused.
 
 ## What I decided
 
 - The scope, and the decisions in the plan.
 - The model-per-role sheet for the agents.
 - Adding the web UI, the lifecycle chart as documentation, the verification skills, and the F1 fix.
+- Adding all the bonus features, and the rule that everything in the UI must be visible: nothing clipped, hidden, or reachable only by URL.
+- No paid model calls until a key was provided. Everything ran on the fake provider until then.
 
 ## Limits
 
-- The OpenAI path has been tested against recorded responses only. It needs one run with a real key, and the relevance threshold for OpenAI embeddings needs calibrating with the command in `docs/evals.md`.
-- The eval numbers in `docs/evals.md` come from the fake provider. They measure the plumbing (retrieval, grounding, refusals), not answer quality.
+- The OpenAI path has been tested against recorded responses only. It needs one run with a real key, covering:
+  - streamed answers and follow-up suggestions;
+  - comparisons and rewritten summaries, with their 90 s limits;
+  - the relevance threshold for its embeddings, calibrated with the command in `docs/evals.md`.
+- The eval numbers in `docs/evals.md` come from the fake provider. They measure the plumbing (retrieval, grounding, refusals, comparison grounding), not answer quality. The fake lines up only identical field labels, so it misses the premium in the demo comparison, where the two documents label it differently.
 
 ## Reproduce the checks
 
