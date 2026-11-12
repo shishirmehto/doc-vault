@@ -465,6 +465,7 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .comparison { display: grid; gap: var(--s4); padding-bottom: var(--s8); }
 .comparison-header { display: grid; gap: var(--s2); max-width: 68ch; }
 .comparison-header h1 { font-size: var(--t-h1-list); letter-spacing: -0.01em; }
+.comparison-header h1:focus { outline: none; }
 .only-differences { display: flex; align-items: center; gap: var(--s2); justify-self: start; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
 .only-differences input { accent-color: var(--carbon); margin: 0; width: 15px; height: 15px; }
 

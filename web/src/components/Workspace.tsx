@@ -76,8 +76,10 @@ export function Workspace() {
 
   const [deleted, setDeleted] = useState<string | null>(null);
   const [screen, setScreen] = useState(selection.kind);
+  const [arrived, setArrived] = useState(false);
   if (screen !== selection.kind) {
     setScreen(selection.kind);
+    setArrived(true);
     if (selection.kind !== "none") setDeleted(null);
   }
 
@@ -136,7 +138,7 @@ export function Workspace() {
       case "comparison":
         return (
           <ComparisonScreen key={selection.comparison} id={selection.comparison} docs={docs} pane={selection.pane}
-            only={selection.only} push={push} replace={replace} />
+            only={selection.only} arrived={arrived} push={push} replace={replace} />
         );
       case "doc":
         return (
