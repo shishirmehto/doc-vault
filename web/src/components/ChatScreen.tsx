@@ -12,6 +12,7 @@ import { threads, useThread } from "@/hooks/useThread";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { citedPageView } from "@/lib/citedPage";
 import type { LookedUp } from "@/lib/docList";
+import { stillFollowing } from "@/lib/follow";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { chatVersion } from "@/lib/versions";
 import { askStatus, chatAsks, documentNames, explain, listNames, NOT_FOUND, usageLine, withVersion } from "@/copy";
@@ -53,6 +54,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   // A streaming answer grows below the fold, so the column follows the text from the moment a question is sent
   // until the reader scrolls up.
   const following = useRef(false);
+  const lastTop = useRef(0);
   const streamed = thread?.ask.phase === "streaming" ? thread.ask.text.length : 0;
   useEffect(() => {
     if (phase === "asking") following.current = true;
@@ -79,8 +81,11 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   return (
     <>
       <main className="centre with-composer">
-        <div className="centre-scroll" ref={column} onWheel={(e) => { if (e.deltaY < 0) following.current = false; }}
-          onTouchMove={() => { following.current = false; }}>
+        <div className="centre-scroll" ref={column} onScroll={(e) => {
+          const { scrollTop: top, scrollHeight: height, clientHeight: client } = e.currentTarget;
+          following.current = stillFollowing(following.current, lastTop.current, { top, height, client });
+          lastTop.current = top;
+        }}>
           <section className="chat" aria-label="Chat">
             <header className="chat-header">
               <h1>{named ? `Asking ${documentNames(named)}` : "Chat"}</h1>
