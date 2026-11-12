@@ -40,9 +40,9 @@ Run `git diff <sync commit> -- docvault/documents.py docvault/db.py docvault/tas
 
 Each model step is one atomic step in the code: one SQL statement, one transaction, or one lock call. `StartParse` and `ResumeEmbed` fold the row read into the compare-and-swap. That is sound because `parsed` changes only under the lease and the compare-and-swap re-checks `status`.
 
-**Sync commit:** `7f83e9c`. The model was last confirmed against the code at this commit. Move it forward only after you have read every changed covered function and confirmed the model still describes it.
+**Sync commit:** `b5c649c`. The model was last confirmed against the code at this commit. Move it forward only after you have read every changed covered function and confirmed the model still describes it.
 
-It moved from `f21d4de` with document versions. Between the two, `documents.py` changed only in `upload`, the `delete` docstring and the reads (`_DOCUMENT_SQL`, `list_documents`, `versions`), and `schema.sql` added columns, an index and the family events in `notify_document()`. No covered function, status, transition or delivery setting changed, and both commands passed.
+It moved from `7f83e9c` with request logs and caches (`e93b3c4`, `b5c649c`). Between the two, `db.py` changed only in `PipelineSteps.record` and `_close`, which now log one line per closed step, `tasks.py` gained Celery signal receivers that carry the request id and configure logging, and `schema.sql` added `llm_calls.request_id` with its index and `chat_turns.cached`. `pg_try_advisory_lock`, the step rows' SQL, the delivery settings, `index_document` and `documents.py` did not change, and `check.py` and `--mutants` both passed at each of the two commits.
 
 ## Run
 
