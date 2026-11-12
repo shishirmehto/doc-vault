@@ -6,11 +6,6 @@ import type { ChatDocument, Doc, DocumentId, Result } from "@/api/domain";
 import { liveFeed } from "@/hooks/useLiveFeed";
 import { useFetched } from "@/hooks/useFetched";
 
-/**
- * Each of a chat's documents, and the document as the vault holds it now: from the live list, or read on its own when
- * the list lacks it, as it lacks an earlier version. `now` is null for a deleted document, and until its read lands. A read
- * follows the events that name it, and keeps showing what it last read while it reads again.
- */
 export function useChatDocs(
   documents: readonly ChatDocument[] | null,
   docs: readonly Doc[] | null,

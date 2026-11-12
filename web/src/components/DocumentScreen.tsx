@@ -78,7 +78,6 @@ export function DocumentScreen({
     const columns = [doc, other].sort((a, b) => a.version.number - b.version.number);
     onCompareVersions({ documents: columns.map((d) => ({ id: d.id, filename: withVersion(d.filename, d.version.number) })), focus: null });
   };
-  // Opens the disclosure under the summary and brings it to the top of the column, so its form shows under it.
   const openRewrite = () => {
     rewrites.setOpen(true);
     disclosure.current?.focus({ preventScroll: true });
@@ -121,7 +120,6 @@ export function DocumentScreen({
             {doc.lifecycle.status === "failed" && (
               <FailureNote failure={doc.lifecycle.failure} onRetry={() => onRetry(id)} />
             )}
-            {/* One bar: what to do with the document, then, set apart and quieter, what to do to the file. */}
             <div className="doc-actions">
               {(ready || readable || versionCount > 1) && <div className="doc-actions-use">
                 {ready && (
@@ -182,7 +180,6 @@ function sourceView(doc: Doc, pane: PaneRequest, insights: Result<Insights> | nu
   return { kind: "page", doc, page, mark, citedPage: fact.source.page };
 }
 
-/** The refusal goes to `onRefused`, which shows it under the bar rather than inside the row. */
 function AskButton({ onAsk, onRefused }: { onAsk(): Promise<ApiError | null>; onRefused(error: ApiError | null): void }) {
   const [busy, setBusy] = useState(false);
   const ask = async () => {

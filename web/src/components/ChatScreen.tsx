@@ -32,9 +32,8 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   const documents = header?.ok ? header.value.documents : null;
   const deleted = documents?.filter((d) => d.deleted).map((d) => d.filename) ?? [];
   const accepting = deleted.length === 0;
-  // A chat keeps the document ids it started on, so it may ask an earlier version than the rail now lists.
   const asked = useChatDocs(documents, docs).map(({ asked, now }) => ({ asked, now, version: chatVersion(now, docs) }));
-  const named = documents && asked.map((a) => ({ ...a.asked, filename: withVersion(a.asked.filename, a.version.number) }));
+  const named = documents && asked.map((a) => ({ ...a.asked, filename: withVersion(a.asked.filename, a.version?.number ?? null) }));
   const [draft, setDraft] = useState("");
   const turns = thread?.history.kind === "loaded" ? thread.history.turns : null;
   const open = (cite: TurnCite) => push({ kind: "chat", chat: id, pane: { cite, page: null } });
@@ -96,8 +95,8 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
                     : `${listNames(deleted)} ${deleted.length === 1 ? "was" : "were"} deleted, so this chat takes no more questions. Its answers still cite their pages. `}
                 <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
               </p>
-              {asked.map(({ now, version }) => now && version.earlier && (
-                <NewerVersionNote key={now.id} lead={chatAsks(now)} doc={now} newest={version.newest}
+              {asked.map(({ now, version }) => now && version?.newer && (
+                <NewerVersionNote key={now.id} lead={chatAsks(now)} doc={now} newest={version.newer.newest}
                   onOpen={(doc) => push({ kind: "doc", doc, pane: null })} />
               ))}
             </header>

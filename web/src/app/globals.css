@@ -57,7 +57,6 @@ h1, h2, h3, p, dl, dd, ul, ol, blockquote, fieldset { margin: 0; }
 ul, ol { padding: 0; list-style: none; }
 a { color: inherit; }
 :focus-visible { outline: 2px solid var(--carbon); outline-offset: 2px; }
-/* A control that Tab scrolls into view stops short of its column's edge, so its ring, drawn outside it, stays in view. */
 .centre, .centre-scroll, .rail-body, .pane-body, .table-box { scroll-padding: var(--s4); }
 button { font: inherit; }
 
@@ -297,7 +296,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .metrics { max-width: 110ch; display: grid; gap: var(--s4); padding-bottom: var(--s8); }
 .metrics-header { display: flex; align-items: baseline; justify-content: space-between; }
 .metrics h2 { font-size: var(--t-h2); font-weight: 600; letter-spacing: -0.01em; margin: var(--s6) 0 0; scroll-margin-top: var(--s4); }
-/* The contents line under the heading: one link per section, in page order. */
 .contents { max-width: 68ch; color: var(--graphite); }
 .contents a { color: var(--carbon); font-weight: 600; text-underline-offset: 3px; white-space: nowrap; }
 .metrics-window { display: flex; align-items: baseline; gap: var(--s4); flex-wrap: wrap; }
@@ -391,12 +389,10 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ------------------------------------------------------------- document */
 
-/* The text keeps its 68ch measure; the action bar may run the column's full width, so it holds one row on a wide screen. */
 .document { display: grid; gap: var(--s6); }
 .document > .insights, .doc-header > :not(.doc-actions) { max-width: 68ch; }
 .doc-header { display: grid; gap: var(--s2); }
 .doc-meta { color: var(--graphite); font-variant-numeric: tabular-nums; }
-/* What to do with the document, then, set apart by space and a quieter graphite, what to do to the file. */
 .doc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s8); margin-top: var(--s2); }
 .doc-actions-use { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .doc-actions-file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s4); }

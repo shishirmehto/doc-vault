@@ -250,10 +250,6 @@ export function comparing(names: string): string {
   return `Comparing ${names}`;
 }
 
-/**
- * A stored comparison's documents, each named with its version where `columnVersion` gives one, so two versions of one
- * file read "terms.txt (version 1) and terms.txt (version 2)" wherever the comparison is named.
- */
 export function comparedNames(documents: readonly ComparedDoc[]): string {
   return documentNames(documents.map((d) => ({ ...d, filename: withVersion(d.filename, columnVersion(documents, d)) })));
 }
@@ -270,10 +266,6 @@ export function fieldCount(rows: readonly CompareRow[]): string {
   return `${fields}, ${differ === 0 ? "none differ" : `${differ} ${differ === 1 ? "differs" : "differ"}`}`;
 }
 
-/**
- * Under a comparison that found no field in two or more of its documents: why, and what to try. A comparison with a
- * deleted document cannot be run again on the same documents, so it points at others.
- */
 export function noFieldsNext(focus: string | null, documents: readonly { deleted: boolean }[]): string {
   const why = focus === null
     ? "None of the fields a broker compares was found in more than one of these documents."
@@ -411,7 +403,6 @@ export function newerVersion(doc: Doc, newest: Doc | null): string {
     : `A newer version of this document, version ${newest.version.number}, was uploaded ${formatWhen(newest.createdAt)}.`;
 }
 
-/** The lead of a chat's note on a document it asks an earlier version of, before `newerVersion`. */
 export function chatAsks(doc: Doc): string {
   return `This chat asks version ${doc.version.number} of ${doc.filename}.`;
 }

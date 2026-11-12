@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { api } from "@/api/client";
 import type {
   AiUsage, CacheFigures, CodeCount, Counts, DocumentMetrics, Health, MetricsWindow, ProcessingMetrics, Purpose, Result,
@@ -46,10 +46,8 @@ const SINCE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short",
 
 const n = (x: number) => x.toLocaleString("en-US");
 
-/** "Since 11 Nov, 09:02:", the start of the window Processing, AI calls and cost, and Chats read. */
 const since = (m: ProcessingMetrics) => `Since ${SINCE.format(m.since)}:`;
 
-/** Every section in page order, each named as its heading is, for the contents line. */
 const SECTIONS = {
   documents: "Documents",
   processing: "Processing",
@@ -61,25 +59,24 @@ const SECTIONS = {
 
 type Section = keyof typeof SECTIONS;
 
+const ORDER = Object.keys(SECTIONS) as Section[];
+
 const sectionId = (s: Section) => `metrics-${s}`;
 
-/** A section's heading, which the contents line links to and moves focus to. */
 function Heading({ section }: { section: Section }) {
   return <h2 id={sectionId(section)} tabIndex={-1}>{SECTIONS[section]}</h2>;
 }
 
-/** "On this page: Documents, Processing, ...": a link to each section. The page never scrolls; the column does. */
 function Contents() {
-  const sections = Object.keys(SECTIONS) as Section[];
   return (
     <nav className="contents" aria-label="On this page">
       On this page:{" "}
-      {sections.map((s, i) => (
+      {ORDER.map((s, i) => (
         <span key={s}>
           <a href={`#${sectionId(s)}`} onClick={() => document.getElementById(sectionId(s))?.focus({ preventScroll: true })}>
             {SECTIONS[s]}
           </a>
-          {i < sections.length - 1 ? ", " : "."}
+          {i < ORDER.length - 1 ? ", " : "."}
         </span>
       ))}
     </nav>
@@ -97,6 +94,39 @@ export function Metrics({ window, onWindow }: { window: MetricsWindow; onWindow(
   const health = useHealth();
   const fake = health?.ok === true && health.value.aiMode === "fake";
 
+  const body = (section: Section): ReactNode => {
+    switch (section) {
+      case "documents":
+        return <Half result={documents.result} retry={documents.reload}>{(m) => <DocumentFigures m={m} />}</Half>;
+      case "processing":
+        return <Half result={processing.result} retry={processing.reload}>{(m) => <ProcessingFigures m={m} />}</Half>;
+      case "ai":
+        return <Half result={processing.result} retry={processing.reload}>{(m) => <AiFigures m={m} fake={fake} />}</Half>;
+      case "chats":
+        return <Half result={processing.result} retry={processing.reload}>{(m) => <ChatFigures m={m} />}</Half>;
+      case "cap":
+        return <Half result={status.result} retry={status.reload}>{(h) => <CapFigures health={h} />}</Half>;
+      case "caches":
+        // The counts come with the processing figures. Without them, /health says whether the cache is off or down.
+        return (
+          <Half result={processing.result} retry={processing.reload}>
+            {(m) =>
+              m.cache ? (
+                <CacheTable cache={m.cache} />
+              ) : (
+                <Half result={status.result} retry={status.reload}>
+                  {(h) => <p className="quiet">{h.cache === "off" ? CACHE_OFF : CACHE_UNREACHABLE}</p>}
+                </Half>
+              )}
+          </Half>
+        );
+      default: {
+        const unknown: never = section;
+        return unknown;
+      }
+    }
+  };
+
   return (
     <main className="centre">
       <section className="metrics" aria-labelledby="metrics-title">
@@ -108,40 +138,23 @@ export function Metrics({ window, onWindow }: { window: MetricsWindow; onWindow(
         </header>
         <Contents />
 
-        <Heading section="documents" />
-        <Half result={documents.result} retry={documents.reload}>{(m) => <DocumentFigures m={m} />}</Half>
-
-        <div className="metrics-window">
-          <Heading section="processing" />
-          <div className="segments" role="group" aria-label="Window">
-            {(Object.keys(WINDOWS) as MetricsWindow[]).map((w) => (
-              <button key={w} type="button" aria-pressed={w === window} onClick={() => onWindow(w)}>{WINDOWS[w]}</button>
-            ))}
-          </div>
-        </div>
-        <Half result={processing.result} retry={processing.reload}>{(m) => <ProcessingFigures m={m} />}</Half>
-
-        <Heading section="ai" />
-        <Half result={processing.result} retry={processing.reload}>{(m) => <AiFigures m={m} fake={fake} />}</Half>
-
-        <Heading section="chats" />
-        <Half result={processing.result} retry={processing.reload}>{(m) => <ChatFigures m={m} />}</Half>
-
-        <Heading section="cap" />
-        <Half result={status.result} retry={status.reload}>{(h) => <CapFigures health={h} />}</Half>
-
-        <Heading section="caches" />
-        {/* The counts come with the processing figures. Without them, /health says whether the cache is off or down. */}
-        <Half result={processing.result} retry={processing.reload}>
-          {(m) =>
-            m.cache ? (
-              <CacheTable cache={m.cache} />
+        {ORDER.map((section) => (
+          <Fragment key={section}>
+            {section === "processing" ? (
+              <div className="metrics-window">
+                <Heading section={section} />
+                <div className="segments" role="group" aria-label="Window">
+                  {(Object.keys(WINDOWS) as MetricsWindow[]).map((w) => (
+                    <button key={w} type="button" aria-pressed={w === window} onClick={() => onWindow(w)}>{WINDOWS[w]}</button>
+                  ))}
+                </div>
+              </div>
             ) : (
-              <Half result={status.result} retry={status.reload}>
-                {(h) => <p className="quiet">{h.cache === "off" ? CACHE_OFF : CACHE_UNREACHABLE}</p>}
-              </Half>
+              <Heading section={section} />
             )}
-        </Half>
+            {body(section)}
+          </Fragment>
+        ))}
       </section>
     </main>
   );
@@ -238,7 +251,6 @@ function ProcessingFigures({ m }: { m: ProcessingMetrics }) {
   );
 }
 
-/** The same window as Processing, so its lead names when the window starts. */
 function AiFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean }) {
   const noCost = fake && m.ai.costUsd === 0 && m.ai.unpricedCalls === 0;
   return (

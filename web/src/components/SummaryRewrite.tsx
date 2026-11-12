@@ -21,7 +21,6 @@ export function SummaryRewrite({ rewrites, cite, onOpenSource, disclosure }: {
   rewrites: Rewrites;
   cite: SummaryCite | null;
   onOpenSource(summary: SummaryId, index: number): void;
-  /** The disclosure's summary line, which the action bar's "Rewrite the summary" moves focus to. */
   disclosure: Ref<HTMLElement>;
 }) {
   const { run, shown, landed } = rewrites;

@@ -14,10 +14,6 @@ function VersionLink({ doc, onOpen, children }: { doc: Doc; onOpen: Open; childr
   return <InAppLink to={{ kind: "doc", doc: doc.id, pane: null }} onFollow={() => onOpen(doc.id)}>{children}</InAppLink>;
 }
 
-/**
- * "Version 2 of 2. Earlier version: version 1." The links come once the family is read, and `children`, the compare
- * with another version, after them.
- */
 export function VersionLine({ doc, versions, family, onOpen, children }: {
   doc: Doc;
   versions: Versions;
@@ -51,10 +47,6 @@ export function VersionLine({ doc, versions, family, onOpen, children }: {
   );
 }
 
-/**
- * On an earlier version: says a newer one exists, with a link to it once it is known. `lead` comes first, as a chat says
- * which version it asks.
- */
 export function NewerVersionNote({ doc, newest, onOpen, lead }: { doc: Doc; newest: Doc | null; onOpen: Open; lead?: string }) {
   return (
     <p className="newer-version">

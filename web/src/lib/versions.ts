@@ -31,16 +31,12 @@ export function familyOf(doc: Doc, versions: readonly Doc[]): Family {
   return { others, newest, compareWith: newest ?? earlier.at(-1) ?? null };
 }
 
-/**
- * What a chat's header says about one of its documents: its version, when its family has more than one, and whether a
- * newer version exists. `doc` is null until it is read, and for a deleted document. `listed` holds the latest version of
- * each family the rail lists, so `newest` is that version when the rail lists it.
- */
-export type ChatVersion = { number: number | null; earlier: boolean; newest: Doc | null };
+export type ChatVersion = { number: number; newer: { newest: Doc | null } | null };
 
-export function chatVersion(doc: Doc | null, listed: readonly Doc[] | null): ChatVersion {
-  if (doc === null || !hasVersions(doc)) return { number: null, earlier: false, newest: null };
-  return { number: doc.version.number, earlier: doc.version.number < doc.version.latest, newest: familyOf(doc, listed ?? []).newest };
+export function chatVersion(doc: Doc | null, listed: readonly Doc[] | null): ChatVersion | null {
+  if (doc === null || !hasVersions(doc)) return null;
+  const newer = doc.version.number < doc.version.latest ? { newest: familyOf(doc, listed ?? []).newest } : null;
+  return { number: doc.version.number, newer };
 }
 
 /** The family read once, kept current by the events that name its members. */
