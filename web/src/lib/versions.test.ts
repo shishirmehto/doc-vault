@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Doc, DocumentId, FamilyId, Lifecycle } from "../api/domain.ts";
+import { ListSync } from "./listSync.ts";
 import { applyVersionEvent, chatVersion, familyOf, hasVersions, laterVersion } from "./versions.ts";
 
 const FAMILY = "00000000-0000-4000-8000-000000000001" as FamilyId;
@@ -68,4 +69,13 @@ test("a chat names a document's version only when its family has more than one, 
   assert.deepEqual(chatVersion(version(1, 3), listed), { number: 1, newer: { newest: version(3, 3) } });
   assert.deepEqual(chatVersion(version(2, 3), null), { number: 2, newer: { newest: null } });
   assert.deepEqual(chatVersion(version(1, 3), [version(1, 1, { status: "ready" }, other)]), { number: 1, newer: { newest: null } });
+});
+
+test("a family read that lands after a sibling's event keeps the event, as the list does", () => {
+  const sync = new ListSync<readonly Doc[]>();
+  sync.resolve(sync.startFetch(), [version(1, 2, { status: "embedding", embedded: 3, total: 9 }), version(2, 2)]);
+  const read = sync.startFetch();
+  sync.apply((docs) => applyVersionEvent(docs, FAMILY, { kind: "document", doc: version(1, 2) }));
+  sync.resolve(read, [version(1, 2, { status: "embedding", embedded: 3, total: 9 }), version(2, 2)]);
+  assert.deepEqual(sync.shown?.map((d) => [d.version.number, d.lifecycle.status]), [[1, "ready"], [2, "ready"]]);
 });
