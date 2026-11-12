@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import type { ApiError, ComparisonId, Doc, DocumentId } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
-import { useListedDoc } from "@/hooks/useListedDoc";
+import { useUnlistedDocs } from "@/hooks/useListedDoc";
 import { useLongRun } from "@/hooks/useLongRun";
 import { compareRuns, useCompareRun } from "@/hooks/useCompareRun";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
-import { COMPARE_MAX, FOCUS_MAX, columns, compareRequest, withDoc, type CompareRequest, type Run } from "@/lib/compare";
+import { COMPARE_MAX, FOCUS_MAX, columns, compareRequest, withDocs, type CompareRequest, type Run } from "@/lib/compare";
 import {
   COMPARE_FULL, LONG_DOCUMENT, NO_COMPARISONS, NOTHING_TO_COMPARE, compareBlocked, compareFailed, comparedNames, comparing,
   differCount, documentNames, explain, focusLine, formatWhen, notReadyNames,
@@ -33,8 +33,10 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
   const [chosen, setChosen] = useState<ReadonlySet<DocumentId>>(() => new Set(initial ? [initial] : []));
   const [focus, setFocus] = useState("");
 
-  const { doc } = useListedDoc(initial, live);
-  const docs = live && withDoc(live, doc);
+  // The linked document, or a failed run's documents after "Change the documents", even when the list lacks them.
+  const [wanted, setWanted] = useState<readonly DocumentId[]>(() => (initial ? [initial] : []));
+  const unlistedDocs = useUnlistedDocs(wanted, live);
+  const docs = live && withDocs(live, unlistedDocs);
 
   const picked = columns(chosen, docs ?? []);
   const blocked = compareBlocked(picked.length, focus);
@@ -42,7 +44,9 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
     if (blocked === null) onCompare(compareRequest(picked, focus));
   };
   const change = (request: CompareRequest) => {
-    setChosen(new Set(request.documents.map((d) => d.id)));
+    const ids = request.documents.map((d) => d.id);
+    setWanted(ids);
+    setChosen(new Set(ids));
     setFocus(request.focus ?? "");
     compareRuns.dismiss();
   };

@@ -2,6 +2,7 @@
 
 import { api } from "@/api/client";
 import type { Doc, DocumentId, Result } from "@/api/domain";
+import { unlisted } from "@/lib/compare";
 import { failedRead, type LookedUp } from "@/lib/docList";
 import { useFetched } from "./useFetched";
 
@@ -20,3 +21,15 @@ export function useListedDoc(id: DocumentId | null, docs: readonly Doc[] | null)
     reload: older.reload,
   };
 }
+
+/** The documents among `ids` that `docs` lacks, each read by id. A read that fails leaves its document out. */
+export function useUnlistedDocs(ids: readonly DocumentId[], docs: readonly Doc[] | null): readonly Doc[] {
+  const lookUp = docs === null ? [] : unlisted(ids, docs);
+  const read = useFetched(`unlisted:${lookUp.join(",")}`, async (): Promise<Result<Doc[]>> => {
+    const results = await Promise.all(lookUp.map((id) => api.document(id)));
+    return { ok: true, value: results.flatMap((r) => (r.ok ? [r.value] : [])) };
+  });
+  return read.result?.ok ? read.result.value : NONE;
+}
+
+const NONE: readonly Doc[] = [];

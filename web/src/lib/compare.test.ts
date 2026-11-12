@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { parseComparison, parseDocumentPage, parseError } from "../api/parse.ts";
 import type { ApiError, Comparison, Doc, DocumentId } from "../api/domain.ts";
 import {
-  cellAt, columns, columnVersion, idle, step, visibleRows, whenRetryChanges, withDoc, worthRetrying, type CompareRequest,
+  cellAt, columns, columnVersion, idle, step, unlisted, visibleRows, whenRetryChanges, withDocs, worthRetrying, type CompareRequest,
   type Run,
 } from "./compare.ts";
 
@@ -112,7 +112,7 @@ test("a document older than the live list's newest 100 is offered after them, on
   const docs = parseDocumentPage(JSON.parse(readFileSync(new URL("../api/fixtures/documents-page.json", import.meta.url), "utf8")).body).docs;
   const policy = docs.find((d) => d.id === POLICY)!;
   const older: Doc = { ...policy, id: "0b6f5f1e-6a43-4d55-9b8e-3c2a1d0e9f77" as DocumentId, filename: "older-policy.pdf" };
-  const offered = withDoc(docs, older);
+  const offered = withDocs(docs, [older]);
   assert.deepEqual(offered.map((d) => d.filename), [
     "live-scan.pdf", "ui-drop-check.txt", "ui-renewal-memo-4.txt", "ui-renewal-memo-2.txt", "ui-renewal-memo-3.txt",
     "ui-textless.pdf", "ui-renewal-memo-1.txt", "u5-check.txt", "sample-endorsement-additional-insured.docx",
@@ -122,7 +122,16 @@ test("a document older than the live list's newest 100 is offered after them, on
     "older-policy.pdf",
     "sample-renewal-quote.pdf",
   ]);
-  assert.deepEqual([withDoc(docs, policy).length, withDoc(docs, null).length], [11, 11]);
+  assert.deepEqual([withDocs(docs, [policy]).length, withDocs(docs, []).length], [11, 11]);
+});
+
+test("Change the documents after a failed Compare with version N reads the version the list lacks and keeps both ticked", () => {
+  const docs = parseDocumentPage(JSON.parse(readFileSync(new URL("../api/fixtures/documents-page.json", import.meta.url), "utf8")).body).docs;
+  const latest = docs.find((d) => d.id === POLICY)!;
+  const first: Doc = { ...latest, id: "0b6f5f1e-6a43-4d55-9b8e-3c2a1d0e9f77" as DocumentId, version: { ...latest.version, number: 1 } };
+  const chosen = [first.id, POLICY];
+  assert.deepEqual(unlisted(chosen, docs), [first.id]);
+  assert.deepEqual(columns(new Set(chosen), withDocs(docs, [first])).map((d) => d.id), chosen);
 });
 
 test("a column header marks any version after the first, and version 1 when another column shares its filename", () => {

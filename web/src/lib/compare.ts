@@ -45,8 +45,15 @@ export function compareRequest(docs: readonly Doc[], focus: string): CompareRequ
   return { documents: docs.map((d) => ({ id: d.id, filename: d.filename })), focus: focus || null };
 }
 
-export function withDoc(docs: readonly Doc[], doc: Doc | null): readonly Doc[] {
-  return doc === null || docs.some((d) => d.id === doc.id) ? docs : [...docs, doc];
+/** Documents the live list lacks, such as a linked one older than its newest 100 or an earlier version, after it. */
+export function withDocs(docs: readonly Doc[], extra: readonly Doc[]): readonly Doc[] {
+  const added = extra.filter((doc, i) => !docs.some((d) => d.id === doc.id) && extra.findIndex((e) => e.id === doc.id) === i);
+  return added.length === 0 ? docs : [...docs, ...added];
+}
+
+/** The ids the live list lacks, to read one by one. */
+export function unlisted(ids: readonly DocumentId[], docs: readonly Doc[]): DocumentId[] {
+  return ids.filter((id) => !docs.some((d) => d.id === id));
 }
 
 export function columns(chosen: ReadonlySet<DocumentId>, docs: readonly Doc[]): Doc[] {
