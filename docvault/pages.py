@@ -135,7 +135,8 @@ def _undouble_token(match: re.Match[str]) -> str:
 
 def _printed_twice(token: str) -> bool:
     letters = sum(ch.isalpha() for ch in token)
-    return len(token) % 2 == 0 and token[::2] == token[1::2] and letters >= 2
+    # One repeated character ("XXXX", "YYYY") is a template placeholder, not a glyph printed twice.
+    return len(token) % 2 == 0 and token[::2] == token[1::2] and letters >= 2 and len(set(token)) >= 2
 
 
 _WORD = re.compile(r"[^\W\d_]+")

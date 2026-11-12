@@ -196,9 +196,11 @@ def test_an_aes_pdf_that_needs_a_password_to_open_is_refused_as_encrypted(tmp_pa
 
 
 def test_fake_bold_in_a_pdf_is_read_once_and_amounts_keep_their_digits(tmp_path):
-    lines = ["PPoolliiccyy NNuummbbeerr:: SAMPLE-0001", "11sstt Named Insured", "Committee balloon 1100 $5500 Page 22 of 22"]
+    lines = ["PPoolliiccyy NNuummbbeerr:: SAMPLE-0001", "11sstt Named Insured", "Committee balloon 1100 $5500 Page 22 of 22",
+             "Loan No. XXXX-XXXX Year YYYY Code XXXX AA))"]
     pdf = pages.extract(DocKind.PDF, text_pdf(tmp_path / "bold.pdf", lines), max_pages=10)
-    assert pdf.pages[0].text == "Policy Number: SAMPLE-0001\n1st Named Insured\nCommittee balloon 1100 $5500 Page 22 of 22"
+    assert pdf.pages[0].text == ("Policy Number: SAMPLE-0001\n1st Named Insured\nCommittee balloon 1100 $5500 Page 22 of 22\n"
+                                 "Loan No. XXXX-XXXX Year YYYY Code XXXX A)")
 
     txt = tmp_path / "bold.txt"
     txt.write_text("\n".join(lines), encoding="utf-8")
