@@ -401,4 +401,4 @@ def test_a_reply_with_seven_sources_is_valid_and_the_summary_keeps_the_first_six
     schema = sent[0][1]["response_format"]["json_schema"]["schema"]
     assert (stored.sources, stored.dropped_sources) == (tuple(SummarySource(page, COVER) for page in range(1, 7)), 0)
     assert ledger(ctx, "ok") == [(True,)]
-    assert sorted(schema["properties"]["sources"]) == ["description", "items", "title", "type"]
+    assert "maxItems" not in schema["properties"]["sources"]

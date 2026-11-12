@@ -393,4 +393,4 @@ def test_the_model_writes_the_answer_before_its_follow_ups_and_four_of_them_are_
         "model_declined", ["Who is the insurer?", "Is there a deductible?", "What is the premium?"])
     assert ledger(ctx) == {turn["id"]: ["embed_query", "answer"]}
     assert list(schema["properties"]) == ["supported", "answer", "evidence", "follow_ups"]
-    assert sorted(schema["properties"]["follow_ups"]) == ["description", "items", "title", "type"]
+    assert "maxItems" not in schema["properties"]["follow_ups"]

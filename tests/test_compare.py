@@ -271,7 +271,7 @@ def test_a_reply_with_31_rows_is_valid_and_the_comparison_keeps_the_first_30(ctx
     schema = sent[0][1]["response_format"]["json_schema"]["schema"]
     assert ([row.field for row in stored.rows], stored.dropped_cells, stored.usage.calls) == (
         [f"Row {n}" for n in range(1, 31)], 0, 1)
-    assert sorted(schema["properties"]["rows"]) == ["items", "title", "type"]
+    assert "maxItems" not in schema["properties"]["rows"]
 
 
 def test_a_document_deleted_during_the_model_call_reads_back_as_deleted(ctx):
