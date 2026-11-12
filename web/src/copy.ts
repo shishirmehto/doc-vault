@@ -411,10 +411,9 @@ export function newerVersion(doc: Doc, newest: Doc | null): string {
     : `A newer version of this document, version ${newest.version.number}, was uploaded ${formatWhen(newest.createdAt)}.`;
 }
 
-/** Under a chat's header, for a document whose chat asks an earlier version. */
-export function newerInChat(doc: Doc, newer: { number: number; doc: Doc | null }): string {
-  const when = newer.doc ? `was uploaded ${formatWhen(newer.doc.createdAt)}` : "is in the vault";
-  return `This chat asks version ${doc.version.number} of ${doc.filename}. A newer version, version ${newer.number}, ${when}.`;
+/** The lead of a chat's note on a document it asks an earlier version of, before `newerVersion`. */
+export function chatAsks(doc: Doc): string {
+  return `This chat asks version ${doc.version.number} of ${doc.filename}.`;
 }
 
 /** When the family could not be read, in place of the links to the other versions. */

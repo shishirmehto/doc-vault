@@ -64,9 +64,9 @@ test("a chat names a document's version only when its family has more than one, 
   const listed = [version(3, 3), version(1, 1, { status: "ready" }, other)];
   assert.deepEqual(
     [chatVersion(null, listed), chatVersion(version(1, 1, { status: "ready" }, other), listed), chatVersion(version(3, 3), listed)],
-    [{ number: null, newer: null }, { number: null, newer: null }, { number: 3, newer: null }],
+    [{ number: null, earlier: false, newest: null }, { number: null, earlier: false, newest: null }, { number: 3, earlier: false, newest: null }],
   );
-  assert.deepEqual(chatVersion(version(1, 3), listed), { number: 1, newer: { number: 3, doc: version(3, 3) } });
-  assert.deepEqual(chatVersion(version(2, 3), null), { number: 2, newer: { number: 3, doc: null } });
-  assert.deepEqual(chatVersion(version(1, 3), [version(1, 1, { status: "ready" }, other)]), { number: 1, newer: { number: 3, doc: null } });
+  assert.deepEqual(chatVersion(version(1, 3), listed), { number: 1, earlier: true, newest: version(3, 3) });
+  assert.deepEqual(chatVersion(version(2, 3), null), { number: 2, earlier: true, newest: null });
+  assert.deepEqual(chatVersion(version(1, 3), [version(1, 1, { status: "ready" }, other)]), { number: 1, earlier: true, newest: null });
 });

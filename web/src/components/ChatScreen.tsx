@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import type {
-  ApiError, ChatDocument, ChatId, ChatPane, Citation, Doc, DocumentId, NonEmpty, Result, Selection, Turn, TurnCite,
+  ApiError, ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Result, Selection, Turn, TurnCite,
 } from "@/api/domain";
 import { useChatDocs } from "@/hooks/useChatDocs";
 import { useFetched } from "@/hooks/useFetched";
@@ -11,11 +11,11 @@ import { threads, useThread } from "@/hooks/useThread";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { chatVersion } from "@/lib/versions";
-import { askStatus, documentNames, explain, listNames, newerInChat, NOT_FOUND, usageLine, withVersion } from "@/copy";
+import { askStatus, chatAsks, documentNames, explain, listNames, NOT_FOUND, usageLine, withVersion } from "@/copy";
 import { Composer } from "./Composer";
-import { InAppLink } from "./InAppLink";
 import { MissingChat } from "./Missing";
 import { SourcePane, type SourceView } from "./SourcePane";
+import { NewerVersionNote } from "./Versions";
 
 type Props = {
   id: ChatId;
@@ -96,11 +96,9 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
                     : `${listNames(deleted)} ${deleted.length === 1 ? "was" : "were"} deleted, so this chat takes no more questions. Its answers still cite their pages. `}
                 <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
               </p>
-              {asked.map(({ now, version: { newer } }) => now && newer && (
-                <p key={now.id} className="newer-version">
-                  {newerInChat(now, newer)}
-                  {newer.doc && <> <NewerLink id={newer.doc.id} number={newer.number} onOpen={push} /></>}
-                </p>
+              {asked.map(({ now, version }) => now && version.earlier && (
+                <NewerVersionNote key={now.id} lead={chatAsks(now)} doc={now} newest={version.newest}
+                  onOpen={(doc) => push({ kind: "doc", doc, pane: null })} />
               ))}
             </header>
             <Turns thread={thread} pane={pane} onOpen={open} accepting={accepting} onReload={reload}
@@ -145,11 +143,6 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
       )}
     </>
   );
-}
-
-function NewerLink({ id, number, onOpen }: { id: DocumentId; number: number; onOpen(s: Selection): void }) {
-  const to: Selection = { kind: "doc", doc: id, pane: null };
-  return <InAppLink to={to} onFollow={() => onOpen(to)}>{`Open version ${number}`}</InAppLink>;
 }
 
 function citationAt(turns: readonly Turn[], cite: TurnCite): Citation | null {

@@ -7,8 +7,8 @@ import {
 import { readAskStream } from "./api/client.ts";
 import type { ApiError, DocumentId } from "./api/domain.ts";
 import {
-  cannotOpen, clockTime, compareBlocked, compareFailed, comparedNames, comparing, deletedColumns, differCount, docMeta, dollars,
-  droppedCells, explain, fieldCount, focusLine, hitRate, newerInChat, newerVersion, noCap, noFieldsNext, notReadyNames, otherVersions, partlyRead,
+  cannotOpen, chatAsks, clockTime, compareBlocked, compareFailed, comparedNames, comparing, deletedColumns, differCount, docMeta, dollars,
+  droppedCells, explain, fieldCount, focusLine, hitRate, newerVersion, noCap, noFieldsNext, notReadyNames, otherVersions, partlyRead,
   retrying, rewriteOptions, rewriting, rewrittenBy, sourceLabel, sourcesNote, usageLine, versionCompareBlocked,
   versionLine, versionMeta, withVersion, wordTarget,
 } from "./copy.ts";
@@ -232,10 +232,7 @@ test("the version line, its links' label, an earlier version's note, the Version
       "A comparison is already running. Compare opens up again when it finishes.",
     ],
   );
-  assert.deepEqual([newerInChat(v1, { number: 2, doc: v2 }), newerInChat(v1, { number: 3, doc: null })], [
-    "This chat asks version 1 of phase-e-fixture-terms.txt. A newer version, version 2, was uploaded 12 Nov, 10:42.",
-    "This chat asks version 1 of phase-e-fixture-terms.txt. A newer version, version 3, is in the vault.",
-  ]);
+  assert.equal(chatAsks(v1), "This chat asks version 1 of phase-e-fixture-terms.txt.");
 });
 
 // ------------------------------------------------------------------ phase F

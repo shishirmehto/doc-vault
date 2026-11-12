@@ -51,10 +51,14 @@ export function VersionLine({ doc, versions, family, onOpen, children }: {
   );
 }
 
-/** On an earlier version: says a newer one exists, with a link to it once the family is read. */
-export function NewerVersionNote({ doc, newest, onOpen }: { doc: Doc; newest: Doc | null; onOpen: Open }) {
+/**
+ * On an earlier version: says a newer one exists, with a link to it once it is known. `lead` comes first, as a chat says
+ * which version it asks.
+ */
+export function NewerVersionNote({ doc, newest, onOpen, lead }: { doc: Doc; newest: Doc | null; onOpen: Open; lead?: string }) {
   return (
     <p className="newer-version">
+      {lead && `${lead} `}
       {newerVersion(doc, newest)}{" "}
       {newest && <VersionLink doc={newest} onOpen={onOpen}>{`Open version ${newest.version.number}`}</VersionLink>}
     </p>

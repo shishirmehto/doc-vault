@@ -107,9 +107,8 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
   text-underline-offset: 3px; justify-self: start;
 }
 .text-button:hover:not(:disabled, [aria-disabled="true"]) { text-decoration: underline; }
-.text-button:disabled { color: var(--graphite); cursor: default; }
+.text-button:disabled, .text-button[aria-disabled="true"] { color: var(--graphite); cursor: not-allowed; }
 .text-button.quiet-action { color: var(--graphite); }
-.text-button[aria-disabled="true"] { color: var(--graphite); cursor: not-allowed; }
 /* Stamp marks failures, and the one action that cannot be undone. */
 .button.danger { background: var(--stamp); }
 .button.danger:hover:not(:disabled) { background: #8a2923; }
@@ -400,8 +399,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* What to do with the document, then, set apart by space and a quieter graphite, what to do to the file. */
 .doc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s8); margin-top: var(--s2); }
 .doc-actions-use { display: flex; flex-wrap: wrap; gap: var(--s2); }
-/* A failed document has nothing to use, and an empty group would still take the gap before the file actions. */
-.doc-actions-use:empty { display: none; }
 .doc-actions-file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s4); }
 .doc-status { display: grid; gap: 2px; }
 /* Versions. The line reads like a form's edition notice; an earlier version carries a carbon margin rule, because the

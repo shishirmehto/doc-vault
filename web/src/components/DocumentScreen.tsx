@@ -85,6 +85,7 @@ export function DocumentScreen({
     disclosure.current?.scrollIntoView({ block: "start" });
   };
   const ready = doc.lifecycle.status === "ready";
+  const readable = doc.layout !== null && doc.lifecycle.status !== "failed";
   const versionCount = family ? family.others.length + 1 : 0;
 
   return (
@@ -122,7 +123,7 @@ export function DocumentScreen({
             )}
             {/* One bar: what to do with the document, then, set apart and quieter, what to do to the file. */}
             <div className="doc-actions">
-              <div className="doc-actions-use">
+              {(ready || readable || versionCount > 1) && <div className="doc-actions-use">
                 {ready && (
                   <>
                     <AskButton onAsk={() => onAsk(id)} onRefused={setAskRefused} />
@@ -132,9 +133,9 @@ export function DocumentScreen({
                     <button type="button" className="button secondary" onClick={openRewrite}>Rewrite the summary</button>
                   </>
                 )}
-                {doc.layout && doc.lifecycle.status !== "failed" && (
+                {readable && (
                   <button type="button" className="button secondary" onClick={() => push({ kind: "doc", doc: id, pane: { kind: "page", page: 1 } })}>
-                    Read the {unitName(doc.layout.unit, 2)}
+                    Read the {unitName(doc.layout?.unit ?? "page", 2)}
                   </button>
                 )}
                 {versionCount > 1 && (
@@ -143,7 +144,7 @@ export function DocumentScreen({
                     Versions ({versionCount})
                   </button>
                 )}
-              </div>
+              </div>}
               <div className="doc-actions-file">
                 <UploadVersion onFiles={onUploadVersion} />
                 <DeleteDocument doc={doc} otherVersions={versionCount > 1} onDelete={() => onDelete(doc)} />

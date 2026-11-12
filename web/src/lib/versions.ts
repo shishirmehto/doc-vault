@@ -32,17 +32,15 @@ export function familyOf(doc: Doc, versions: readonly Doc[]): Family {
 }
 
 /**
- * What a chat's header says about one of its documents: its version, when its family has more than one, and the newer
- * version, when the chat asks an earlier one. `doc` is null until it is read, and for a deleted document. `listed` holds
- * the latest version of each family the rail lists, so the newer one is linked when it is there.
+ * What a chat's header says about one of its documents: its version, when its family has more than one, and whether a
+ * newer version exists. `doc` is null until it is read, and for a deleted document. `listed` holds the latest version of
+ * each family the rail lists, so `newest` is that version when the rail lists it.
  */
-export type ChatVersion = { number: number | null; newer: { number: number; doc: Doc | null } | null };
+export type ChatVersion = { number: number | null; earlier: boolean; newest: Doc | null };
 
 export function chatVersion(doc: Doc | null, listed: readonly Doc[] | null): ChatVersion {
-  if (doc === null || !hasVersions(doc)) return { number: null, newer: null };
-  if (doc.version.number >= doc.version.latest) return { number: doc.version.number, newer: null };
-  const newest = listed?.find((d) => d.version.family === doc.version.family && d.id !== doc.id) ?? null;
-  return { number: doc.version.number, newer: { number: newest?.version.number ?? doc.version.latest, doc: newest } };
+  if (doc === null || !hasVersions(doc)) return { number: null, earlier: false, newest: null };
+  return { number: doc.version.number, earlier: doc.version.number < doc.version.latest, newest: familyOf(doc, listed ?? []).newest };
 }
 
 /** The family read once, kept current by the events that name its members. */

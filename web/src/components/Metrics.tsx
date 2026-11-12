@@ -46,6 +46,9 @@ const SINCE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short",
 
 const n = (x: number) => x.toLocaleString("en-US");
 
+/** "Since 11 Nov, 09:02:", the start of the window Processing, AI calls and cost, and Chats read. */
+const since = (m: ProcessingMetrics) => `Since ${SINCE.format(m.since)}:`;
+
 /** Every section in page order, each named as its heading is, for the contents line. */
 const SECTIONS = {
   documents: "Documents",
@@ -198,7 +201,7 @@ function CodeTable({ caption, unit, rows, empty }: { caption: string; unit: stri
 function ProcessingFigures({ m }: { m: ProcessingMetrics }) {
   return (
     <>
-      <p className="metrics-lead">Since {SINCE.format(m.since)}: {n(m.uploaded)} uploaded, {n(m.indexed)} indexed.</p>
+      <p className="metrics-lead">{since(m)} {n(m.uploaded)} uploaded, {n(m.indexed)} indexed.</p>
 
       <Figures caption="Timings">
         <thead><tr><th scope="col">Measure</th><th scope="col">p50</th><th scope="col">p95</th></tr></thead>
@@ -241,7 +244,7 @@ function AiFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean }) {
   return (
     <>
       <p className="metrics-lead">
-        Since {SINCE.format(m.since)}: {n(m.ai.calls)} AI calls, {n(m.ai.errors)} errors, {n(m.ai.inputTokens)} tokens in,{" "}
+        {since(m)} {n(m.ai.calls)} AI calls, {n(m.ai.errors)} errors, {n(m.ai.inputTokens)} tokens in,{" "}
         {n(m.ai.outputTokens)} out. Cost: {noCost ? "fake provider, no cost" : costText(m.ai)}.
       </p>
       <Figures caption="AI calls by purpose and model">
@@ -278,7 +281,7 @@ function AiFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean }) {
 function ChatFigures({ m }: { m: ProcessingMetrics }) {
   return (
     <>
-      <p className="metrics-lead">Since {SINCE.format(m.since)}: {n(m.chat.turns)} {m.chat.turns === 1 ? "question" : "questions"} asked.</p>
+      <p className="metrics-lead">{since(m)} {n(m.chat.turns)} {m.chat.turns === 1 ? "question" : "questions"} asked.</p>
       <Figures caption="Questions by outcome">
         <thead><tr><th scope="col">Outcome</th><th scope="col">Questions</th></tr></thead>
         <tbody>
