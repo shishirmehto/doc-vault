@@ -119,8 +119,9 @@ def blocked_inserts(db: dbmod.Db) -> int:
                       " AND wait_event_type = 'Lock' AND query LIKE '%%INSERT INTO documents%%'")
 
 
-def test_two_concurrent_uploads_into_one_family_get_versions_2_and_3(ctx):
-    first = created(upload(ctx, "Premium: $1,000", "terms.txt"))
+def race_for_version_2(ctx) -> dict[str, object]:
+    """Upload A takes version 2 and holds its transaction open; upload B takes version 2 too, waits on A's row, and
+    finds the number taken once A commits."""
     held = HeldPool(ctx.db)
     results: dict[str, object] = {}
 
@@ -142,11 +143,54 @@ def test_two_concurrent_uploads_into_one_family_get_versions_2_and_3(ctx):
     held.release.set()
     a.join(10)
     b.join(10)
+    return results
+
+
+def stored_blobs(ctx) -> set[str]:
+    return {path.name for path in ctx.blobs.root.rglob("*") if path.is_file()}
+
+
+def stored_shas(ctx) -> set[str]:
+    with ctx.db.connection() as conn:
+        return {row["sha"] for row in conn.execute("SELECT encode(sha256, 'hex') AS sha FROM documents")}
+
+
+def test_two_concurrent_uploads_into_one_family_get_versions_2_and_3(ctx):
+    first = created(upload(ctx, "Premium: $1,000", "terms.txt"))
+
+    results = race_for_version_2(ctx)
 
     numbers = {key: created(outcome).version.number for key, outcome in results.items()}
     assert numbers == {"a": 2, "b": 3}
     assert [d.version for d in documents.versions(ctx.db, first.id)] == [
         Version(FamilyId(first.id), n, 3) for n in (1, 2, 3)]
+
+
+def test_an_upload_that_loses_every_version_race_is_a_retryable_conflict_and_keeps_no_blob(ctx, monkeypatch):
+    monkeypatch.setattr(documents, "VERSION_ATTEMPTS", 1)
+    first = created(upload(ctx, "Premium: $1,000", "terms.txt"))
+
+    results = race_for_version_2(ctx)
+
+    assert created(results["a"]).version.number == 2
+    lost = results["b"]
+    assert isinstance(lost, VaultError)
+    assert (lost.failure.code, lost.failure.retryable) == (ErrorCode.VERSION_CONFLICT, True)
+    assert [d.version.number for d in documents.versions(ctx.db, first.id)] == [1, 2]
+    assert stored_blobs(ctx) == stored_shas(ctx)
+    assert len(stored_blobs(ctx)) == 2
+
+
+def test_the_upload_route_answers_a_lost_version_race_with_a_retryable_409(client, ctx, monkeypatch):
+    post(client, "Premium: $1,000", "terms.txt")
+    monkeypatch.setattr(documents, "VERSION_ATTEMPTS", 0)
+
+    lost = post(client, "Premium: $1,200", "terms.txt")
+
+    error = lost.json()["error"]
+    assert (lost.status_code, error["code"], error["retryable"]) == (409, "version_conflict", True)
+    assert stored_blobs(ctx) == stored_shas(ctx)
+    assert len(stored_blobs(ctx)) == 1
 
 
 def test_deleting_version_1_keeps_version_2s_number_and_the_next_upload_takes_3(ctx):

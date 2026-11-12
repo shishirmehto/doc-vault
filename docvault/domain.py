@@ -116,6 +116,7 @@ class ErrorCode(StrEnum):
     DOCUMENTS_NOT_READY = "documents_not_ready"
     DOCUMENTS_DELETED = "documents_deleted"
     NOTHING_TO_RETRY = "nothing_to_retry"
+    VERSION_CONFLICT = "version_conflict"         # an upload lost more version-number races than it retries
     INVALID_CURSOR = "invalid_cursor"
     INVALID_REQUEST = "invalid_request"           # a parameter or body failed validation
     RATE_LIMITED = "rate_limited"                 # the client spent its per-minute budget for this route

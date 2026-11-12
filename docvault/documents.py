@@ -103,6 +103,8 @@ def upload(ctx: Ctx, stream: BinaryIO, filename: str, *, replaces: DocumentId | 
 
     Two concurrent uploads of the same bytes write the same blob path and race on the unique index; one gets Created,
     the other Existing. A crash after the blob write leaves an orphan file that the next identical upload reuses.
+    An upload that loses VERSION_ATTEMPTS version-number races in a row raises a retryable VERSION_CONFLICT and
+    deletes its blob.
     A lost enqueue (crash after commit) is caught by reconcile().
     """
     family = None
@@ -119,8 +121,12 @@ def upload(ctx: Ctx, stream: BinaryIO, filename: str, *, replaces: DocumentId | 
         ctx.blobs.delete(sha)   # a stored document always sniffs, so this blob belongs to nobody
         raise
     name = PurePath(filename.replace("\x00", "")).name[:255] or "upload"
-    with ctx.db.connection() as conn:
-        doc_id, created = _insert_version(conn, sha, name, kind, size, family)
+    try:
+        with ctx.db.connection() as conn:
+            doc_id, created = _insert_version(conn, sha, name, kind, size, family)
+    except VaultError:
+        ctx.blobs.delete(sha)   # its last attempt found no document with these bytes
+        raise
     if not created:
         return Existing(get(ctx.db, doc_id))
     ctx.jobs.index(doc_id)
@@ -157,7 +163,7 @@ def _insert_version(conn: Connection, sha: Sha256, filename: str, kind: DocKind,
             return DocumentId(created["id"]), True
         if same := conn.execute("SELECT id FROM documents WHERE sha256 = %s", (sha,)).fetchone():
             return DocumentId(same["id"]), False
-    raise VaultError(ErrorCode.INTERNAL, "Too many versions of this document arrived at once. Upload it again.",
+    raise VaultError(ErrorCode.VERSION_CONFLICT, "Too many versions of this document arrived at once. Upload it again.",
                      retryable=True)
 
 

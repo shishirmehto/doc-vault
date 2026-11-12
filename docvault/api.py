@@ -61,6 +61,7 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.DOCUMENTS_NOT_READY: 409,
     ErrorCode.DOCUMENTS_DELETED: 409,
     ErrorCode.NOTHING_TO_RETRY: 409,
+    ErrorCode.VERSION_CONFLICT: 409,
     ErrorCode.INVALID_CURSOR: 400,
     ErrorCode.INVALID_REQUEST: 422,
     ErrorCode.RATE_LIMITED: 429,        # with Retry-After: the seconds until the budget allows one more
@@ -226,7 +227,8 @@ router = APIRouter()
 @router.post("/documents", status_code=202, response_model=wire.DocumentOut, dependencies=[rate_limited("upload")],
              responses={200: {"model": wire.DocumentOut, "description": "Same bytes uploaded before; existing document"},
                         **errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.FILE_TOO_LARGE, ErrorCode.UNSUPPORTED_TYPE,
-                                 ErrorCode.EMPTY_FILE, ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED)})
+                                 ErrorCode.EMPTY_FILE, ErrorCode.INVALID_REQUEST, ErrorCode.VERSION_CONFLICT,
+                                 ErrorCode.RATE_LIMITED)})
 def upload(file: UploadFile, response: Response, ctx: Deps,
            replaces: Annotated[UUID | None, Query(description=(
                "A document id. New bytes become the next version of its family, whatever their name. Without it, "
