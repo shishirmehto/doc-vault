@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 from psycopg.types.json import Jsonb
 
 from . import documents, insights, prompts
-from .ai import ComparisonOwner
+from .ai import USAGE_SQL, ComparisonOwner, usage_of
 from .context import Ctx
 from .db import Db, decode_cursor, next_cursor
 from .domain import (
@@ -29,7 +29,6 @@ from .domain import (
     Page,
     PageBasis,
     Row,
-    Usage,
     VaultError,
 )
 from .pages import collapse_whitespace, find_on_page
@@ -148,14 +147,12 @@ def _grounded(cell: CellDraft, pages: Sequence[Page]) -> Cell | None:
     return None if found is None else Cell(collapse_whitespace(cell.value), cell.page, found)
 
 
-_COMPARISON_SQL = """
+_COMPARISON_SQL = f"""
 SELECT c.id, c.focus, c.rows, c.dropped_cells, c.model, c.prompt_version, c.created_at,
        (SELECT jsonb_agg(doc || jsonb_build_object('deleted', d.id IS NULL) ORDER BY at)
         FROM jsonb_array_elements(c.documents) WITH ORDINALITY AS snapshot (doc, at)
         LEFT JOIN documents d ON d.id = (doc ->> 'id')::uuid) AS documents,
-       count(l.id) AS calls, coalesce(sum(l.input_tokens), 0) AS input_tokens,
-       coalesce(sum(l.output_tokens), 0) AS output_tokens,
-       CASE WHEN count(l.cost_usd) = count(l.id) THEN coalesce(sum(l.cost_usd), 0) END AS cost_usd
+       {USAGE_SQL}
 FROM comparisons c LEFT JOIN llm_calls l ON l.comparison_id = c.id
 """
 
@@ -174,5 +171,5 @@ def _row_to_comparison(row: Mapping[str, Any]) -> Comparison:
         rows=tuple(Row(stored["field"], tuple(None if cell is None else Cell(**cell) for cell in stored["cells"]))
                    for stored in row["rows"]),
         dropped_cells=row["dropped_cells"], model=row["model"], prompt_version=row["prompt_version"],
-        usage=Usage(row["calls"], row["input_tokens"], row["output_tokens"], row["cost_usd"]),
+        usage=usage_of(row),
         created_at=row["created_at"])

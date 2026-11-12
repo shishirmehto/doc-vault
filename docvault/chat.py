@@ -31,7 +31,7 @@ from psycopg import Connection
 from psycopg.types.json import Jsonb
 
 from . import insights, pages, prompts
-from .ai import TurnOwner, Vector
+from .ai import USAGE_SQL, TurnOwner, Vector, usage_of
 from .answer_text import AnswerField, MarkerFilter
 from .cache import Cache
 from .context import Ctx
@@ -56,7 +56,6 @@ from .domain import (
     Turn,
     TurnId,
     TurnOutcome,
-    Usage,
     VaultError,
 )
 from .prompts import AnswerDraft, CondensedQuery
@@ -281,12 +280,9 @@ def history(db: Db, chat_id: ChatId, *, limit: int = 50) -> list[Turn]:
 # ------------------------------------------------------------------ rows
 
 # Usage is read back from the ledger rather than kept on the turn, so it counts every attempt the gateway made.
-# count(cost_usd) skips NULLs: when it falls short of count(id), some call was unpriced and the total is unknown.
-_TURN_SQL = """
+_TURN_SQL = f"""
 SELECT t.id, t.chat_id, t.question, t.standalone_query, t.outcome, t.answer, t.citations, t.suggestions,
-       t.cached, t.started_at, t.finished_at, count(l.id) AS calls, coalesce(sum(l.input_tokens), 0) AS input_tokens,
-       coalesce(sum(l.output_tokens), 0) AS output_tokens,
-       CASE WHEN count(l.cost_usd) = count(l.id) THEN coalesce(sum(l.cost_usd), 0) END AS cost_usd
+       t.cached, t.started_at, t.finished_at, {USAGE_SQL}
 FROM chat_turns t LEFT JOIN llm_calls l ON l.turn_id = t.id
 """
 
@@ -353,7 +349,7 @@ def _row_to_turn(row: Mapping[str, Any]) -> Turn:
     return Turn(id=TurnId(row["id"]), chat_id=ChatId(row["chat_id"]), question=row["question"],
                 standalone_query=row["standalone_query"], answer=answer, started_at=row["started_at"],
                 finished_at=row["finished_at"],
-                usage=Usage(row["calls"], row["input_tokens"], row["output_tokens"], row["cost_usd"]),
+                usage=usage_of(row),
                 suggestions=tuple(row["suggestions"]), cached=row["cached"])
 
 

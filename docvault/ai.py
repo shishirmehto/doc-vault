@@ -25,7 +25,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Literal, NamedTuple, Protocol
+from typing import Any, Literal, NamedTuple, Protocol
 
 from openai import (
     APIConnectionError,
@@ -58,6 +58,7 @@ from .domain import (
     SummaryTone,
     Turn,
     TurnId,
+    Usage,
     VaultError,
 )
 from .pages import SENTENCE_OR_PARAGRAPH_END, TABLE_CELL, collapse_whitespace
@@ -218,6 +219,17 @@ class _Billing:
     provider: str
     model: str
     prompt: Prompt | None = None
+
+
+# An owner's spend, for a query that joins llm_calls as l and groups by the owner. count(cost_usd) skips NULLs: when it
+# falls short of count(id), some call was unpriced and the total is unknown.
+USAGE_SQL = """count(l.id) AS calls, coalesce(sum(l.input_tokens), 0) AS input_tokens,
+       coalesce(sum(l.output_tokens), 0) AS output_tokens,
+       CASE WHEN count(l.cost_usd) = count(l.id) THEN coalesce(sum(l.cost_usd), 0) END AS cost_usd"""
+
+
+def usage_of(row: Mapping[str, Any]) -> Usage:
+    return Usage(row["calls"], row["input_tokens"], row["output_tokens"], row["cost_usd"])
 
 
 class DailySpend:
