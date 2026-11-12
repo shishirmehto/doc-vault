@@ -10,6 +10,7 @@ import { useFetched } from "@/hooks/useFetched";
 import { useListedDoc } from "@/hooks/useListedDoc";
 import { threads, useThread } from "@/hooks/useThread";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
+import { citedPageView } from "@/lib/citedPage";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { chatVersion } from "@/lib/versions";
 import { askStatus, chatAsks, documentNames, explain, listNames, NOT_FOUND, usageLine, withVersion } from "@/copy";
@@ -149,9 +150,7 @@ function sourceView(pane: ChatPane, turns: readonly Turn[] | null, doc: Doc | nu
   const citation = citationAt(turns, pane.cite);
   if (!citation) return { kind: "unknown", message: "This citation is not in the chat's history." };
   if (!doc) return { kind: "unknown", message: `${citation.filename} is no longer in the vault.` };
-  const page = pane.page ?? citation.source.page;
-  const mark = page === citation.source.page ? { quote: citation.source.quote, label: `source ${citation.ref}`, flag: String(citation.ref) } : null;
-  return { kind: "page", doc, page, mark, citedPage: citation.source.page };
+  return citedPageView(doc, pane.page, citation.source.page, { quote: citation.source.quote, label: `source ${citation.ref}`, flag: String(citation.ref) });
 }
 
 function Turns({ thread, pane, onOpen, accepting, onReload, onSuggest }: {

@@ -10,6 +10,7 @@ import { useCompareRun } from "@/hooks/useCompareRun";
 import { useRewrites } from "@/hooks/useRewrites";
 import { useVersions } from "@/hooks/useVersions";
 import type { CompareRequest } from "@/lib/compare";
+import { citedPageView } from "@/lib/citedPage";
 import { familyOf, hasVersions } from "@/lib/versions";
 import { citedFact, citedSource, summarySourceView } from "@/lib/summaryPane";
 import { docMeta, explain, formatMs, statusLine, unitName, versionCompareBlocked, withVersion } from "@/copy";
@@ -168,9 +169,7 @@ function sourceView(doc: Doc, pane: PaneRequest, insights: Result<Insights> | nu
   if (insights === null) return { kind: "resolving" };
   const fact = insights.ok && insights.value.status === "ready" ? insights.value.keyFacts[pane.cite.index] : undefined;
   if (!fact) return { kind: "unknown", message: "This fact is not in the document's current summary." };
-  const page = pane.page ?? fact.source.page;
-  const mark = page === fact.source.page ? { quote: fact.source.quote, label: fact.label } : null;
-  return { kind: "page", doc, page, mark, citedPage: fact.source.page };
+  return citedPageView(doc, pane.page, fact.source.page, { quote: fact.source.quote, label: fact.label });
 }
 
 function AskButton({ onAsk, onRefused }: { onAsk(): Promise<ApiError | null>; onRefused(error: ApiError | null): void }) {

@@ -1,6 +1,7 @@
 import type { Doc, PaneRequest, Result, SummaryCite, SummaryList } from "../api/domain.ts";
 import type { SourceView } from "../components/SourcePane.tsx";
 import { NO_SUCH_SOURCE, explain, rewriteNotListed } from "../copy.ts";
+import { citedPageView } from "./citedPage.ts";
 
 export function citedFact(pane: PaneRequest | null): number | null {
   return pane?.kind === "cite" && pane.cite.kind === "fact" ? pane.cite.index : null;
@@ -17,7 +18,5 @@ export function summarySourceView(list: Result<SummaryList> | null, cite: Summar
   if (!summary) return { kind: "unknown", message: rewriteNotListed(list.value.complete) };
   const source = summary.sources[cite.index];
   if (!source) return { kind: "unknown", message: NO_SUCH_SOURCE };
-  const shown = page ?? source.page;
-  const mark = shown === source.page ? { quote: source.quote, label: "Rewritten summary" } : null;
-  return { kind: "page", doc, page: shown, mark, citedPage: source.page };
+  return citedPageView(doc, page, source.page, { quote: source.quote, label: "Rewritten summary" });
 }
