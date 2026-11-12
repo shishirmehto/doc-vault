@@ -122,7 +122,7 @@ function FirstSteps({ onFiles }: { onFiles(files: File[]): void }) {
         <p className="step-title">Wait until each shows Ready, when its pages are read and its key facts found.</p>
       </li>
       <li>
-        <p className="step-title">Ask a question.</p>
+        <p className="step-title">Ask a question or compare documents.</p>
       </li>
     </ol>
   );

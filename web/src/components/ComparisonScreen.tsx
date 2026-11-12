@@ -9,7 +9,7 @@ import { useFetched } from "@/hooks/useFetched";
 import { cellAt, columnVersion, visibleRows } from "@/lib/compare";
 import { cellView } from "@/lib/comparisonPane";
 import {
-  NONE_DIFFER, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, partlyRead, withVersion,
+  NONE_DIFFER, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, noFieldsNext, partlyRead, withVersion,
 } from "@/copy";
 import { InAppLink } from "./InAppLink";
 import { MissingComparison } from "./Missing";
@@ -114,6 +114,7 @@ function ComparisonView({ c, docs, active, only: inUrl, onOpen, onOnly, onNew }:
         {deleted.length > 0 && c.rows.length > 0 && <p className="quiet">{deletedColumns(deleted)}</p>}
         <p className="written-by">Compared by {c.model} with prompt {c.promptVersion}.</p>
       </header>
+      {c.rows.length === 0 && <div className="not-found"><p>{noFieldsNext(c.focus, c.documents)}</p></div>}
       {c.rows.length > 0 && (
         <>
           <label className="only-differences">

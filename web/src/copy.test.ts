@@ -8,7 +8,7 @@ import { readAskStream } from "./api/client.ts";
 import type { ApiError, DocumentId } from "./api/domain.ts";
 import {
   cannotOpen, clockTime, compareBlocked, compareFailed, comparing, deletedColumns, differCount, docMeta, dollars,
-  droppedCells, explain, fieldCount, focusLine, hitRate, newerVersion, noCap, notReadyNames, otherVersions, partlyRead,
+  droppedCells, explain, fieldCount, focusLine, hitRate, newerVersion, noCap, noFieldsNext, notReadyNames, otherVersions, partlyRead,
   retrying, rewriteOptions, rewriting, rewrittenBy, sourceLabel, sourcesNote, usageLine, versionCompareBlocked,
   versionLine, versionMeta, withVersion, wordTarget,
 } from "./copy.ts";
@@ -70,6 +70,20 @@ test("a comparison's header names its documents, its focus and how many fields d
       "1 field, 1 differs",
       "No fields were found to compare",
       "1 field, none differ",
+    ],
+  );
+});
+
+test("a comparison with no fields says what to try, by its focus and whether its documents are still in the vault", () => {
+  const live = [{ deleted: false }, { deleted: false }];
+  assert.deepEqual(
+    [noFieldsNext(null, live), noFieldsNext("earthquake sublimits", live), noFieldsNext("premium", [{ deleted: false }, { deleted: true }]),
+      noFieldsNext(null, [{ deleted: true }, { deleted: true }])],
+    [
+      "None of the fields a broker compares was found in more than one of these documents. Try a focus, such as deductibles, or documents that state the same fields, such as a policy and its renewal quote.",
+      "No field about “earthquake sublimits” was found in more than one of these documents. Try a broader focus, or none, or documents that state the same fields.",
+      "No field about “premium” was found in more than one of these documents. Start a new comparison of documents that state the same fields, such as a policy and its renewal quote.",
+      "None of the fields a broker compares was found in more than one of these documents. Start a new comparison of documents that state the same fields, such as a policy and its renewal quote.",
     ],
   );
 });

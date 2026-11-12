@@ -262,6 +262,22 @@ export function fieldCount(rows: readonly CompareRow[]): string {
   return `${fields}, ${differ === 0 ? "none differ" : `${differ} ${differ === 1 ? "differs" : "differ"}`}`;
 }
 
+/**
+ * Under a comparison that found no field in two or more of its documents: why, and what to try. A comparison with a
+ * deleted document cannot be run again on the same documents, so it points at others.
+ */
+export function noFieldsNext(focus: string | null, documents: readonly { deleted: boolean }[]): string {
+  const why = focus === null
+    ? "None of the fields a broker compares was found in more than one of these documents."
+    : `No field about “${focus}” was found in more than one of these documents.`;
+  const next = documents.some((d) => d.deleted)
+    ? "Start a new comparison of documents that state the same fields, such as a policy and its renewal quote."
+    : focus === null
+      ? "Try a focus, such as deductibles, or documents that state the same fields, such as a policy and its renewal quote."
+      : "Try a broader focus, or none, or documents that state the same fields.";
+  return `${why} ${next}`;
+}
+
 /** "5 of 12 fields differ", for a list of comparisons. */
 export function differCount(rows: readonly CompareRow[]): string {
   if (rows.length === 0) return "No fields found";
