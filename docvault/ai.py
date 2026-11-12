@@ -561,7 +561,10 @@ def _usage_tokens(usage: CompletionUsage) -> Tokens:
 
 class OpenAIEmbedder:
     provider = "openai"
-    min_similarity = 0.25   # uncalibrated; docs/evals.md gives the command that calibrates it with a key
+    # Calibrated on the frozen case set (docs/evals.md): the lowest answerable turn scored 0.239, and the
+    # out-of-scope turns (0.257 to 0.514) overlap the answerable ones, so no threshold separates them. The gate
+    # only screens off-topic questions; the answer step declines what the documents do not say.
+    min_similarity = 0.20
 
     def __init__(self, client: OpenAI, model: str, dimensions: int) -> None:
         self.model, self.dimensions = model, dimensions
