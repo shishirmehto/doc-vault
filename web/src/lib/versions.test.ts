@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Doc, DocumentId, FamilyId, Lifecycle } from "../api/domain.ts";
-import { applyVersionEvent, familyOf, hasVersions, laterVersion } from "./versions.ts";
+import { applyVersionEvent, chatVersion, familyOf, hasVersions, laterVersion } from "./versions.ts";
 
 const FAMILY = "00000000-0000-4000-8000-000000000001" as FamilyId;
 
@@ -57,4 +57,16 @@ test("the family follows its own events: a new version, a status change and a de
   assert.deepEqual(numbers(deleted), [1]);
   assert.equal(applyVersionEvent(ready, FAMILY, { kind: "document", doc: stranger }), ready);
   assert.equal(applyVersionEvent(ready, FAMILY, { kind: "deleted", id: stranger.id }), ready);
+});
+
+test("a chat names a document's version only when its family has more than one, and points an earlier one at the newest listed", () => {
+  const other = "00000000-0000-4000-8000-000000000002" as FamilyId;
+  const listed = [version(3, 3), version(1, 1, { status: "ready" }, other)];
+  assert.deepEqual(
+    [chatVersion(null, listed), chatVersion(version(1, 1, { status: "ready" }, other), listed), chatVersion(version(3, 3), listed)],
+    [{ number: null, newer: null }, { number: null, newer: null }, { number: 3, newer: null }],
+  );
+  assert.deepEqual(chatVersion(version(1, 3), listed), { number: 1, newer: { number: 3, doc: version(3, 3) } });
+  assert.deepEqual(chatVersion(version(2, 3), null), { number: 2, newer: { number: 3, doc: null } });
+  assert.deepEqual(chatVersion(version(1, 3), [version(1, 1, { status: "ready" }, other)]), { number: 1, newer: { number: 3, doc: null } });
 });

@@ -2,13 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
-import type { ApiError, ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Result, Selection, Turn, TurnCite } from "@/api/domain";
+import type {
+  ApiError, ChatDocument, ChatId, ChatPane, Citation, Doc, DocumentId, NonEmpty, Result, Selection, Turn, TurnCite,
+} from "@/api/domain";
+import { useChatDocs } from "@/hooks/useChatDocs";
 import { useFetched } from "@/hooks/useFetched";
 import { threads, useThread } from "@/hooks/useThread";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
-import { askStatus, documentNames, explain, listNames, NOT_FOUND, usageLine } from "@/copy";
+import { chatVersion } from "@/lib/versions";
+import { askStatus, documentNames, explain, listNames, newerInChat, NOT_FOUND, usageLine, withVersion } from "@/copy";
 import { Composer } from "./Composer";
+import { InAppLink } from "./InAppLink";
 import { MissingChat } from "./Missing";
 import { SourcePane, type SourceView } from "./SourcePane";
 
@@ -27,6 +32,9 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   const documents = header?.ok ? header.value.documents : null;
   const deleted = documents?.filter((d) => d.deleted).map((d) => d.filename) ?? [];
   const accepting = deleted.length === 0;
+  // A chat keeps the document ids it started on, so it may ask an earlier version than the rail now lists.
+  const asked = useChatDocs(documents, docs).map(({ asked, now }) => ({ asked, now, version: chatVersion(now, docs) }));
+  const named = documents && asked.map((a) => ({ ...a.asked, filename: withVersion(a.asked.filename, a.version.number) }));
   const [draft, setDraft] = useState("");
   const turns = thread?.history.kind === "loaded" ? thread.history.turns : null;
   const open = (cite: TurnCite) => push({ kind: "chat", chat: id, pane: { cite, page: null } });
@@ -79,7 +87,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
           onTouchMove={() => { following.current = false; }}>
           <section className="chat" aria-label="Chat">
             <header className="chat-header">
-              <h1>{documents ? `Asking ${documentNames(documents)}` : "Chat"}</h1>
+              <h1>{named ? `Asking ${documentNames(named)}` : "Chat"}</h1>
               <p className="quiet">
                 {!documents
                   ? null
@@ -88,6 +96,12 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
                     : `${listNames(deleted)} ${deleted.length === 1 ? "was" : "were"} deleted, so this chat takes no more questions. Its answers still cite their pages. `}
                 <button type="button" className="text-button" onClick={() => push({ kind: "none" })}>New chat</button>
               </p>
+              {asked.map(({ now, version: { newer } }) => now && newer && (
+                <p key={now.id} className="newer-version">
+                  {newerInChat(now, newer)}
+                  {newer.doc && <> <NewerLink id={newer.doc.id} number={newer.number} onOpen={push} /></>}
+                </p>
+              ))}
             </header>
             <Turns thread={thread} pane={pane} onOpen={open} accepting={accepting} onReload={reload}
               onSuggest={(question) => void threads.ask(id, question)} />
@@ -131,6 +145,11 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
       )}
     </>
   );
+}
+
+function NewerLink({ id, number, onOpen }: { id: DocumentId; number: number; onOpen(s: Selection): void }) {
+  const to: Selection = { kind: "doc", doc: id, pane: null };
+  return <InAppLink to={to} onFollow={() => onOpen(to)}>{`Open version ${number}`}</InAppLink>;
 }
 
 function citationAt(turns: readonly Turn[], cite: TurnCite): Citation | null {
