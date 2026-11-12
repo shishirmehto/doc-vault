@@ -20,7 +20,7 @@ curl localhost:8000/health
 
 `GET /health` returns 200 with `"ai_mode": "live"` when `OPENAI_API_KEY` is set, and `"ai_mode": "fake"` when it is not. Swagger is at `http://localhost:8000/docs`. The web UI is at `http://localhost:3000`: upload documents, read their insights, chat with citations that open the cited page, and see the metrics. `web/README.md` describes it.
 
-The app has no login, so compose publishes every port on `127.0.0.1`, and only this machine can reach the stack. `API_PORT`, `DB_PORT` and `WEB_PORT` change the host ports, so a second stack can run beside the first:
+`API_PORT`, `DB_PORT` and `WEB_PORT` change the host ports, so a second stack can run beside the first:
 
 ```bash
 API_PORT=18000 DB_PORT=54339 WEB_PORT=13000 docker compose -p docvault-demo up --build -d
