@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 from . import documents, prompts
 from .ai import SummaryOwner
 from .context import Ctx
-from .db import Db, decode_cursor, encode_cursor
+from .db import Db, decode_cursor, next_cursor
 from .domain import (
     DocumentId,
     ErrorCode,
@@ -97,9 +97,7 @@ def list_summaries(db: Db, document_id: DocumentId, *, limit: int,
             " ORDER BY s.created_at DESC, s.id DESC LIMIT %(limit)s",
             {"document_id": document_id, "created_at": after and after[0], "id": after and after[1],
              "limit": limit + 1}).fetchall()
-    last = rows[limit - 1] if len(rows) > limit else None
-    return ([_row_to_summary(row, cached=True) for row in rows[:limit]],
-            last and encode_cursor(last["created_at"], last["id"]))
+    return [_row_to_summary(row, cached=True) for row in rows[:limit]], next_cursor(rows, limit)
 
 
 def ground(draft: SummaryDraft, pages: Sequence[Page]) -> tuple[tuple[SummarySource, ...], int]:

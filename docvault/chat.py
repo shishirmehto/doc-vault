@@ -35,7 +35,7 @@ from .ai import TurnOwner, Vector
 from .answer_text import AnswerField, MarkerFilter
 from .cache import Cache
 from .context import Ctx
-from .db import Db, decode_cursor, encode_cursor
+from .db import Db, decode_cursor, next_cursor
 from .documents import ready_documents
 from .domain import (
     Answer,
@@ -124,8 +124,7 @@ def list_chats(db: Db, *, limit: int, cursor: str | None) -> tuple[list[Chat], s
             " OR (c.created_at, c.id) < (%(created_at)s::timestamptz, %(id)s::uuid))"
             " GROUP BY c.id ORDER BY c.created_at DESC, c.id DESC LIMIT %(limit)s",
             {"created_at": after and after[0], "id": after and after[1], "limit": limit + 1}).fetchall()
-    last = rows[limit - 1] if len(rows) > limit else None
-    return [_row_to_chat(row) for row in rows[:limit]], last and encode_cursor(last["created_at"], last["id"])
+    return [_row_to_chat(row) for row in rows[:limit]], next_cursor(rows, limit)
 
 
 def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage], None] | None = None,

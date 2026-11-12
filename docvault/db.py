@@ -11,12 +11,13 @@ import binascii
 import hashlib
 import logging
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import psycopg
@@ -94,6 +95,11 @@ def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
         return datetime.fromisoformat(created_at), UUID(row_id)
     except (ValueError, binascii.Error) as exc:
         raise VaultError(ErrorCode.INVALID_CURSOR, "The cursor is not one this API returned.") from exc
+
+
+def next_cursor(rows: Sequence[Mapping[str, Any]], limit: int) -> str | None:
+    """The cursor after rows[:limit] when a query with LIMIT limit + 1 found more rows; None on the last page."""
+    return encode_cursor(rows[limit - 1]["created_at"], rows[limit - 1]["id"]) if len(rows) > limit else None
 
 
 @dataclass(frozen=True, slots=True)

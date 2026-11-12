@@ -30,7 +30,7 @@ from psycopg.types.json import Jsonb
 from . import insights, pages
 from .ai import DocOwner
 from .context import Ctx
-from .db import Db, Lease, PipelineSteps, decode_cursor, encode_cursor, pipeline_steps
+from .db import Db, Lease, PipelineSteps, decode_cursor, next_cursor, pipeline_steps
 from .domain import (
     Created,
     DocKind,
@@ -397,8 +397,7 @@ def list_documents(db: Db, *, status: DocStatus | None, latest: bool, limit: int
             " ORDER BY d.created_at DESC, d.id DESC LIMIT %(limit)s",
             {"status": status, "latest": latest, "created_at": after and after[0], "id": after and after[1],
              "limit": limit + 1}).fetchall()
-    last = rows[limit - 1] if len(rows) > limit else None
-    return [_row_to_document(row) for row in rows[:limit]], last and encode_cursor(last["created_at"], last["id"])
+    return [_row_to_document(row) for row in rows[:limit]], next_cursor(rows, limit)
 
 
 def versions(db: Db, doc_id: DocumentId) -> list[Document]:
