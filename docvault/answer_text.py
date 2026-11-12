@@ -17,38 +17,33 @@ from enum import Enum, auto
 
 _JSON_WHITESPACE = frozenset(" \t\n\r")
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
-# Characters of numbers, true, false and null. Their spelling is not checked.
 _LITERAL = frozenset("0123456789+-.eEtrufalsn")
 _ESCAPES = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
 
 
 class _Scan(Enum):
-    """What the JSON scanner accepts next."""
-
-    DOCUMENT = auto()        # leading whitespace, then the top-level "{"
-    KEY_OR_CLOSE = auto()    # just after "{"
-    KEY = auto()             # after "," in an object
+    DOCUMENT = auto()
+    KEY_OR_CLOSE = auto()
+    KEY = auto()
     COLON = auto()
-    ANSWER_COLON = auto()    # after the top-level "answer" key
-    ANSWER_VALUE = auto()    # the top-level answer value, read only when it is a string
-    VALUE_OR_CLOSE = auto()  # just after "["
-    VALUE = auto()           # after ":", or after "," in an array
-    COMMA_OR_CLOSE = auto()  # after a value inside an object or array
-    LITERAL = auto()         # inside a number, true, false or null
+    ANSWER_COLON = auto()
+    ANSWER_VALUE = auto()
+    VALUE_OR_CLOSE = auto()
+    VALUE = auto()
+    COMMA_OR_CLOSE = auto()
+    LITERAL = auto()
     STRING = auto()
-    ESCAPE = auto()          # after a backslash in a string
-    HEX = auto()             # among the four digits of a \uXXXX escape
-    ANSWERED = auto()        # the answer string closed
-    STOPPED = auto()         # not JSON, not an object, a non-string answer, or the document ended without one
+    ESCAPE = auto()
+    HEX = auto()
+    ANSWERED = auto()
+    STOPPED = auto()
 
 
 class _Role(Enum):
-    """What the string being scanned is."""
-
-    TOP_KEY = auto()  # a key of the top-level object, compared with "answer"
+    TOP_KEY = auto()
     KEY = auto()
     VALUE = auto()
-    ANSWER = auto()   # the top-level answer value, returned as it is decoded
+    ANSWER = auto()
 
 
 class AnswerField:
@@ -63,11 +58,11 @@ class AnswerField:
 
     def __init__(self) -> None:
         self._state = _Scan.DOCUMENT
-        self._closers: list[str] = []  # the bracket each open object or array still needs
+        self._closers: list[str] = []
         self._role = _Role.VALUE
         self._decoded: list[str] = []
         self._hex = ""
-        self._high = ""                 # a high surrogate whose low half may still follow
+        self._high = ""
 
     @property
     def done(self) -> bool:
@@ -182,15 +177,13 @@ class AnswerField:
 
 
 class _Marker(Enum):
-    """Where the filter is in a marker and the spaces and tabs before it."""
-
-    TEXT = auto()          # nothing held
-    PAD = auto()           # holding spaces and tabs that a marker may follow
-    OPEN = auto()          # after "["
-    LABEL = auto()         # after "S"
-    NUMBER = auto()        # among the digits of a label
-    BEFORE_COMMA = auto()  # whitespace after a label's digits
-    AFTER_COMMA = auto()   # after "," and any whitespace
+    TEXT = auto()
+    PAD = auto()
+    OPEN = auto()
+    LABEL = auto()
+    NUMBER = auto()
+    BEFORE_COMMA = auto()
+    AFTER_COMMA = auto()
 
 
 class MarkerFilter:
@@ -205,13 +198,13 @@ class MarkerFilter:
     def __init__(self) -> None:
         self._state = _Marker.TEXT
         self._pad = ""
-        self._marker = ""  # the unfinished marker after the pad, from its "["
+        self._marker = ""
 
     def feed(self, text: str) -> str:
         return "".join(self._step(ch) for ch in text)
 
     def flush(self) -> str:
-        """What is still held: an unfinished marker stays text, a trailing pad goes (ground strips the answer)."""
+        """What is still held: an unfinished marker stays text, a trailing pad goes."""
         held = (self._pad + self._marker).rstrip(" \t")
         self._state, self._pad, self._marker = _Marker.TEXT, "", ""
         return held
@@ -246,7 +239,6 @@ class MarkerFilter:
 
 
 def _following(state: _Marker, ch: str) -> _Marker | None:
-    """The state after ch inside a marker: TEXT when ch closes it, None when ch cannot occur there."""
     match state, ch:
         case _Marker.OPEN, "S":
             return _Marker.LABEL

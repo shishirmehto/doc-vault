@@ -1,5 +1,3 @@
-"""Comparison: grounding, differences, the pipeline and its routes. Fake provider, real Postgres."""
-
 from __future__ import annotations
 
 import dataclasses
@@ -65,8 +63,6 @@ class Rows(BaseModel):
 
 
 class FailsOnceChat(FakeChat):
-    """A provider that fails its first call with a retryable error and would answer the second."""
-
     def __init__(self) -> None:
         super().__init__()
         self.timeouts: list[float] = []
@@ -166,8 +162,6 @@ def test_the_fake_aligns_every_label_the_policy_and_the_renewal_quote_share():
     ]
 
 
-# ------------------------------------------------------------------ grounding
-
 DECLARATIONS = CompareDoc("D1", POLICY, PageBasis.PHYSICAL, (), (
     Page(1, "Named Insured: Example Contractors LLC"), Page(2, "Property Damage Deductible\n$2,500 per occurrence")))
 RENEWAL = CompareDoc("D2", QUOTE, PageBasis.PHYSICAL, (), (
@@ -233,9 +227,6 @@ def test_ground_reads_rows_until_it_keeps_30_and_counts_dropped_cells_only_in_th
     rows, dropped = compare.ground(draft, [DECLARATIONS, RENEWAL])
 
     assert ([row.field for row in rows], dropped) == ([f"Row {n}" for n in range(1, 31)], 1)
-
-
-# ------------------------------------------------------------------ the pipeline
 
 
 def completion(draft: dict) -> dict:
@@ -318,9 +309,6 @@ def test_verified_key_facts_reach_the_prompt_only_for_documents_with_ready_insig
     assert f'<document id="D2" filename="{QUOTE}">\n<page n="1">' in prompt.messages[0].content
 
 
-# ------------------------------------------------------------------ over HTTP
-
-
 def compared(client, *document_ids: UUID, **body: object):
     return client.post("/comparisons", json={"document_ids": [str(doc_id) for doc_id in document_ids], **body})
 
@@ -378,7 +366,7 @@ def test_a_broker_compares_the_policy_with_its_renewal_quote_and_reads_it_back(c
     assert ledger == [("compare", None, None, UUID(body["id"])), ("compare", None, None, UUID(focused.json()["id"]))]
     assert client.get(f"/comparisons/{body['id']}").json() == body
 
-    with ctx.db.connection() as conn:   # a minute apart, so the order does not rest on clock resolution
+    with ctx.db.connection() as conn:
         conn.execute("UPDATE comparisons SET created_at = now() - interval '1 minute' WHERE id = %s", (body["id"],))
     newest = client.get("/comparisons", params={"limit": 1}).json()
     rest = client.get("/comparisons", params={"limit": 1, "cursor": newest["next_cursor"]}).json()

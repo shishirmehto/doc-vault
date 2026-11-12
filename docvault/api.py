@@ -1,8 +1,7 @@
 """FastAPI routes. Each route parses input, calls one domain function, maps the result.
 
 No business rules live here. The only table in this file maps domain error
-codes to HTTP statuses, so the domain never imports HTTP concepts. The streamed
-ask runs chat.ask in a worker thread and turns its progress into server-sent events.
+codes to HTTP statuses, so the domain never imports HTTP concepts.
 GET /events/documents turns an events.Feed into server-sent events. RequestLog gives every
 request an id, returns it as X-Request-ID and logs the request once, when it ends.
 """
@@ -66,7 +65,7 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.INVALID_REQUEST: 422,
     ErrorCode.RATE_LIMITED: 429,        # with Retry-After: the seconds until the budget allows one more
     ErrorCode.QUOTA_EXCEEDED: 429,      # with Retry-After: the seconds until midnight UTC, when the daily cap resets
-    ErrorCode.TOO_MANY_STREAMS: 503,    # with Retry-After: 5
+    ErrorCode.TOO_MANY_STREAMS: 503,
     ErrorCode.AI_UNAVAILABLE: 503,      # with Retry-After: 5 when retryable
     ErrorCode.AI_BAD_OUTPUT: 502,
     ErrorCode.INTERNAL: 500,            # an exception no route expected (internal_error_handler); also stored
@@ -335,14 +334,6 @@ def sse(event: str, data: BaseModel | dict[str, object]) -> str:
 
 
 class AskInThread:
-    """One chat.ask in a worker thread, its progress queued as server-sent event frames.
-
-    The thread owns the ask. When the client leaves, the response stops reading
-    the queue, but the thread runs on, stores the turn and bills every attempt,
-    so the chat's history shows the answer. The queue is unbounded, so the thread
-    never waits for a reader that has gone.
-    """
-
     def __init__(self, ctx: Ctx, chat_id: ChatId, question: str) -> None:
         self._events: queue.SimpleQueue[str | Turn | Exception] = queue.SimpleQueue()
         # A new thread starts with an empty context; the copy carries the request id to the ledger rows.
@@ -363,11 +354,9 @@ class AskInThread:
             put(exc)
 
     def first(self) -> str | Turn | Exception:
-        """Blocks until the ask reports anything. chat.ask checks the chat and its scope before its first stage."""
         return self._events.get()
 
     def frames(self, first: str | Turn | Exception) -> Iterator[str]:
-        """Every frame from `first` on, ending with one turn or error frame."""
         item = first
         while isinstance(item, str):
             yield item

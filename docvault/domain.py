@@ -24,7 +24,7 @@ ChunkId = NewType("ChunkId", UUID)
 ChatId = NewType("ChatId", UUID)
 TurnId = NewType("TurnId", UUID)
 ComparisonId = NewType("ComparisonId", UUID)
-FamilyId = NewType("FamilyId", UUID)   # the versions of one document; the first version's id
+FamilyId = NewType("FamilyId", UUID)
 SummaryId = NewType("SummaryId", UUID)
 Sha256 = NewType("Sha256", bytes)
 
@@ -120,7 +120,7 @@ class ErrorCode(StrEnum):
     INVALID_CURSOR = "invalid_cursor"
     INVALID_REQUEST = "invalid_request"           # a parameter or body failed validation
     RATE_LIMITED = "rate_limited"                 # the client spent its per-minute budget for this route
-    TOO_MANY_STREAMS = "too_many_streams"         # this API process already has its cap of live event streams
+    TOO_MANY_STREAMS = "too_many_streams"
     QUOTA_EXCEEDED = "quota_exceeded"             # today's AI spend reached DAILY_AI_BUDGET_USD; also stored on insights
 
 
@@ -247,7 +247,7 @@ class Version:
 
     family_id: FamilyId
     number: int
-    latest: int                 # the highest number in the family, read at query time
+    latest: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -420,11 +420,8 @@ class Turn:
     started_at: datetime
     finished_at: datetime
     usage: Usage                # aggregated from llm_calls WHERE turn_id = id
-    suggestions: tuple[str, ...]        # at most 3 follow-up questions, each ending in "?"
+    suggestions: tuple[str, ...]
     cached: bool                # served from the answer cache: no model call, usage all zero
-
-
-# ---------------------------------------------------------------- comparison
 
 
 @dataclass(frozen=True, slots=True)
@@ -434,18 +431,18 @@ class ComparedDocument:
 
     id: DocumentId
     filename: str
-    version: int | None     # None in a comparison stored before versions existed
-    page_basis: PageBasis   # labels the column's cell pages
-    pages_read: int         # coverage: pages 1..pages_read went into the prompt
+    version: int | None
+    page_basis: PageBasis
+    pages_read: int
     page_count: int
-    deleted: bool           # derived at read time: the document has no row any more
+    deleted: bool
 
 
 @dataclass(frozen=True, slots=True)
 class Cell:
-    value: str          # as the document writes it, whitespace collapsed
+    value: str
     page: int
-    quote: str          # the source span on `page`, whitespace collapsed; never the model's copy
+    quote: str
 
 
 _CURRENCY = re.compile(r"[$€£]|(?<![a-z])(?:usd|eur|gbp)(?![a-z])")
@@ -455,8 +452,6 @@ _ZERO_CENTS = re.compile(r"(?<=\d)\.00(?!\d)")
 
 
 def _comparable(value: str) -> tuple[frozenset[str], str]:
-    """'USD 1,000,000.00' -> ({'usd'}, '1000000'): one value written two ways compares equal, and its currencies
-    apart. Only trailing punctuation goes, so '-$500' and '($500)' keep what makes them negative."""
     text = value.casefold()
     currencies = frozenset(_CURRENCY_CODE.get(mark, mark) for mark in _CURRENCY.findall(text))
     text = _ZERO_CENTS.sub("", _COMMA_IN_NUMBER.sub("", _CURRENCY.sub("", text)))
@@ -465,8 +460,8 @@ def _comparable(value: str) -> tuple[frozenset[str], str]:
 
 @dataclass(frozen=True, slots=True)
 class Row:
-    field: str                          # "Property Damage Deductible"
-    cells: tuple[Cell | None, ...]      # one per document, in Comparison.documents order; None is an empty cell
+    field: str
+    cells: tuple[Cell | None, ...]
 
     @property
     def differs(self) -> bool:
@@ -481,17 +476,14 @@ class Row:
 @dataclass(frozen=True, slots=True)
 class Comparison:
     id: ComparisonId
-    documents: tuple[ComparedDocument, ...]     # the columns, in request order
+    documents: tuple[ComparedDocument, ...]
     focus: str | None
     rows: tuple[Row, ...]
-    dropped_cells: int          # values compare.ground could not keep in the rows it read, such as a quote not on its page
+    dropped_cells: int
     model: str
     prompt_version: str
-    usage: Usage                # aggregated from llm_calls WHERE comparison_id = id
+    usage: Usage
     created_at: datetime
-
-
-# ---------------------------------------------------------------- summary
 
 
 class SummaryLength(StrEnum):
@@ -503,7 +495,7 @@ class SummaryLength(StrEnum):
 class SummaryTone(StrEnum):
     PLAIN = "plain"
     FORMAL = "formal"
-    CLIENT = "client"       # written for the insured client, avoiding broker jargon
+    CLIENT = "client"
 
 
 @dataclass(frozen=True, slots=True)
@@ -524,7 +516,7 @@ class SummaryOptions:
 @dataclass(frozen=True, slots=True)
 class SummarySource:
     page: int
-    quote: str          # the source span on `page`, whitespace collapsed; never the model's copy
+    quote: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -533,10 +525,10 @@ class Summary:
     document_id: DocumentId
     options: SummaryOptions
     text: str
-    sources: tuple[SummarySource, ...]  # may be empty: a summary is not a fact claim, so it is kept without them
-    dropped_sources: int        # sources summaries.ground could not keep, such as a quote not on its page
-    page_basis: PageBasis       # read from the document at read time; labels the source pages
+    sources: tuple[SummarySource, ...]
+    dropped_sources: int
+    page_basis: PageBasis
     model: str
     prompt_version: str
-    cached: bool                # no model call answered this request: a stored summary, served again
+    cached: bool
     created_at: datetime

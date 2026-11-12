@@ -10,8 +10,7 @@ A chat's first question is looked up in the answer cache before any of that.
 
 Pure decisions (select_sources, gate, ground, suggestions) are separate functions with
 no I/O, so the grounding and refusal rules are unit-tested without a model
-or a database. A caller that shows progress (the stream route) passes sinks
-to ask(); the pipeline is the same with or without them.
+or a database.
 """
 
 from __future__ import annotations
@@ -127,7 +126,6 @@ def ready_documents(conn: Connection, document_ids: Sequence[DocumentId]) -> lis
 
 
 def documents_not_found(missing: Sequence[DocumentId], total: int) -> VaultError:
-    """DOCUMENT_NOT_FOUND (404) for the ids of `total` that do not exist, listing them."""
     return VaultError(ErrorCode.DOCUMENT_NOT_FOUND, f"{len(missing)} of {total} documents do not exist.",
                       details={"missing": [str(doc_id) for doc_id in missing]})
 
@@ -278,13 +276,6 @@ def _ignore(*_: object) -> None:
 
 
 class _ProvisionalAnswer:
-    """The ai.TextSink for a streamed answer: the JSON's answer field with its [S#] markers removed.
-
-    Each provider attempt starts afresh. When the attempt before it had already sent
-    text, the caller hears on_reset first, so text from a failed or repaired attempt
-    never mixes with the next one.
-    """
-
     def __init__(self, on_text: Callable[[str], None], on_reset: Callable[[], None]) -> None:
         self._on_text, self._on_reset = on_text, on_reset
         self._field, self._markers = AnswerField(), MarkerFilter()
@@ -397,7 +388,6 @@ def _answered(text: str, snapshots: Sequence[Mapping[str, Any]]) -> Answered:
 
 
 def _key_fact_labels(conn: Connection, documents: Sequence[DocRef]) -> list[list[str]]:
-    """The labels of each document's verified key facts, in scope order. A document without ready insights has none."""
     rows = conn.execute("SELECT document_id, body FROM document_insights WHERE document_id = ANY(%s)"
                         " AND status = 'ready'", ([doc.id for doc in documents],)).fetchall()
     labels = {row["document_id"]: [fact["label"] for fact in row["body"]["key_facts"]] for row in rows}
@@ -497,9 +487,6 @@ def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int)
     chosen = sorted(at for _, at in sorted(rounds)[:k])
     return [Source(f"S{n}", c.chunk_id, c.doc, c.text, c.page_map, c.similarity, c.rrf)
             for n, c in enumerate((ranked[at] for at in chosen), start=1)]
-
-
-# ------------------------------------------------------------------ suggestions
 
 
 def suggestions(follow_ups: Sequence[str], question: str) -> tuple[str, ...]:

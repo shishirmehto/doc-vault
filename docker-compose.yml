@@ -23,7 +23,6 @@ services:
     # No access log: the API writes its own line per request, with the request id and the route.
     command: uvicorn docvault.api:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 5 --no-access-log
     env_file: [{path: .env, required: false}]
-    # The fake chat streams its answer a word every 25 ms, so the demo shows streaming without a key.
     # DAILY_AI_BUDGET_USD comes from the shell or .env; empty means no cap.
     environment: {FAKE_STREAM_DELAY_MS: "25", LOG_FORMAT: json, DAILY_AI_BUDGET_USD: "${DAILY_AI_BUDGET_USD:-}",
                   CACHE_URL: "redis://cache:6379/0"}

@@ -126,9 +126,8 @@ def upload(ctx: Ctx, stream: BinaryIO, filename: str, *, replaces: DocumentId | 
     return Created(get(ctx.db, doc_id))
 
 
-# The family is `family` when given, else the newest document's with this name; the version is the family's highest
-# number plus one. A new family takes the new row's own id. ON CONFLICT names no index, so it covers both unique keys:
-# the bytes (sha256) and the version number (documents_family_version).
+# ON CONFLICT names no index, so it covers both unique keys: the bytes (sha256) and the version number
+# (documents_family_version).
 _INSERT_VERSION_SQL = """
 WITH new AS (SELECT gen_random_uuid() AS id),
 family AS (
@@ -148,11 +147,8 @@ VERSION_ATTEMPTS = 10
 
 def _insert_version(conn: Connection, sha: Sha256, filename: str, kind: DocKind, size: int,
                     family: FamilyId | None) -> tuple[DocumentId, bool]:
-    """The new document's id and True, or the id of the document with these bytes and False.
-
-    No row back means the bytes exist, or a concurrent upload committed this version number first. Each attempt is
-    its own statement and snapshot, so the next one sees that version and takes the number after it. Every retry
-    follows another upload's commit, so the loop ends.
+    """No row back means the bytes exist, or a concurrent upload committed this version number first. Each attempt is
+    its own statement and snapshot, so the next one sees that version and takes the number after it.
     """
     params = {"sha": sha, "filename": filename, "kind": kind, "size": size, "family": family}
     for _ in range(VERSION_ATTEMPTS):

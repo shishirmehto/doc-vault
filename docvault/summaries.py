@@ -5,9 +5,6 @@ create() is the whole path in one function a reader can follow top to bottom:
 
   check the document is ready -> serve a stored summary for the same options, model and prompt version
   -> otherwise read its pages -> summary prompt -> one model call -> ground (check every source's quote) -> persist
-
-ground is pure, so the grounding rule is unit-tested without a model or a database. SummaryOptions.of (domain.py)
-normalises the focus, so the options are both the cache key and the prompt's input.
 """
 
 from __future__ import annotations
@@ -68,7 +65,6 @@ def create(ctx: Ctx, document_id: DocumentId, options: SummaryOptions) -> Summar
     summary_id = SummaryId(uuid4())
     prompt = prompts.summary(doc.filename, doc.page_basis, pages, options, budget_chars=ctx.settings.insights_max_chars)
     draft = ctx.ai.complete(prompt, SummaryDraft, owner=SummaryOwner(summary_id))
-    # Stored, a blank summary would be the answer to every later request with these options.
     if not (text := collapse_whitespace(draft.summary)):
         raise VaultError(ErrorCode.AI_BAD_OUTPUT, "The model returned an empty summary.", retryable=True)
     sources, dropped = ground(draft, pages)
@@ -81,7 +77,7 @@ def create(ctx: Ctx, document_id: DocumentId, options: SummaryOptions) -> Summar
         except ForeignKeyViolation:
             raise chat.documents_not_found([document_id], 1) from None
         row = conn.execute(_SUMMARY_SQL + _BY_KEY, key).fetchone()
-    if row is None:   # an identical request stored first, and the document went before this read
+    if row is None:
         raise chat.documents_not_found([document_id], 1)
     return _row_to_summary(row, cached=False)
 
@@ -130,9 +126,6 @@ def ground(draft: SummaryDraft, pages: Sequence[Page]) -> tuple[tuple[SummarySou
     return tuple(kept), dropped
 
 
-# ------------------------------------------------------------------ rows
-
-# page_basis comes from the documents row at read time. A summary goes with its document, so the join keeps every row.
 _SUMMARY_SQL = """
 SELECT s.id, s.document_id, s.length, s.focus_key, s.tone, s.text, s.sources, s.dropped_sources, s.model,
        s.prompt_version, s.created_at, d.page_basis
@@ -152,7 +145,6 @@ ON CONFLICT (document_id, length, focus_key, tone, model, prompt_version) DO NOT
 
 
 def _row_to_summary(row: Mapping[str, Any], *, cached: bool) -> Summary:
-    """The database-to-domain boundary for summaries. focus_key '' is no focus."""
     return Summary(
         id=SummaryId(row["id"]), document_id=DocumentId(row["document_id"]),
         options=SummaryOptions(SummaryLength(row["length"]), row["focus_key"] or None, SummaryTone(row["tone"])),

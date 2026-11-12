@@ -103,17 +103,15 @@ class Case:
 
 @dataclass(frozen=True, slots=True)
 class ExpectedField:
-    """A field planted in both documents of the comparison case, as a change or unchanged."""
-
     field: str
-    policy: Fact            # the first column's cell: on this page, its quote holding this text, its value in it
-    quote: Fact             # the second column's cell, likewise
-    differs: bool           # True for a planted change
+    policy: Fact
+    quote: Fact
+    differs: bool
 
 
 @dataclass(frozen=True, slots=True)
 class ComparisonCase:
-    documents: tuple[str, str]      # sample filenames, compared with no focus in this column order
+    documents: tuple[str, str]
     fields: tuple[ExpectedField, ...]
 
 
@@ -122,7 +120,7 @@ class CaseSet:
     documents: tuple[str, ...]      # every sample to upload
     planted: tuple[Fact, ...]       # facts.yaml without the boilerplate repeated on every page
     cases: tuple[Case, ...]
-    comparison: ComparisonCase      # from facts.yaml's changes and unchanged
+    comparison: ComparisonCase
 
 
 def load_cases(path: Path = CASES) -> CaseSet:
@@ -240,7 +238,7 @@ def _ratio(flags: Iterable[bool]) -> Ratio:
 @dataclass(frozen=True, slots=True)
 class FieldResult:
     expected: ExpectedField
-    row: Row | None         # the first row whose two cells hold the expected facts; None when no row does
+    row: Row | None
 
     @property
     def found(self) -> bool:
@@ -276,9 +274,9 @@ class Report:
     suggested: tuple[Suggested, ...]
     grounding: Ratio            # insights key facts kept / (kept + dropped)
     recall: Ratio               # planted facts found in a kept key fact's quote, same document and page
-    cell_grounding: Ratio       # comparison cells kept / (kept + dropped)
+    cell_grounding: Ratio
     fields: tuple[FieldResult, ...]
-    summary_grounding: Mapping[SummaryLength, Ratio]    # summary sources kept / (kept + dropped), samples summed
+    summary_grounding: Mapping[SummaryLength, Ratio]
     spend: tuple[metrics.AIUsage, ...]
     turn_p95_ms: int | None
 

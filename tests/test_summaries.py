@@ -1,6 +1,3 @@
-"""Summaries: the options key, the prompt, the fake's options, grounding, the cache and the pipeline. Fake provider,
-real Postgres."""
-
 from __future__ import annotations
 
 import dataclasses
@@ -47,9 +44,6 @@ def test_the_focus_is_trimmed_lowercased_and_single_spaced_and_a_blank_one_is_no
     assert SummaryOptions.of(BRIEF, focus, CLIENT) == SummaryOptions(BRIEF, key, CLIENT)
 
 
-# ------------------------------------------------------------------ the prompt
-
-
 def sample_pages(name: str) -> tuple[PageBasis, tuple[Page, ...]]:
     doc = pages.extract(pages.sniff_kind(SAMPLES / name), SAMPLES / name, max_pages=100)
     return doc.basis, doc.pages
@@ -76,8 +70,6 @@ def test_the_prompt_is_the_insights_pages_then_the_word_target_the_readers_inter
                                                                                               CLIENT))
     assert (prompt.name, prompt.version, prompt.purpose, prompt.tier) == ("summary", "summary-v1", "summary", "main")
 
-
-# ------------------------------------------------------------------ the fake, through the pipeline
 
 OPENING = f"{POLICY} in brief."
 COVER = "SAMPLE - fictitious document. Not a real insurance contract."
@@ -132,8 +124,6 @@ def test_each_tone_gives_the_fake_its_own_opening_sentence_and_the_same_passages
                      f"Here is what {POLICY} means for you. {COVER}"]
 
 
-# ------------------------------------------------------------------ grounding
-
 DECLARATIONS = (Page(1, "Named Insured: Example Contractors LLC"),
                 Page(2, "Property Damage Deductible\n$2,500 per occurrence"))
 
@@ -162,9 +152,6 @@ def test_ground_reads_sources_until_it_keeps_six():
         (1, words[0]), (2, "Named Insured"), *((1, word) for word in words[1:]), (2, "LLC")), DECLARATIONS)
 
     assert (sources, dropped) == (tuple(SummarySource(1, word) for word in words[:6]), 1)
-
-
-# ------------------------------------------------------------------ the cache and the ledger
 
 
 def ledger(ctx, columns: str = "purpose, document_id, turn_id, comparison_id, summary_id, ok") -> list[tuple]:
@@ -235,9 +222,6 @@ def test_a_blank_summary_is_refused_as_bad_output_stores_nothing_and_its_call_st
     assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 0
 
 
-# ------------------------------------------------------------------ deletes
-
-
 def test_deleting_the_document_deletes_its_summaries(ctx):
     policy = indexed(ctx, SAMPLES / POLICY)
     summaries.create(ctx, policy, options())
@@ -266,9 +250,6 @@ def test_a_document_deleted_during_the_model_call_is_not_found_and_nothing_is_st
     assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 0
 
 
-# ------------------------------------------------------------------ over HTTP
-
-
 def summarise(client, doc_id: UUID, **body: object):
     return client.post(f"/documents/{doc_id}/summaries", json=body)
 
@@ -292,7 +273,7 @@ def test_a_broker_summarises_the_policy_gets_the_stored_summary_back_and_lists_b
     assert (other.json()["text"], other.json()["cached"]) == (f"Here is what {POLICY} means for you. {COVER}", False)
     assert ledger(ctx, "summary_id") == [(UUID(body["id"]),), (UUID(other.json()["id"]),)]
 
-    with ctx.db.connection() as conn:   # a minute apart, so the order does not rest on clock resolution
+    with ctx.db.connection() as conn:
         conn.execute("UPDATE document_summaries SET created_at = now() - interval '1 minute' WHERE id = %s",
                      (body["id"],))
     newest = client.get(f"/documents/{policy}/summaries", params={"limit": 1}).json()

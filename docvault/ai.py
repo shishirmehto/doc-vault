@@ -512,8 +512,7 @@ class OpenAIChat:
         return RawCompletion(message.content or "", message.refusal), _usage_tokens(response.usage)
 
     def _streamed(self, request: dict, on_text: Callable[[str], None]) -> tuple[RawCompletion, Tokens]:
-        """The same request with stream=True. The text is collected for validation and repair, and usage
-        comes from the final chunk, which include_usage adds with no choices."""
+        """Usage comes from the final chunk, which include_usage adds with no choices."""
         text: list[str] = []
         refusal: list[str] = []
         usage: CompletionUsage | None = None
@@ -715,10 +714,6 @@ def _fake_insights(prompt: Prompt) -> InsightsDraft:
 
 
 def _fake_compare(prompt: Prompt) -> ComparisonDraft:
-    """Each document's fields in order: its key facts, then the label-and-value passages of its pages (_key_fact).
-    The first field per label wins, labels compared as lowercase words. One row per label that two or more
-    documents have, in order of first appearance, named as first written; with a focus, only labels sharing a
-    content word with it. A document without the field gets a null cell."""
     documents: tuple[CompareDoc, ...] = prompt.inputs["documents"]
     focus: str | None = prompt.inputs["focus"]
     fields: list[dict[str, KeyFact | KeyFactDraft]] = []
@@ -797,7 +792,7 @@ def _fake_answer(prompt: Prompt) -> AnswerDraft:
     """Per document, the segment sharing the most content words with the standalone query. Ties go to the
     segment with fewer distinct content words (the tighter match), then the earlier source, then the earlier
     segment. Every document whose best segment shares at least two words is cited, with that segment as both
-    the sentence and the quote; with none, the draft is unsupported. Follow-ups come from _fake_follow_ups."""
+    the sentence and the quote; with none, the draft is unsupported."""
     query = set(_tokens(prompt.inputs["standalone"]))
     sources: tuple[Source, ...] = prompt.inputs["sources"]
     best: dict[DocumentId, tuple[tuple[int, int, int, int], Source, str]] = {}
@@ -841,9 +836,7 @@ class FakeChat:
     compare (_fake_compare), summary (_fake_summary).
 
     Token counts are whitespace word counts (system and messages in, JSON out),
-    so ledger and metrics tests have real numbers. Asked to stream, it sends the
-    finished JSON in word-sized pieces, stream_delay_ms apart, to simulate a
-    model's pacing.
+    so ledger and metrics tests have real numbers.
     """
 
     provider = "fake"
@@ -870,4 +863,4 @@ class FakeChat:
         return RawCompletion(text), Tokens(sum(len(part.split()) for part in sent), 0, len(text.split()))
 
 
-_WORD_PIECES = re.compile(r"(?<=\s)(?=\S)")   # cut before each word, so every piece keeps its trailing spaces
+_WORD_PIECES = re.compile(r"(?<=\s)(?=\S)")

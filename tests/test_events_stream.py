@@ -1,10 +1,3 @@
-"""GET /events/documents against a real uvicorn server, a real LISTEN connection and the fake provider.
-
-A real server rather than TestClient, so a client that leaves closes a real socket and the slot is freed through
-uvicorn and the HTTP middleware, as in production. vault_test is shared with other test runs whose commits also
-reach this listener, so assertions look only at this test's document ids and skip resync frames they cause.
-"""
-
 from __future__ import annotations
 
 import json
@@ -33,8 +26,6 @@ LIFECYCLE = ["queued", "parsing", "embedding", "ready"]
 
 
 class Stream:
-    """One open event stream, read a frame at a time. A comment reads as (":", text)."""
-
     def __init__(self, response: httpx.Response) -> None:
         self.response = response
         self._lines = response.iter_lines()
@@ -54,7 +45,6 @@ class Stream:
         return fields["event"], json.loads(fields["data"])
 
     def read_until(self, wanted: Callable[[Frame], bool], within: float = 10) -> list[Frame]:
-        """Frames up to and including the first wanted one, or every frame read until `within` passed."""
         deadline = time.monotonic() + within
         seen: list[Frame] = []
         while time.monotonic() < deadline:
@@ -91,8 +81,6 @@ class Live:
 
 @pytest.fixture
 def live(ctx, database_url: str, monkeypatch) -> Iterator[Live]:
-    """The real app on a free port, its lifespan swapped for one that uses the test ctx and a small hub.
-    The listener's liveness probe runs every 0.2 s, so every test crosses several probe cycles."""
     monkeypatch.setattr(events, "PROBE_S", 0.2)
     hubs: list[events.Hub] = []
 

@@ -86,8 +86,6 @@ class AnswerDraft(BaseModel):
                                     "do not cover.")
     evidence: list[EvidenceDraft] = Field(description="One item for every marker used in answer. Empty when "
                                                       "supported is false.")
-    # After evidence, so the answer streams first. No max_length: a fourth question or a missing "?" must not cost
-    # a repair call. chat.suggestions keeps at most three well-formed ones.
     follow_ups: list[str] = Field(description="Up to 3 short questions the user could ask next that these sources "
                                               "answer, each ending in '?'. Empty when there are none.")
 
@@ -123,7 +121,6 @@ class RowDraft(BaseModel):
 
 
 class ComparisonDraft(BaseModel):
-    # No max_length: a comparison gets no repair turn, so an extra row would fail it. compare.ground keeps MAX_ROWS.
     rows: list[RowDraft]
 
 
@@ -134,8 +131,6 @@ class SummarySourceDraft(BaseModel):
 
 class SummaryDraft(BaseModel):
     summary: str = Field(description="Plain text, no markdown.")
-    # No max_length: a summary gets no repair turn, so a seventh source would fail it. summaries.ground keeps
-    # MAX_SOURCES.
     sources: list[SummarySourceDraft] = Field(description="Up to 6 passages that support the summary's main "
                                                           "statements.")
 
@@ -299,10 +294,7 @@ def insights(filename: str, basis: PageBasis, pages: Sequence[Page], *, budget_c
 
 
 def _page_prefix(basis: PageBasis, pages: Sequence[Page], budget_chars: int) -> tuple[tuple[Page, ...], list[str]]:
-    """The pages a prompt includes, and their lines: <page n="3">...</page> each, then "The text above stops at
-    p. N of M." when the prefix is partial.
-
-    Pages go in order while their text totals at most budget_chars; the first
+    """Pages go in order while their text totals at most budget_chars; the first
     non-empty page always goes in, cut to the budget when it alone is longer.
     """
     filled = [page for page in pages if page.text]
@@ -319,17 +311,12 @@ def _page_prefix(basis: PageBasis, pages: Sequence[Page], budget_chars: int) -> 
     return tuple(included), lines
 
 
-# ------------------------------------------------------------------ compare
-
-
 @dataclass(frozen=True, slots=True)
 class CompareDoc:
-    """One document as the compare prompt sees it."""
-
-    label: str                      # "D1".."D5" in request order; the model names cells by it
+    label: str
     filename: str
     basis: PageBasis
-    key_facts: tuple[KeyFact, ...]  # verified insights facts; none when insights are not ready
+    key_facts: tuple[KeyFact, ...]
     pages: tuple[Page, ...]
 
 

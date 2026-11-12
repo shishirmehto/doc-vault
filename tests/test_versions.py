@@ -1,9 +1,3 @@
-"""Document versions: which upload joins which family, under which number, and how the API lists them.
-
-Fake provider, real Postgres. The race test holds one upload's insert open on its own connection, so the collision
-it checks happens on every run rather than when two threads happen to meet.
-"""
-
 from __future__ import annotations
 
 import dataclasses
@@ -84,7 +78,7 @@ def test_bytes_stored_before_win_over_replaces(ctx):
 def test_a_name_two_families_share_joins_the_family_of_the_newest(ctx):
     older = created(upload(ctx, "Deductible: $500", "schedule.txt"))
     newer = created(upload(ctx, "Deductible: $750", "other.txt"))
-    with ctx.db.connection() as conn:   # as a database from before versions holds them: same name, two families
+    with ctx.db.connection() as conn:
         conn.execute("UPDATE documents SET filename = 'schedule.txt' WHERE id = %s", (newer.id,))
 
     third = created(upload(ctx, "Deductible: $1,000", "Schedule.txt"))
@@ -95,8 +89,6 @@ def test_a_name_two_families_share_joins_the_family_of_the_newest(ctx):
 
 @dataclasses.dataclass
 class HeldPool:
-    """The pool, except that the first connection taken runs one transaction and commits it only on `release`."""
-
     pool: dbmod.Db
     inserted: threading.Event = dataclasses.field(default_factory=threading.Event)
     release: threading.Event = dataclasses.field(default_factory=threading.Event)
@@ -135,7 +127,7 @@ def test_two_concurrent_uploads_into_one_family_get_versions_2_and_3(ctx):
     def run(key: str, worker_ctx, text: str) -> None:
         try:
             results[key] = upload(worker_ctx, text, "terms.txt")
-        except BaseException as exc:   # the assertion below names it
+        except BaseException as exc:
             results[key] = exc
 
     a = threading.Thread(target=run, args=("a", dataclasses.replace(ctx, db=held), "Premium: $1,100"))
@@ -214,7 +206,7 @@ def test_a_comparison_of_two_versions_names_each_version_and_marks_the_changed_f
         documents.run_index(ctx, doc.id)
 
     body = client.post("/comparisons", json={"document_ids": [str(v1.id), str(v2.id)]}).json()
-    with ctx.db.connection() as conn:   # as a comparison stored before versions holds its columns
+    with ctx.db.connection() as conn:
         conn.execute("UPDATE comparisons SET documents = (SELECT jsonb_agg(doc - 'version') FROM"
                      " jsonb_array_elements(documents) AS doc) WHERE id = %s", (body["id"],))
     older = client.get(f"/comparisons/{body['id']}").json()
@@ -242,7 +234,6 @@ def scratch_url(database_url: str) -> Iterator[str]:
 def test_migrate_makes_each_existing_document_its_own_family_at_version_1(scratch_url):
     dbmod.migrate(scratch_url)
     with psycopg.connect(scratch_url, autocommit=True) as conn:
-        # Back to the documents table as it was before versions, then rows written by that code.
         conn.execute("DROP TRIGGER documents_notify ON documents")
         conn.execute("DROP INDEX documents_family_version, documents_filename")
         conn.execute("ALTER TABLE documents DROP COLUMN family_id, DROP COLUMN version")

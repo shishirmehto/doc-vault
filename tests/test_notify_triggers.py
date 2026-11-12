@@ -1,7 +1,4 @@
-"""The NOTIFY triggers behind GET /events/documents: a committed change sends the document id once, a rollback none.
-
-vault_test is shared with other test runs, so assertions count only ids these tests created. Every step ends
-at a marker notification: Postgres delivers notifications in commit order, so whatever a step sent arrives
+"""Every step ends at a marker notification: Postgres delivers notifications in commit order, so whatever a step sent arrives
 before the marker sent after it, and a missing id is a real absence rather than a timeout.
 """
 
@@ -23,7 +20,6 @@ class Channel:
     writer: Connection
 
     def sent(self, sql: str, params: tuple = (), *, rollback: bool = False) -> list[str]:
-        """Payloads delivered on channel documents for one statement, rolled back or committed."""
         if rollback:
             with self.writer.transaction(force_rollback=True):
                 self.writer.execute(sql, params)
@@ -39,7 +35,6 @@ class Channel:
         raise AssertionError("the marker notification never arrived")
 
     def counts(self, doc_id: UUID, sql: str, params: tuple = ()) -> tuple[int, int]:
-        """How often doc_id was sent when the statement rolled back, then when the same statement committed."""
         rolled_back = self.sent(sql, params, rollback=True).count(str(doc_id))
         return rolled_back, self.sent(sql, params).count(str(doc_id))
 

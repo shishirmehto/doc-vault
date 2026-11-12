@@ -22,11 +22,9 @@ def test_the_case_set_scores_retrieval_citations_and_refusals_apart():
     assert report.citation == Ratio(7, 34)
     assert report.not_found == Ratio(15, 16)
     assert (report.grounding, report.recall) == (Ratio(31, 31), Ratio(12, 28))
-    assert report.suggestions == Ratio(108, 108)    # three under each of the 36 cases' last turns
+    assert report.suggestions == Ratio(108, 108)
     assert (report.cell_grounding, report.difference_recall, report.equal_kept) == (
         Ratio(24, 24), Ratio(3, 4), Ratio(1, 1))
-    # The fake aligns fields by label, and the premium is "Total Advance Premium" in one and "Total Annual Premium"
-    # in the other.
     assert [(result.expected.field, result.row) for result in report.fields if not result.found] == [("premium", None)]
     assert report.summary_grounding == {
         SummaryLength.BRIEF: Ratio(6, 6), SummaryLength.STANDARD: Ratio(12, 12), SummaryLength.DETAILED: Ratio(18, 18)}

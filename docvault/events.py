@@ -60,8 +60,6 @@ def read(db: Db, doc_id: DocumentId) -> Changed | Deleted:
 
 
 class Feed:
-    """The events queued for one open stream, at most hub.backlog of them."""
-
     def __init__(self, hub: Hub) -> None:
         self._hub = hub
         self._events: deque[Event] = deque()
@@ -120,7 +118,6 @@ class Hub:
             doc_id = DocumentId(UUID(payload))
         except ValueError:
             return
-        # With no stream open nobody needs the read, and a stream that opens later reads the list itself.
         if doc_id in self._pending or not self._feeds:
             return
         self._pending.add(doc_id)
@@ -170,7 +167,6 @@ async def listen(url: str, hub: Hub) -> NoReturn:
                     # On a half-open TCP connection the probe would otherwise wait for the kernel's timeout.
                     async with asyncio.timeout(PROBE_S):
                         await conn.execute("SELECT 1")
-        # Any failure, not only a lost connection: a listener that stopped would leave every stream open and silent.
         except Exception:
             log.warning("The live events connection to Postgres failed; reconnecting in %.1f s", backoff,
                         exc_info=True)

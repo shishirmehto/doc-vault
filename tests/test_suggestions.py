@@ -1,5 +1,3 @@
-"""Follow-up suggestions: cleaned from the answer model, or built from key-fact labels when the gate refuses."""
-
 from __future__ import annotations
 
 from docvault import insights

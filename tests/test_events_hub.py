@@ -1,5 +1,3 @@
-"""The hub behind GET /events/documents: coalesced reads fanned out to every feed. No database: the read is injected."""
-
 from __future__ import annotations
 
 import asyncio
@@ -33,8 +31,6 @@ def document(doc_id: DocumentId) -> Document:
 
 
 class Reads:
-    """The injected read: records every id it is asked for, in order."""
-
     def __init__(self, fail: DocumentId | None = None) -> None:
         self.ids: list[DocumentId] = []
         self.fail = fail
@@ -47,7 +43,6 @@ class Reads:
 
 
 def drive[T](scenario: Callable[[Hub], Awaitable[T]], read: Callable, **hub_kwargs) -> T:
-    """Runs the scenario against a hub whose consumer is running."""
     async def main() -> T:
         hub = Hub(read, **{"window_s": 0.05, "keepalive_s": 0.3, **hub_kwargs})
         consumer = asyncio.create_task(hub.run())
@@ -59,7 +54,6 @@ def drive[T](scenario: Callable[[Hub], Awaitable[T]], read: Callable, **hub_kwar
 
 
 async def until_quiet(feed: Feed) -> list[Event | None]:
-    """Every event the feed yields, ending with the first None (keepalive_s with nothing queued)."""
     seen: list[Event | None] = [await feed.next()]
     while seen[-1] is not None:
         seen.append(await feed.next())

@@ -51,7 +51,7 @@ LIMIT = Limit(amount=1_000_000, currency="USD")
 
 @dataclass
 class ScriptedChat:
-    """Returns or raises its script in order and keeps every prompt it was sent and the timeout of each call."""
+    """Returns or raises its script in order and keeps every prompt it was sent."""
 
     script: list[tuple[RawCompletion, Tokens] | ProviderError]
     models: Mapping[Tier, str] = field(default_factory=lambda: {"main": "gpt-6.1-sol", "small": "gpt-6-luna"})
@@ -255,8 +255,6 @@ CHAT_COMPLETION = {
 
 def openai_client(*responses: httpx2.Response | Exception, sent: list[tuple[str, dict]] | None = None,
                   timeouts: list[float] | None = None) -> OpenAI:
-    """A client whose transport answers with `responses` in order, keeping each request's path and JSON body in
-    `sent` and its read timeout, which the SDK sends outside the body, in `timeouts`."""
     queue = list(responses)
 
     def handle(request: httpx2.Request) -> httpx2.Response:
@@ -411,14 +409,8 @@ def test_fake_chat_answers_from_its_handler_and_counts_words_as_tokens(db):
         fake.complete(dataclasses.replace(PROMPT, name="condense"), Limit, owner=OWNER)
 
 
-
-# ------------------------------------------------------------------ streaming
-
-
 @dataclass
 class RecordingSink:
-    """A TextSink that keeps every attempt mark and every piece of text, in order."""
-
     events: list[str] = field(default_factory=list)
 
     def attempt(self) -> None:
@@ -433,7 +425,6 @@ USAGE = {"prompt_tokens": 2000, "completion_tokens": 300, "total_tokens": 2300,
 
 
 def chunk(content: str | None = None, *, usage: dict | None = None, finish: str | None = None) -> dict:
-    """One chat.completion.chunk. The final usage chunk that include_usage adds has no choices."""
     choices = [] if usage else [{"index": 0, "delta": {} if content is None else {"content": content},
                                  "finish_reason": finish, "logprobs": None}]
     return {"id": "chatcmpl-a1", "object": "chat.completion.chunk", "created": 1762819200, "model": "gpt-6.1-sol",

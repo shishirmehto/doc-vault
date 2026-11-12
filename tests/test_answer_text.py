@@ -1,5 +1,3 @@
-"""answer_text: the answer field of streaming answer-model JSON, and marker removal as text arrives. Pure."""
-
 from __future__ import annotations
 
 import json
@@ -32,7 +30,6 @@ ESCAPED = (
 
 
 def chunkings(text: str) -> list[list[str]]:
-    """Two chunks split at every index, then one character per chunk."""
     return [[text[:at], text[at:]] for at in range(len(text) + 1)] + [list(text)]
 
 

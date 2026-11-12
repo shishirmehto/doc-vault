@@ -4,9 +4,6 @@ create() is the whole path in one function a reader can follow top to bottom:
 
   check the documents are ready -> read their pages and verified key facts -> compare prompt
   (each document an even share of the budget) -> one model call -> ground (check every cell's quote) -> persist
-
-ground is pure, and Row.differs (domain.py) decides a difference from the values in code, so the
-grounding and difference rules are unit-tested without a model or a database.
 """
 
 from __future__ import annotations
@@ -155,10 +152,6 @@ def _grounded(cell: CellDraft, pages: Sequence[Page]) -> Cell | None:
     return None if found is None else Cell(collapse_whitespace(cell.value), cell.page, found)
 
 
-# ------------------------------------------------------------------ rows
-
-# Usage is read back from the ledger, as chat._TURN_SQL does, so it counts every attempt the gateway made.
-# deleted comes from the documents table at read time; everything else about a column is the snapshot.
 _COMPARISON_SQL = """
 SELECT c.id, c.focus, c.rows, c.dropped_cells, c.model, c.prompt_version, c.created_at,
        (SELECT jsonb_agg(doc || jsonb_build_object('deleted', d.id IS NULL) ORDER BY at)
@@ -176,7 +169,6 @@ def _row_json(row: Row) -> dict[str, object]:
 
 
 def _row_to_comparison(row: Mapping[str, Any]) -> Comparison:
-    """The database-to-domain boundary for comparisons. Rows are positional: cells[i] belongs to documents[i]."""
     return Comparison(
         id=ComparisonId(row["id"]),
         documents=tuple(ComparedDocument(DocumentId(UUID(doc["id"])), doc["filename"], doc.get("version"),

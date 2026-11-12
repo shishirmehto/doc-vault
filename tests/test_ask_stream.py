@@ -1,5 +1,3 @@
-"""POST /chats/{id}/messages/stream: the same ask, its progress as server-sent events. Fake provider, real Postgres."""
-
 from __future__ import annotations
 
 import dataclasses
@@ -21,7 +19,6 @@ LIMIT_QUESTION = "What is the each occurrence limit?"
 
 
 def events(text: str) -> list[tuple[str, dict]]:
-    """The frames of a whole text/event-stream body, as (event, data)."""
     parsed = []
     for frame in text.split("\n\n"):
         if frame:
@@ -39,7 +36,6 @@ def stream(client, chat_id: str, question: str) -> list[tuple[str, dict]]:
 
 
 def shape(sent: list[tuple[str, dict]]) -> list[str]:
-    """Event names with each stage named and each run of deltas folded into one entry."""
     names: list[str] = []
     for event, data in sent:
         name = f"stage:{data['stage']}" if event == "stage" else event
@@ -133,8 +129,6 @@ def test_a_provider_failure_mid_stream_is_an_error_event_and_every_attempt_stays
 
 
 class BreaksOnceAfterText(FakeChat):
-    """The first answer attempt streams half its JSON, then fails like a dropped provider; later attempts work."""
-
     def __init__(self) -> None:
         super().__init__()
         self.broken = False
@@ -149,8 +143,6 @@ class BreaksOnceAfterText(FakeChat):
 
 
 class RepairedOnce(FakeChat):
-    """The first answer attempt streams a draft whose evidence is not a list, so the gateway asks for a repair."""
-
     def complete_json(self, prompt, output, *, timeout_s, on_text=None):
         if prompt.name != "answer" or len(prompt.messages) > 1 or on_text is None:
             return super().complete_json(prompt, output, timeout_s=timeout_s, on_text=on_text)
@@ -182,8 +174,6 @@ def test_text_from_a_failed_or_repaired_attempt_is_reset_before_the_next_attempt
 
 
 class HeldAfterFirstWord(FakeChat):
-    """Streams the answer's first piece, then waits for `go` before the rest, so a test can leave mid-answer."""
-
     def __init__(self, go: threading.Event) -> None:
         super().__init__()
         self.go = go

@@ -96,14 +96,14 @@ class DocumentOut(BaseModel):
     page_basis: PageBasis | None
     empty_pages: list[int] = []
     insights_status: InsightsStatus
-    document_type: str | None          # the insights' document type, once insights are ready
+    document_type: str | None
     error: ErrorBody | None            # only when status == "failed"
     failed_stage: Literal["parse", "embed"] | None   # only when status == "failed": the step that failed
     processing_ms: int | None
     created_at: datetime
-    family_id: UUID                    # shared by every version of this document: the first version's id
-    version: int                       # 1, 2, 3 in upload order; a deleted version leaves a gap
-    latest_version: int                # the family's highest version now
+    family_id: UUID
+    version: int
+    latest_version: int
     links: dict[str, str]
 
 
@@ -113,7 +113,7 @@ class DocumentPage(BaseModel):
 
 
 class VersionList(BaseModel):
-    items: list[DocumentOut]           # the family, oldest first
+    items: list[DocumentOut]
 
 
 class PageOut(BaseModel):
@@ -236,7 +236,7 @@ class TurnOut(BaseModel):
     reason: Literal["no_evidence", "model_declined", "unverified"] | None   # only when not_found
     answer: str
     citations: list[CitationOut]
-    suggestions: list[str]             # follow-up questions to offer, at most 3, each ending in "?"
+    suggestions: list[str]
     usage: UsageOut
     latency_ms: int
     created_at: datetime
@@ -246,9 +246,6 @@ class TurnOut(BaseModel):
 class HistoryOut(BaseModel):
     chat_id: UUID
     turns: list[TurnOut]
-
-
-# ------------------------------------------------------------------ comparison
 
 
 def _distinct(ids: list[UUID]) -> list[UUID]:
@@ -267,25 +264,25 @@ class CompareIn(BaseModel):
 
 class ComparedDocumentOut(BaseModel):
     id: UUID
-    filename: str                      # as it was when the comparison ran
-    version: int | None                # the document's version then; null for a comparison stored before versions
-    deleted: bool                      # deleted since; its column keeps its cells and page labels
-    pages_read: int                    # coverage: pages 1..pages_read went into the prompt
+    filename: str
+    version: int | None
+    deleted: bool
+    pages_read: int
     page_count: int
 
 
 class CellOut(BaseModel):
     document_id: UUID
-    value: str | None                  # every field but document_id is null for an empty cell
+    value: str | None
     page: int | None
-    page_label: str | None             # "p. 3" or "section 3"
-    quote: str | None                  # the source text on that page, whitespace collapsed
+    page_label: str | None
+    quote: str | None
 
 
 class RowOut(BaseModel):
     field: str
-    cells: list[CellOut]               # one per document, in the order of documents
-    differs: bool                      # distinct values, different currencies, or an empty cell beside a filled one
+    cells: list[CellOut]
+    differs: bool
 
 
 class ComparisonOut(BaseModel):
@@ -293,7 +290,7 @@ class ComparisonOut(BaseModel):
     documents: list[ComparedDocumentOut]
     focus: str | None
     rows: list[RowOut]
-    dropped_cells: int                 # filled cells left out, such as one whose quote was not on the cited page
+    dropped_cells: int
     model: str
     prompt_version: str
     usage: UsageOut
@@ -303,9 +300,6 @@ class ComparisonOut(BaseModel):
 class ComparisonPage(BaseModel):
     items: list[ComparisonOut]
     next_cursor: str | None
-
-
-# ------------------------------------------------------------------ summary
 
 
 class SummaryIn(BaseModel):
@@ -322,22 +316,22 @@ class SummaryIn(BaseModel):
 
 class SummarySourceOut(BaseModel):
     page: int
-    page_label: str                    # "p. 3" or "section 3"
-    quote: str                         # the source text on that page, whitespace collapsed
+    page_label: str
+    quote: str
 
 
 class SummaryOut(BaseModel):
     id: UUID
     document_id: UUID
     length: SummaryLength
-    focus: str | None                  # as compared: lowercase, single spaces; null for none
+    focus: str | None
     tone: SummaryTone
     text: str
-    sources: list[SummarySourceOut]    # may be empty: the summary stands without them
-    dropped_sources: int               # sources left out because the quote was not on the page they cite
+    sources: list[SummarySourceOut]
+    dropped_sources: int
     model: str
     prompt_version: str
-    cached: bool                       # true: a stored summary, served again with no model call
+    cached: bool
     created_at: datetime
 
 
@@ -526,7 +520,6 @@ def turn_out(turn: Turn) -> TurnOut:
 
 
 def comparison_out(comparison: Comparison) -> ComparisonOut:
-    """Every row's cells[i] belongs to documents[i]."""
     docs = comparison.documents
     return ComparisonOut(
         id=comparison.id, focus=comparison.focus, dropped_cells=comparison.dropped_cells, model=comparison.model,
