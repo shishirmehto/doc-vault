@@ -1,18 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { headingTakesFocus } from "./focus.ts";
+import { focusDropped } from "./focus.ts";
 
 const body = {};
 const findField = {};
 
-test("a screen's heading takes the focus that fell to the page when the reader moved there, and no other", () => {
+test("focus counts as dropped when it fell to the page body or nowhere, and not while a control holds it", () => {
   assert.deepEqual(
     [
-      headingTakesFocus(true, { activeElement: body, body }),
-      headingTakesFocus(true, { activeElement: null, body }),
-      headingTakesFocus(false, { activeElement: body, body }),
-      headingTakesFocus(true, { activeElement: findField, body }),
+      focusDropped({ activeElement: body, body }),
+      focusDropped({ activeElement: null, body }),
+      focusDropped({ activeElement: findField, body }),
     ],
-    [true, true, false, false],
+    [true, true, false],
   );
 });

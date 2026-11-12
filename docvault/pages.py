@@ -124,38 +124,34 @@ _TOKEN = re.compile(r"\S{4,}")
 
 
 def _undouble(text: str) -> str:
-    """Read "fake bold" once. Some PDFs draw bold by printing each glyph twice, and pypdf then reads
-    "PPoolliiccyy" for "Policy". A token with every character doubled in place and at least 2 letters is halved; a
-    token with no letters, such as 1100, is never touched."""
+    """Some PDFs draw bold by printing each glyph twice, and pypdf then reads "PPoolliiccyy" for "Policy"."""
     return _TOKEN.sub(_undouble_token, text)
 
 
 def _undouble_token(match: re.Match[str]) -> str:
     token = match.group()
-    once = token[::2]
-    if len(token) % 2 or token[1::2] != once or sum(ch.isalpha() for ch in token) < 2:
-        return token
-    return once
+    return token[::2] if _printed_twice(token) else token
+
+
+def _printed_twice(token: str) -> bool:
+    letters = sum(ch.isalpha() for ch in token)
+    return len(token) % 2 == 0 and token[::2] == token[1::2] and letters >= 2
 
 
 _WORD = re.compile(r"[^\W\d_]+")
 _LINE_END_HYPHEN = re.compile(r"([^\W_]+)-\n([^\W\d_]+)")
 
 
-def _join_line_end_hyphens(texts: list[str]) -> list[str]:
-    """Rejoin words that a PDF hyphenated at a line end: pypdf reads "infor-\\nmation". When the next line starts
-    with a lower-case letter, the halves become one word if the document uses that word elsewhere, and keep the
-    hyphen otherwise, as in "single-family" or "30-day". The line break goes either way. The vocabulary is the whole
-    document, but no join crosses a page, so every quote stays on the page it was found on."""
-    vocabulary = {word.lower() for text in texts for word in _WORD.findall(text)}
+def _join_line_end_hyphens(page_texts: list[str]) -> list[str]:
+    letter_words = {word.lower() for text in page_texts for word in _WORD.findall(text)}
 
-    def join(match: re.Match[str]) -> str:
+    def unwrap(match: re.Match[str]) -> str:
         head, tail = match.groups()
         if not tail[0].islower():
             return match.group()
-        return head + tail if (head + tail).lower() in vocabulary else f"{head}-{tail}"
+        return head + tail if (head + tail).lower() in letter_words else f"{head}-{tail}"
 
-    return [_LINE_END_HYPHEN.sub(join, text) for text in texts]
+    return [_LINE_END_HYPHEN.sub(unwrap, text) for text in page_texts]
 
 
 def _tidy(text: str) -> str:

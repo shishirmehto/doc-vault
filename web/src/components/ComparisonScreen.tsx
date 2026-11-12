@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { api } from "@/api/client";
 import type {
   CellCite, ComparedDoc, Comparison, ComparisonId, ComparisonPane, Doc, Selection,
 } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
+import { useCatchDroppedFocus } from "@/hooks/useCatchDroppedFocus";
 import { useListedDoc } from "@/hooks/useListedDoc";
 import { cellAt, columnVersion, visibleRows } from "@/lib/compare";
 import { cellView } from "@/lib/comparisonPane";
-import { headingTakesFocus } from "@/lib/focus";
 import {
   NONE_DIFFER, comparedNames, comparing, deletedColumns, droppedCells, fieldCount, focusLine, noFieldsNext, partlyRead,
 } from "@/copy";
@@ -23,13 +23,12 @@ type Props = {
   docs: readonly Doc[] | null;
   pane: ComparisonPane | null;
   only: boolean;
-  /** The reader moved here from another screen, rather than loading the page on this one. */
-  arrived: boolean;
+  navigated: boolean;
   push(s: Selection): void;
   replace(s: Selection): void;
 };
 
-export function ComparisonScreen({ id, docs, pane, only, arrived, push, replace }: Props) {
+export function ComparisonScreen({ id, docs, pane, only, navigated, push, replace }: Props) {
   const { result, reload } = useFetched(`comparison:${id}`, () => api.comparison(id));
   const comparison = result?.ok ? result.value : null;
   const at = (next: ComparisonPane | null, nextOnly = only): Selection => ({ kind: "comparison", comparison: id, pane: next, only: nextOnly });
@@ -52,7 +51,7 @@ export function ComparisonScreen({ id, docs, pane, only, arrived, push, replace 
         ) : !result.ok ? (
           <LoadFailed error={result.error} onRetry={reload} />
         ) : (
-          <ComparisonView c={result.value} docs={docs} active={pane?.cite ?? null} only={only} arrived={arrived}
+          <ComparisonView c={result.value} docs={docs} active={pane?.cite ?? null} only={only} navigated={navigated}
             onOpen={(cite) => push(at({ cite, page: null }))}
             onOnly={(next) => replace(at(pane, next))}
             onNew={() => push({ kind: "compare", with: null })} />
@@ -69,12 +68,12 @@ export function ComparisonScreen({ id, docs, pane, only, arrived, push, replace 
   );
 }
 
-function ComparisonView({ c, docs, active, only: inUrl, arrived, onOpen, onOnly, onNew }: {
+function ComparisonView({ c, docs, active, only: inUrl, navigated, onOpen, onOnly, onNew }: {
   c: Comparison;
   docs: readonly Doc[] | null;
   active: CellCite | null;
   only: boolean;
-  arrived: boolean;
+  navigated: boolean;
   onOpen(cite: CellCite): void;
   onOnly(only: boolean): void;
   onNew(): void;
@@ -91,11 +90,7 @@ function ComparisonView({ c, docs, active, only: inUrl, arrived, onOpen, onOnly,
   const deleted = c.documents.filter((d) => d.deleted).map((d) => d.filename);
   const unit = (doc: ComparedDoc) => docs?.find((d) => d.id === doc.id)?.layout?.unit ?? "page";
 
-  // A finished run's status, or the Recent comparisons link, held focus and left with the compare screen.
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    if (headingTakesFocus(arrived, document)) heading.current?.focus({ preventScroll: true });
-  }, [arrived]);
+  const heading = useCatchDroppedFocus<HTMLHeadingElement>(navigated);
 
   return (
     <section className="comparison" aria-labelledby="comparison-title">
