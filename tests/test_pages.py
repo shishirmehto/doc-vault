@@ -205,6 +205,21 @@ def test_fake_bold_in_a_pdf_is_read_once_and_amounts_keep_their_digits(tmp_path)
     assert pages.extract(DocKind.TXT, txt, max_pages=10).pages[0].text == "\n".join(lines)
 
 
+def test_a_word_split_at_a_line_end_joins_when_the_document_uses_it_whole_and_never_across_pages(tmp_path):
+    path = text_pdf(
+        tmp_path / "columns.pdf",
+        ["We rely on the infor-", "mation you gave us, on the single-", "family dwelling and on the Policy-",
+         "Holder named above. See the defini-"],
+        ["tions of these words: information, definitions."],
+    )
+    doc = pages.extract(DocKind.PDF, path, max_pages=10)
+    assert [p.text for p in doc.pages] == [
+        "We rely on the information you gave us, on the single-family dwelling and on the Policy-\nHolder named above. "
+        "See the defini-",
+        "tions of these words: information, definitions.",
+    ]
+
+
 def test_kind_comes_from_the_bytes_not_the_name(tmp_path):
     disguised = tmp_path / "notes.txt"
     disguised.write_bytes((SAMPLES / POLICY).read_bytes())

@@ -116,8 +116,8 @@ def _extract_pdf(path: Path, max_pages: int) -> ExtractedText:
         raise VaultError(ErrorCode.ENCRYPTED_PDF,
                          "This PDF is password-protected. Remove the password and upload it again.")
     _check_page_count(len(reader.pages), max_pages)   # before extraction, which is the slow part
-    return ExtractedText(PageBasis.PHYSICAL, tuple(
-        Page(number, _undouble(_tidy(page.extract_text()))) for number, page in enumerate(reader.pages, start=1)))
+    texts = _join_line_end_hyphens([_undouble(_tidy(page.extract_text())) for page in reader.pages])
+    return ExtractedText(PageBasis.PHYSICAL, tuple(Page(number, text) for number, text in enumerate(texts, start=1)))
 
 
 _TOKEN = re.compile(r"\S{4,}")
@@ -136,6 +136,26 @@ def _undouble_token(match: re.Match[str]) -> str:
     if len(token) % 2 or token[1::2] != once or sum(ch.isalpha() for ch in token) < 2:
         return token
     return once
+
+
+_WORD = re.compile(r"[^\W\d_]+")
+_LINE_END_HYPHEN = re.compile(r"([^\W\d_]+)-\n([^\W\d_]+)")
+
+
+def _join_line_end_hyphens(texts: list[str]) -> list[str]:
+    """Rejoin words that a PDF hyphenated at a line end: pypdf reads "infor-\\nmation". When the next line starts
+    with a lower-case letter, the halves become one word if the document uses that word elsewhere, and keep the
+    hyphen otherwise, as in "single-family". The line break goes either way. The vocabulary is the whole document,
+    but no join crosses a page, so every quote stays on the page it was found on."""
+    vocabulary = {word.lower() for text in texts for word in _WORD.findall(text)}
+
+    def join(match: re.Match[str]) -> str:
+        head, tail = match.groups()
+        if not tail[0].islower():
+            return match.group()
+        return head + tail if (head + tail).lower() in vocabulary else f"{head}-{tail}"
+
+    return [_LINE_END_HYPHEN.sub(join, text) for text in texts]
 
 
 def _tidy(text: str) -> str:
