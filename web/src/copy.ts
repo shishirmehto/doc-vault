@@ -418,10 +418,17 @@ export const OTHER_VERSIONS_STAY = "Its other versions stay in the vault, with t
 /** "$0.000001", "$5.00", "$0.25": two decimals, or as many as the amount needs, as the API writes the cap. */
 export function dollars(usd: number): string {
   const digits = decimals(usd);
-  return new Intl.NumberFormat("en-US", {
-    style: "currency", currency: "USD", minimumFractionDigits: digits, maximumFractionDigits: digits,
-  }).format(usd);
+  let format = USD.get(digits);
+  if (format === undefined) {
+    format = new Intl.NumberFormat("en-US", {
+      style: "currency", currency: "USD", minimumFractionDigits: digits, maximumFractionDigits: digits,
+    });
+    USD.set(digits, format);
+  }
+  return format.format(usd);
 }
+
+const USD = new Map<number, Intl.NumberFormat>();
 
 /** The fewest decimals, at least 2, that write `usd` exactly. */
 function decimals(usd: number): number {

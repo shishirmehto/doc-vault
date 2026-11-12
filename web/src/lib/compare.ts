@@ -1,7 +1,7 @@
 // A comparison run as a pure state machine, and the rules the comparison screens read. hooks/useCompareRun.ts runs
 // the request and feeds its result in as events.
 
-import type { ApiError, CellCite, ComparedDoc, CompareCell, CompareRow, Comparison, Doc, DocumentId } from "../api/domain.ts";
+import type { ApiError, CellCite, ComparedDoc, CompareCell, CompareRow, Comparison, Doc, DocumentId, Quota } from "../api/domain.ts";
 
 /** POST /comparisons takes 2 to 5 documents and a focus of at most 200 characters. */
 export const COMPARE_MIN = 2;
@@ -61,7 +61,8 @@ export function columns(chosen: ReadonlySet<DocumentId>, docs: readonly Doc[]): 
  * documents_not_ready: a document becomes ready on its own. A used-up spending cap fails again until it resets.
  */
 export function worthRetrying(error: ApiError, now: Date = new Date()): boolean {
-  if (error.kind === "refused" && error.code === "quota_exceeded" && error.quota !== null) return now >= error.quota.resetsAt;
+  const quota = usedUpCap(error);
+  if (quota !== null) return now >= quota.resetsAt;
   return !(error.kind === "refused" && error.retryable === false && error.code !== "documents_not_ready");
 }
 
@@ -73,9 +74,15 @@ const LONGEST_WAIT_MS = 2 ** 31 - 1;
  * changes with time. Returns the cancel. The caller reads worthRetrying again, and calls this again if it is still no.
  */
 export function whenRetryChanges(error: ApiError, onChange: () => void): () => void {
-  if (error.kind !== "refused" || error.quota === null || worthRetrying(error)) return () => {};
-  const timer = setTimeout(onChange, Math.min(LONGEST_WAIT_MS, error.quota.resetsAt.getTime() - Date.now()));
+  const quota = usedUpCap(error);
+  if (quota === null || worthRetrying(error)) return () => {};
+  const timer = setTimeout(onChange, Math.min(LONGEST_WAIT_MS, quota.resetsAt.getTime() - Date.now()));
   return () => clearTimeout(timer);
+}
+
+/** The cap and its reset, when `error` is a used-up spending cap whose details parsed. */
+function usedUpCap(error: ApiError): Quota | null {
+  return error.kind === "refused" && error.code === "quota_exceeded" ? error.quota : null;
 }
 
 /** The rows "Only differences" leaves, each with its index in `rows`, which is what a cell's URL names. */

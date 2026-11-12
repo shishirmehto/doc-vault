@@ -466,10 +466,9 @@ export function parseProcessingMetrics(w: W.ProcessingMetricsOut): ProcessingMet
 
 function cacheFigures(w: W.ProcessingMetricsOut["cache"]): CacheFigures | null {
   if (w === null) return null;
-  const counts = ({ hits, misses }: { hits: number; misses: number }) => ({ hits, misses });
   return {
-    embedding: counts(w.embedding),
-    answer: counts(w.answer),
+    embedding: w.embedding,
+    answer: w.answer,
     countedSince: w.counted_since === null ? null : new Date(w.counted_since),
   };
 }
