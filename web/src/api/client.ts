@@ -64,7 +64,9 @@ export const api = {
   processingMetrics: (window: MetricsWindow): Promise<Result<ProcessingMetrics>> =>
     call("GET", `/metrics/processing?window=${window}`, P.parseProcessingMetrics),
 
-  askStream: async (chat: ChatId, question: string, onProgress: (p: AskProgress) => void): Promise<Result<Turn>> => {
+  /** `onAccepted` hears the 200 that begins the stream: from then on the server answers whatever happens to it. */
+  askStream: async (chat: ChatId, question: string, onProgress: (p: AskProgress) => void,
+    onAccepted: () => void = () => {}): Promise<Result<Turn>> => {
     const id = newRequestId();
     let res: Response;
     try {
@@ -82,6 +84,7 @@ export const api = {
       const text = await bodyText(res);
       return text === null ? { ok: false, error: { kind: "offline" } } : settle(res.status, text, headers, P.parseTurn);
     }
+    onAccepted();
     return readAskStream(res.body, onProgress, headers.requestId);
   },
 

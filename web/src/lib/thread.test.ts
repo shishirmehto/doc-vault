@@ -17,7 +17,10 @@ function seen(t: Thread) {
   return { ask: t.ask.phase, turns: t.history.kind === "loaded" ? t.history.turns.map((turn) => turn.question) : t.history.kind };
 }
 
-const lost: ThreadEvent = { type: "ask-failed", error: { kind: "offline" } };
+/** No answer and no stream: the request or its response was lost before the server accepted the question. */
+const lost: ThreadEvent = { type: "ask-failed", error: { kind: "offline" }, accepted: false };
+/** The server accepted the question with a 200 and its stream broke before a turn or an error event. */
+const broken: ThreadEvent = { type: "ask-failed", error: { kind: "offline" }, accepted: true };
 
 test("an answer is appended and the thread is free for the next question", () => {
   const t = run([{ type: "sent", question: deductible.question }, { type: "answered", turn: deductible }]);
@@ -103,9 +106,11 @@ test("quiet before any text keeps the step as it is, and progress after the end 
   assert.deepEqual(run(progress({ kind: "text", text: "late" }), done), done);
 });
 
-test("a stream that breaks mid-answer drops its text and checks history like any lost answer", () => {
-  const t = run([{ type: "sent", question: worldCup.question }, ...progress({ kind: "stage", stage: "searching" }), lost]);
-  assert.deepEqual(t.ask, { phase: "checking", question: "Who won the 2022 football World Cup?", error: { kind: "offline" } });
+test("a stream that breaks mid-answer drops its text and checks history for a turn that may still land", () => {
+  const t = run([{ type: "sent", question: worldCup.question }, ...progress({ kind: "stage", stage: "searching" }), broken]);
+  assert.deepEqual(t.ask, {
+    phase: "checking", question: "Who won the 2022 football World Cup?", error: { kind: "offline" }, mayLand: true,
+  });
 });
 
 test("only the latest turn's suggestions are offered, and only while nothing is in flight or failed", () => {
@@ -117,12 +122,12 @@ test("only the latest turn's suggestions are offered, and only while nothing is 
   assert.deepEqual(offered(started), []);
 });
 
-test("a broken stream keeps checking history until its turn lands, and offers a retry only on the final read", () => {
+test("a broken stream keeps checking history until its turn lands, and never offers a retry", () => {
   const checking = run([
     { type: "answered", turn: deductible },
     { type: "sent", question: perOccurrence.question },
     ...progress({ kind: "stage", stage: "answering" }, { kind: "text", text: "Property" }),
-    lost,
+    broken,
   ]);
   const early = (value: readonly Turn[]): ThreadEvent => ({ type: "history-early", result: { ok: true, value } });
   const notYet = run([early([deductible]), { type: "history-early", result: { ok: false, error: { kind: "offline" } } }], checking);
@@ -131,7 +136,30 @@ test("a broken stream keeps checking history until its turn lands, and offers a 
     ask: "idle",
     turns: ["What is the property damage deductible?", "Does it apply per occurrence?"],
   });
-  assert.equal(step(notYet, { type: "history", result: { ok: true, value: [deductible] } }).ask.phase, "failed");
+  const waiting = step(notYet, { type: "history", result: { ok: true, value: [deductible] } });
+  assert.deepEqual([waiting.ask.phase, canAsk(waiting)], ["waiting", false]);
+  assert.equal(run([{ type: "recheck" }, { type: "history", result: { ok: true, value: [deductible] } }], waiting).ask.phase, "waiting");
+  assert.equal(step(waiting, { type: "dismissed" }), waiting);
+  assert.deepEqual(seen(step(waiting, early([deductible, perOccurrence]))).ask, "idle");
+  const unread = step(notYet, { type: "history", result: { ok: false, error: { kind: "offline" } } });
+  assert.equal(run([{ type: "recheck" }, { type: "history", result: { ok: true, value: [deductible] } }], unread).ask.phase, "waiting");
+});
+
+test("a malformed event mid-stream is no verdict either, so its turn may still land", () => {
+  const malformed: ThreadEvent = { type: "ask-failed", error: { kind: "unexpected", detail: "bad event" }, accepted: true };
+  const t = run([{ type: "sent", question: worldCup.question }, ...progress({ kind: "stage", stage: "searching" }), malformed,
+    { type: "history", result: { ok: true, value: [] } }]);
+  assert.deepEqual([t.ask.phase, canAsk(t)], ["waiting", false]);
+});
+
+test("an error event is the server's verdict, so Try again is offered once history lacks the turn", () => {
+  const refused: ThreadEvent = {
+    type: "ask-failed", accepted: true,
+    error: { kind: "refused", status: 200, code: "ai_unavailable", message: "", retryable: true, retryAfterS: null,
+      documents: [], quota: null, requestId: null },
+  };
+  const t = run([{ type: "sent", question: worldCup.question }, refused, { type: "history", result: { ok: true, value: [] } }]);
+  assert.deepEqual([t.ask.phase, canAsk(t)], ["failed", true]);
 });
 
 test("a follow-up's status line follows the server's steps, after a neutral line until the first one", () => {

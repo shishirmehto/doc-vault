@@ -278,6 +278,19 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
       );
     case "failed":
       return <FailedAsk question={ask.question} error={ask.error} onRetry={onRetry} onEdit={onEdit} />;
+    case "waiting":
+      return (
+        <article className="turn ask-failed">
+          <h2 className="question">{ask.question}</h2>
+          <p role="status">
+            The answer did not arrive, and the chat&apos;s history does not show it yet. The vault may still be answering,
+            so it keeps checking, and the question is not sent again.
+          </p>
+          <p className="actions">
+            <button type="button" className="button" onClick={onRecheck}>Check again</button>
+          </p>
+        </article>
+      );
     case "unconfirmed":
       return (
         <article className="turn ask-failed">

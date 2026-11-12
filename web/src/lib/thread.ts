@@ -11,17 +11,23 @@ export type History =
 /**
  * A failed ask may still have been answered and recorded (the response was lost, or the proxy gave up
  * first), so history is fetched again before anything is offered. Retry is offered only once history
- * shows the question was not recorded, so a retry never records it twice.
+ * shows the question was not recorded and the turn cannot still land, so a retry never records it twice.
+ *
+ * `mayLand`: the server accepted the question (a 200 began its stream) and ended without a verdict (a turn or an
+ * error event). It goes on answering and stores the turn whenever it finishes, so no read of history can show the
+ * question will never be recorded, and no retry is offered.
  */
 export type Ask =
   | { phase: "idle" }
   | { phase: "asking"; question: string }
   | { phase: "streaming"; question: string; stage: AskStage | null; text: string; quiet: boolean }
-  | { phase: "checking"; question: string; error: ApiError }
-  /** History shows no turn for the question: asking again is safe. */
+  | { phase: "checking"; question: string; error: ApiError; mayLand: boolean }
+  /** History shows no turn for the question, and the server gave its verdict: asking again is safe. */
   | { phase: "failed"; question: string; error: ApiError }
   /** History could not be read either, so it is unknown whether the question was recorded. */
-  | { phase: "unconfirmed"; question: string; error: ApiError };
+  | { phase: "unconfirmed"; question: string; error: ApiError; mayLand: boolean }
+  /** History shows no turn yet, but the server may still store one: only Check again, never a second ask. */
+  | { phase: "waiting"; question: string; error: ApiError };
 
 export type Thread = { history: History; ask: Ask };
 
@@ -36,7 +42,8 @@ export type ThreadEvent =
   | { type: "progress"; progress: AskProgress }
   | { type: "quiet" }
   | { type: "answered"; turn: Turn }
-  | { type: "ask-failed"; error: ApiError }
+  /** `accepted`: a 200 began the answer's stream, so the server is answering the question. */
+  | { type: "ask-failed"; error: ApiError; accepted: boolean }
   | { type: "recheck" }
   | { type: "dismissed" };
 
@@ -70,10 +77,11 @@ export function step(t: Thread, e: ThreadEvent): Thread {
       return { history: { kind: "loaded", turns: [...turnsOf(t), e.turn] }, ask: IDLE };
     case "ask-failed":
       return t.ask.phase === "asking" || t.ask.phase === "streaming"
-        ? { ...t, ask: { phase: "checking", question: t.ask.question, error: e.error } }
+        ? { ...t, ask: { phase: "checking", question: t.ask.question, error: e.error, mayLand: e.accepted && e.error.kind !== "refused" } }
         : t;
     case "recheck":
-      return t.ask.phase === "unconfirmed" ? { ...t, ask: { ...t.ask, phase: "checking" } } : t;
+      if (t.ask.phase === "unconfirmed") return { ...t, ask: { ...t.ask, phase: "checking" } };
+      return t.ask.phase === "waiting" ? { ...t, ask: { ...t.ask, phase: "checking", mayLand: true } } : t;
     case "dismissed":
       return t.ask.phase === "failed" ? { ...t, ask: IDLE } : t;
     default: {
@@ -102,15 +110,23 @@ function afterProgress(ask: Ask, p: AskProgress): Ask {
 
 function afterHistory(t: Thread, result: Result<readonly Turn[]>, final: boolean): Thread {
   const ask = t.ask;
-  if (ask.phase !== "checking") {
+  if (ask.phase !== "checking" && ask.phase !== "waiting") {
     if (result.ok) return { ...t, history: { kind: "loaded", turns: result.value } };
     return t.history.kind === "loaded" ? t : { ...t, history: { kind: "failed", error: result.error } };
   }
-  if (!result.ok) return final ? { ...t, ask: { ...ask, phase: "unconfirmed" } } : t;
+  const mayLand = ask.phase === "waiting" || ask.mayLand;
+  if (!result.ok) return final ? { ...t, ask: { phase: "unconfirmed", question: ask.question, error: ask.error, mayLand } } : t;
   const known = new Set(turnsOf(t).map((turn) => turn.id));
   const recorded = result.value.some((turn) => !known.has(turn.id) && turn.question === ask.question);
   if (recorded) return { history: { kind: "loaded", turns: result.value }, ask: IDLE };
-  return final ? { history: { kind: "loaded", turns: result.value }, ask: { ...ask, phase: "failed" } } : t;
+  if (!final) return t;
+  const { question, error } = ask;
+  return { history: { kind: "loaded", turns: result.value }, ask: mayLand ? { phase: "waiting", question, error } : { phase: "failed", question, error } };
+}
+
+/** The question may still be recorded, so history is read again until it shows the turn. */
+export function landing(t: Thread): boolean {
+  return t.ask.phase === "waiting" || (t.ask.phase === "checking" && t.ask.mayLand);
 }
 
 function turnsOf(t: Thread): readonly Turn[] {

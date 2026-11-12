@@ -3,16 +3,24 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { api } from "@/api/client";
 import type { Chat, ChatId, DocumentId, NonEmpty, Result } from "@/api/domain";
-import { canAsk, opening, started, step, type Thread, type ThreadEvent } from "@/lib/thread";
+import { canAsk, landing, opening, started, step, type Thread, type ThreadEvent } from "@/lib/thread";
 
 const MAX_QUESTION = 2000;
 const QUIET_MS = 300;
 /**
- * When a stream breaks after it started, the server still finishes the answer and stores the turn, which
- * can take a model's whole answer time. History is read after each of these waits (30 s in all) before a
- * retry is offered, so a retry does not record the question twice.
+ * When a stream breaks after it started, the server still finishes the answer and stores the turn. History is read
+ * after each of these waits (30 s in all); then the chat says it is still checking, offers Check again, and reads
+ * history every 30 s for as long as the server may still be answering.
  */
 const LANDING_WAITS_MS = [0, 1000, 2000, 4000, 8000, 15000];
+/**
+ * 570 s with the 30 s above, past the server's 550 s at its defaults (config.py, ai.py): three model calls (condense,
+ * the query embedding, the answer), each up to 3 attempts of chat_timeout_s 30 s with two retry waits of at most
+ * MAX_RETRY_WAIT_S 10 s, and a repair turn as long again for condense and the answer. This only stops the polling: the
+ * live provider's timeout bounds each read of a streamed answer rather than the whole answer, so no retry is
+ * offered after it either.
+ */
+const LATE_CHECKS_MS: readonly number[] = Array(18).fill(30_000);
 
 /**
  * Asks live here, outside React, keyed by chat id: the first question is sent from the screen that
@@ -51,20 +59,21 @@ class Threads {
     const thread = this.threads.get(id);
     if (question === "" || !thread || !canAsk(thread)) return;
     this.dispatch(id, { type: "sent", question });
-    let started = false;
+    let accepted = false;
     const result = await api.askStream(id, question, (progress) => {
-      started = true;
       this.dispatch(id, { type: "progress", progress });
       if (progress.kind === "text") this.quietAfter(id, QUIET_MS);
+    }, () => {
+      accepted = true;
     });
     clearTimeout(this.quietTimers.get(id));
     if (result.ok) {
       this.dispatch(id, { type: "answered", turn: result.value });
       return;
     }
-    this.dispatch(id, { type: "ask-failed", error: result.error });
-    if (started && result.error.kind === "offline") await this.awaitLanding(id);
-    await this.loadHistory(id);
+    this.dispatch(id, { type: "ask-failed", error: result.error, accepted });
+    if (this.landing(id)) await this.awaitLanding(id);
+    else await this.loadHistory(id);
   }
 
   reload(id: ChatId): void {
@@ -86,8 +95,19 @@ class Threads {
     for (const wait of LANDING_WAITS_MS) {
       await new Promise((resolve) => setTimeout(resolve, wait));
       this.dispatch(id, { type: "history-early", result: await api.history(id) });
-      if (this.threads.get(id)?.ask.phase !== "checking") return;
+      if (!this.landing(id)) return;
     }
+    await this.loadHistory(id);
+    for (const wait of LATE_CHECKS_MS) {
+      if (!this.landing(id)) return;
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      this.dispatch(id, { type: "history-early", result: await api.history(id) });
+    }
+  }
+
+  private landing(id: ChatId): boolean {
+    const thread = this.threads.get(id);
+    return thread !== undefined && landing(thread);
   }
 
   private quietAfter(id: ChatId, ms: number): void {
