@@ -10,7 +10,6 @@ constructed.
 from __future__ import annotations
 
 import re
-import string
 from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import datetime
@@ -447,15 +446,18 @@ class Cell:
 
 _CURRENCY = re.compile(r"[$€£]|(?<![a-z])(?:usd|eur|gbp)(?![a-z])")
 _CURRENCY_CODE = {"$": "usd", "€": "eur", "£": "gbp"}
-_COMMA_IN_NUMBER = re.compile(r"(?<=\d),(?=\d)")
+# 1,000 and 12,500,000 but not 1,5 (a decimal comma), 1,2 (a list) or 1,000,00.
+_THOUSANDS = re.compile(r"(?<![\d.,])\d{1,3}(?:,\d{3})+(?!\d|,\d)")
 _ZERO_CENTS = re.compile(r"(?<=\d)\.00(?!\d)")
+_SENTENCE_END = ".,;:!? "
 
 
-def _comparable(value: str) -> tuple[frozenset[str], str]:
+def _comparable(value: str) -> tuple[tuple[str, ...], str]:
+    """The currencies in the order they appear, and the text without them. A sign such as + or - is kept."""
     text = value.casefold()
-    currencies = frozenset(_CURRENCY_CODE.get(mark, mark) for mark in _CURRENCY.findall(text))
-    text = _ZERO_CENTS.sub("", _COMMA_IN_NUMBER.sub("", _CURRENCY.sub("", text)))
-    return currencies, " ".join(text.split()).rstrip(string.punctuation + " ")
+    currencies = tuple(_CURRENCY_CODE.get(mark, mark) for mark in _CURRENCY.findall(text))
+    text = _THOUSANDS.sub(lambda group: group[0].replace(",", ""), _CURRENCY.sub("", text))
+    return currencies, " ".join(_ZERO_CENTS.sub("", text).split()).rstrip(_SENTENCE_END)
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,8 +467,8 @@ class Row:
 
     @property
     def differs(self) -> bool:
-        """Two or more distinct values, values in different currencies (a value naming none fits any), or an empty
-        cell beside a filled one. Decided here, never by the model."""
+        """Two or more distinct values, values whose currencies differ or come in another order (a value naming none
+        fits any), or an empty cell beside a filled one. Decided here, never by the model."""
         values = [_comparable(cell.value) for cell in self.cells if cell is not None]
         texts = {text for _, text in values}
         currencies = {marks for marks, _ in values if marks}

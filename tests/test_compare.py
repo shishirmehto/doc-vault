@@ -61,6 +61,15 @@ def row(*values: str | None) -> Row:
     (("-$500", "$500"), True),
     (("($500)", "$500"), True),
     (("$500.", "$500"), False),
+    (("$1,000,000.", "USD 1,000,000.00"), False),
+    (("A+", "A-"), True),
+    (("A+", "A"), True),
+    (("1,5", "15"), True),
+    (("EUR 1,5 million", "EUR 15 million"), True),
+    (("Sections 1,2", "Sections 12"), True),
+    (("1,000,00", "100000"), True),
+    (("$500 or €450", "€500 or $450"), True),
+    (("10%", "10"), True),
 ])
 def test_a_row_differs_on_distinct_values_or_an_empty_cell_beside_a_filled_one(values, differs):
     assert row(*values).differs is differs
