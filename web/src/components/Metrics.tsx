@@ -46,6 +46,43 @@ const SINCE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short",
 
 const n = (x: number) => x.toLocaleString("en-US");
 
+/** Every section in page order, each named as its heading is, for the contents line. */
+const SECTIONS = {
+  documents: "Documents",
+  processing: "Processing",
+  ai: "AI calls and cost",
+  chats: "Chats",
+  cap: "Spending cap",
+  caches: "Caches",
+} as const;
+
+type Section = keyof typeof SECTIONS;
+
+const sectionId = (s: Section) => `metrics-${s}`;
+
+/** A section's heading, which the contents line links to and moves focus to. */
+function Heading({ section }: { section: Section }) {
+  return <h2 id={sectionId(section)} tabIndex={-1}>{SECTIONS[section]}</h2>;
+}
+
+/** "On this page: Documents, Processing, ...": a link to each section. The page never scrolls; the column does. */
+function Contents() {
+  const sections = Object.keys(SECTIONS) as Section[];
+  return (
+    <nav className="contents" aria-label="On this page">
+      On this page:{" "}
+      {sections.map((s, i) => (
+        <span key={s}>
+          <a href={`#${sectionId(s)}`} onClick={() => document.getElementById(sectionId(s))?.focus({ preventScroll: true })}>
+            {SECTIONS[s]}
+          </a>
+          {i < sections.length - 1 ? ", " : "."}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
 /**
  * Each route loads and fails on its own, so one failing never hides the others. /health is read here as well as by the
  * page's shared poll, so the cap and the cache load, fail and refresh like the other halves.
@@ -66,24 +103,31 @@ export function Metrics({ window, onWindow }: { window: MetricsWindow; onWindow(
             Refresh
           </button>
         </header>
+        <Contents />
 
-        <h2>Documents</h2>
+        <Heading section="documents" />
         <Half result={documents.result} retry={documents.reload}>{(m) => <DocumentFigures m={m} />}</Half>
 
         <div className="metrics-window">
-          <h2>Processing</h2>
+          <Heading section="processing" />
           <div className="segments" role="group" aria-label="Window">
             {(Object.keys(WINDOWS) as MetricsWindow[]).map((w) => (
               <button key={w} type="button" aria-pressed={w === window} onClick={() => onWindow(w)}>{WINDOWS[w]}</button>
             ))}
           </div>
         </div>
-        <Half result={processing.result} retry={processing.reload}>{(m) => <ProcessingFigures m={m} fake={fake} />}</Half>
+        <Half result={processing.result} retry={processing.reload}>{(m) => <ProcessingFigures m={m} />}</Half>
 
-        <h2>Spending cap</h2>
+        <Heading section="ai" />
+        <Half result={processing.result} retry={processing.reload}>{(m) => <AiFigures m={m} fake={fake} />}</Half>
+
+        <Heading section="chats" />
+        <Half result={processing.result} retry={processing.reload}>{(m) => <ChatFigures m={m} />}</Half>
+
+        <Heading section="cap" />
         <Half result={status.result} retry={status.reload}>{(h) => <CapFigures health={h} />}</Half>
 
-        <h2>Caches</h2>
+        <Heading section="caches" />
         {/* The counts come with the processing figures. Without them, /health says whether the cache is off or down. */}
         <Half result={processing.result} retry={processing.reload}>
           {(m) =>
@@ -151,8 +195,7 @@ function CodeTable({ caption, unit, rows, empty }: { caption: string; unit: stri
   );
 }
 
-function ProcessingFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean }) {
-  const noCost = fake && m.ai.costUsd === 0 && m.ai.unpricedCalls === 0;
+function ProcessingFigures({ m }: { m: ProcessingMetrics }) {
   return (
     <>
       <p className="metrics-lead">Since {SINCE.format(m.since)}: {n(m.uploaded)} uploaded, {n(m.indexed)} indexed.</p>
@@ -188,10 +231,18 @@ function ProcessingFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean })
           ))}
         </tbody>
       </Figures>
+    </>
+  );
+}
 
+/** The same window as Processing, so its lead names when the window starts. */
+function AiFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean }) {
+  const noCost = fake && m.ai.costUsd === 0 && m.ai.unpricedCalls === 0;
+  return (
+    <>
       <p className="metrics-lead">
-        {n(m.ai.calls)} AI calls, {n(m.ai.errors)} errors, {n(m.ai.inputTokens)} tokens in, {n(m.ai.outputTokens)} out. Cost:{" "}
-        {noCost ? "fake provider, no cost" : costText(m.ai)}.
+        Since {SINCE.format(m.since)}: {n(m.ai.calls)} AI calls, {n(m.ai.errors)} errors, {n(m.ai.inputTokens)} tokens in,{" "}
+        {n(m.ai.outputTokens)} out. Cost: {noCost ? "fake provider, no cost" : costText(m.ai)}.
       </p>
       <Figures caption="AI calls by purpose and model">
         <thead>
@@ -220,8 +271,15 @@ function ProcessingFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean })
           )}
         </tbody>
       </Figures>
+    </>
+  );
+}
 
-      <Figures caption={`Questions: ${n(m.chat.turns)} asked`}>
+function ChatFigures({ m }: { m: ProcessingMetrics }) {
+  return (
+    <>
+      <p className="metrics-lead">Since {SINCE.format(m.since)}: {n(m.chat.turns)} {m.chat.turns === 1 ? "question" : "questions"} asked.</p>
+      <Figures caption="Questions by outcome">
         <thead><tr><th scope="col">Outcome</th><th scope="col">Questions</th></tr></thead>
         <tbody>
           {(Object.keys(OUTCOME) as TurnOutcome[]).map((o) => (
