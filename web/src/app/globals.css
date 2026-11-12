@@ -57,6 +57,8 @@ h1, h2, h3, p, dl, dd, ul, ol, blockquote, fieldset { margin: 0; }
 ul, ol { padding: 0; list-style: none; }
 a { color: inherit; }
 :focus-visible { outline: 2px solid var(--carbon); outline-offset: 2px; }
+/* A control that Tab scrolls into view stops short of its column's edge, so its ring, drawn outside it, stays in view. */
+.centre, .centre-scroll, .rail-body, .pane-body, .table-box { scroll-padding: var(--s4); }
 button { font: inherit; }
 
 /* ------------------------------------------------------------- chrome */
