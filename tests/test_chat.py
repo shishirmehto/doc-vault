@@ -5,6 +5,8 @@ from __future__ import annotations
 import dataclasses
 from uuid import UUID, uuid4
 
+import httpx2
+
 from docvault import chat
 from docvault.ai import FakeChat
 from docvault.api import app
@@ -24,6 +26,8 @@ from docvault.domain import (
 from docvault.prompts import AnswerDraft, EvidenceDraft
 
 from .conftest import FACTS, POLICY, QUOTE, SAMPLES, TRUTH, scalar
+from .test_ai import openai_chat, openai_client
+from .test_compare import completion
 from .test_insights import indexed, post, provider_down, with_chat
 
 
@@ -370,3 +374,23 @@ def test_a_provider_failure_that_retrying_cannot_fix_sends_no_retry_after(client
 
     assert (response.status_code, response.json()["error"]["retryable"], response.headers.get("retry-after")) == (
         503, False, None)
+
+
+def test_the_model_writes_the_answer_before_its_follow_ups_and_four_of_them_are_valid_but_the_turn_offers_three(
+        client, ctx):
+    chat_id = client.post("/chats", json={"document_ids": [str(ready(ctx, POLICY))]}).json()["id"]
+    sent: list[tuple[str, dict]] = []
+    provider = openai_client(httpx2.Response(200, json=completion({
+        "supported": False, "answer": "The selected documents do not say.", "evidence": [], "follow_ups": [
+            "Who is the insurer?", "Is there a deductible?", "What is the premium?", "What is the policy period?"]})),
+        sent=sent)
+    app.state.ctx = with_chat(ctx, openai_chat(provider))
+
+    turn = ask(client, chat_id, "What is the each occurrence limit?")
+
+    schema = sent[0][1]["response_format"]["json_schema"]["schema"]
+    assert (turn["reason"], turn["suggestions"]) == (
+        "model_declined", ["Who is the insurer?", "Is there a deductible?", "What is the premium?"])
+    assert ledger(ctx) == {turn["id"]: ["embed_query", "answer"]}
+    assert list(schema["properties"]) == ["supported", "answer", "evidence", "follow_ups"]
+    assert sorted(schema["properties"]["follow_ups"]) == ["description", "items", "title", "type"]

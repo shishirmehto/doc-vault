@@ -388,3 +388,17 @@ def test_the_openai_path_grounds_each_source_and_a_failed_call_gets_no_retry_and
         3, [90.0] * 3, "/v1/chat/completions", "gpt-6.1-sol", "json_schema", "SummaryDraft", True)
     assert ledger(ctx, "ok, error_code") == [(True, None), (False, "server_error"), (True, None)]
     assert scalar(ctx.db, "SELECT count(*) FROM document_summaries") == 1
+
+
+def test_a_reply_with_seven_sources_is_valid_and_the_summary_keeps_the_first_six(ctx):
+    policy = indexed(ctx, SAMPLES / POLICY)
+    sent: list[tuple[str, dict]] = []
+    client = openai_client(httpx2.Response(200, json=completion({"summary": "The policy insures a roofer.", "sources": [
+        {"page": page, "quote": COVER} for page in range(1, 8)]})), sent=sent)
+
+    stored = summaries.create(with_chat(ctx, openai_chat(client)), policy, options())
+
+    schema = sent[0][1]["response_format"]["json_schema"]["schema"]
+    assert (stored.sources, stored.dropped_sources) == (tuple(SummarySource(page, COVER) for page in range(1, 7)), 0)
+    assert ledger(ctx, "ok") == [(True,)]
+    assert sorted(schema["properties"]["sources"]) == ["description", "items", "title", "type"]

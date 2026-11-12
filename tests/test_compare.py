@@ -256,6 +256,24 @@ def test_the_openai_path_stores_grounded_cells_and_tries_a_failing_call_once(ctx
     assert scalar(ctx.db, "SELECT count(*) FROM comparisons") == 1
 
 
+def test_a_reply_with_31_rows_is_valid_and_the_comparison_keeps_the_first_30(ctx):
+    policy, quote = indexed(ctx, SAMPLES / POLICY), indexed(ctx, SAMPLES / QUOTE)
+    cells = [{"document": "D1", "value": "$2,500 per occurrence", "page": 2,
+              "quote": "Property Damage Deductible $2,500 per occurrence"},
+             {"document": "D2", "value": "$5,000 per occurrence", "page": 2,
+              "quote": "Property Damage Deductible $5,000 per occurrence"}]
+    sent: list[tuple[str, dict]] = []
+    client = openai_client(httpx2.Response(200, json=completion(
+        {"rows": [{"field": f"Row {n}", "cells": cells} for n in range(1, 32)]})), sent=sent)
+
+    stored = compare.create(with_chat(ctx, openai_chat(client)), [policy, quote], None)
+
+    schema = sent[0][1]["response_format"]["json_schema"]["schema"]
+    assert ([row.field for row in stored.rows], stored.dropped_cells, stored.usage.calls) == (
+        [f"Row {n}" for n in range(1, 31)], 0, 1)
+    assert sorted(schema["properties"]["rows"]) == ["items", "title", "type"]
+
+
 def test_a_document_deleted_during_the_model_call_reads_back_as_deleted(ctx):
     policy, quote = indexed(ctx, SAMPLES / POLICY), indexed(ctx, SAMPLES / QUOTE)
 
