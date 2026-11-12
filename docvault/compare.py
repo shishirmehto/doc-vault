@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 from psycopg.types.json import Jsonb
 
-from . import chat, prompts
+from . import chat, insights, prompts
 from .ai import ComparisonOwner
 from .context import Ctx
 from .db import Db, decode_cursor, encode_cursor
@@ -26,7 +26,6 @@ from .domain import (
     ComparisonId,
     DocumentId,
     ErrorCode,
-    KeyFact,
     Page,
     PageBasis,
     Row,
@@ -59,9 +58,7 @@ def create(ctx: Ctx, document_ids: Sequence[DocumentId], focus: str | None) -> C
         for row in conn.execute("SELECT document_id, number, text FROM pages WHERE document_id = ANY(%s)"
                                 " ORDER BY number", (ids,)):
             pages.setdefault(row["document_id"], []).append(Page(row["number"], row["text"]))
-        facts = {row["document_id"]: tuple(KeyFact(**fact) for fact in row["body"]["key_facts"])
-                 for row in conn.execute("SELECT document_id, body FROM document_insights"
-                                         " WHERE document_id = ANY(%s) AND status = 'ready'", (ids,))}
+        facts = insights.ready_key_facts(conn, ids)
         versions = {row["id"]: row["version"] for row in conn.execute(
             "SELECT id, version FROM documents WHERE id = ANY(%s)", (ids,))}
     docs = [CompareDoc(f"D{n}", ref.filename, ref.page_basis, facts.get(ref.id, ()), tuple(pages[ref.id]))

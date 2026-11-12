@@ -12,6 +12,7 @@ import dataclasses
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from psycopg import Connection
 from psycopg.errors import ForeignKeyViolation
 from psycopg.types.json import Jsonb
 
@@ -119,6 +120,13 @@ def reset_failed(db: Db, doc_id: DocumentId) -> bool:
     with db.connection() as conn:
         return conn.execute("DELETE FROM document_insights WHERE document_id = %s AND status = 'failed'"
                             " RETURNING document_id", (doc_id,)).fetchone() is not None
+
+
+def ready_key_facts(conn: Connection, document_ids: Sequence[DocumentId]) -> dict[DocumentId, tuple[KeyFact, ...]]:
+    """The verified key facts of each document whose insights are ready. Other documents are absent."""
+    rows = conn.execute("SELECT document_id, body FROM document_insights WHERE document_id = ANY(%s)"
+                        " AND status = 'ready'", (list(document_ids),))
+    return {DocumentId(row["document_id"]): tuple(KeyFact(**fact) for fact in row["body"]["key_facts"]) for row in rows}
 
 
 def from_row(row: Mapping[str, Any], page_count: int, basis: PageBasis) -> InsightsReady | InsightsFailed:

@@ -30,7 +30,7 @@ from pgvector import Vector as PgVector
 from psycopg import Connection
 from psycopg.types.json import Jsonb
 
-from . import pages, prompts
+from . import insights, pages, prompts
 from .ai import TurnOwner, Vector
 from .answer_text import AnswerField, MarkerFilter
 from .cache import Cache
@@ -213,7 +213,8 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
     else:
         answer = NotFound(TurnOutcome.NO_EVIDENCE, prompts.no_evidence_text(documents))
         with ctx.db.connection() as conn:
-            suggested = fact_suggestions(_key_fact_labels(conn, documents), question)
+            facts = insights.ready_key_facts(conn, [doc.id for doc in documents])
+        suggested = fact_suggestions([[fact.label for fact in facts.get(doc.id, ())] for doc in documents], question)
 
     turn = _store_turn(ctx, turn_id, chat_id, question, standalone, answer, suggested, started, cached=False)
     if key is not None and isinstance(answer, Answered):
@@ -385,13 +386,6 @@ def _answered(text: str, snapshots: Sequence[Mapping[str, Any]]) -> Answered:
     """An answer from its stored citation snapshots, of which an answered turn always has at least one."""
     first, *rest = (_citation(snapshot) for snapshot in snapshots)
     return Answered(text, (first, *rest))
-
-
-def _key_fact_labels(conn: Connection, documents: Sequence[DocRef]) -> list[list[str]]:
-    rows = conn.execute("SELECT document_id, body FROM document_insights WHERE document_id = ANY(%s)"
-                        " AND status = 'ready'", ([doc.id for doc in documents],)).fetchall()
-    labels = {row["document_id"]: [fact["label"] for fact in row["body"]["key_facts"]] for row in rows}
-    return [labels.get(doc.id, []) for doc in documents]
 
 
 def _snapshot(citation: Citation) -> dict[str, object]:
