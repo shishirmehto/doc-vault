@@ -20,7 +20,7 @@ const REQUEST: CompareRequest = {
 };
 const LIMITED: ApiError = {
   kind: "refused", status: 429, code: "rate_limited", message: "Too many requests. Try again in 2 seconds.",
-  retryable: true, retryAfterS: 2, documents: [], quota: null, requestId: null,
+  retryable: true, retryAt: new Date("2026-11-12T12:00:02Z"), documents: [], quota: null, requestId: null,
 };
 
 test("a run starts once, and a success forgets it", () => {
@@ -78,11 +78,11 @@ test("a cell's URL resolves to its field, its document and its page; an empty or
 
 test("Try again is offered unless the refusal is final; a document that is not ready becomes ready on its own", () => {
   const refused = (code: string, retryable: boolean | null): ApiError => ({
-    kind: "refused", status: 400, code, message: "", retryable, retryAfterS: null, documents: [], quota: null, requestId: null,
+    kind: "refused", status: 400, code, message: "", retryable, retryAt: null, documents: [], quota: null, requestId: null,
   });
   assert.deepEqual(
     [
-      worthRetrying(LIMITED),
+      worthRetrying(LIMITED, new Date("2026-11-12T12:00:02Z")),
       worthRetrying(refused("documents_not_ready", false)),
       worthRetrying(refused("document_not_found", false)),
       worthRetrying(refused("invalid_request", false)),
@@ -165,12 +165,25 @@ test("Try again comes back at the cap's reset without a reload: the timer wakes 
   assert.deepEqual([offered, worthRetrying(capped)], [[true], true]);
 });
 
+test("a rate limit is not worth retrying until its Retry-After has passed, and the timer wakes then", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.parse("2026-11-12T12:00:00Z") });
+  const { status, headers, body } = JSON.parse(readFileSync(new URL("../api/fixtures/upload-429-rate-limited.json", import.meta.url), "utf8"));
+  const limited = parseError(status, body, headers["retry-after"], headers["x-request-id"]);
+  const offered: boolean[] = [];
+  whenRetryChanges(limited, () => offered.push(worthRetrying(limited)));
+  t.mock.timers.tick(1_999);
+  assert.deepEqual([offered, worthRetrying(limited)], [[], false]);
+  t.mock.timers.tick(1);
+  assert.deepEqual([offered, worthRetrying(limited)], [[true], true]);
+});
+
 test("an answer that cannot change with time schedules no wake, and a cancelled wake never comes", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.parse("2026-11-12T12:00:00Z") });
   const { status, headers, body } = JSON.parse(readFileSync(new URL("../api/fixtures/summary-429-quota-exceeded.json", import.meta.url), "utf8"));
   const capped = parseError(status, body, headers["retry-after"], headers["x-request-id"]);
   let wakes = 0;
-  for (const error of [LIMITED, { kind: "offline" } as const, refusedFinal()]) whenRetryChanges(error, () => wakes++);
+  const waited = { ...LIMITED, retryAt: new Date("2026-11-12T11:59:59Z") };
+  for (const error of [waited, { kind: "offline" } as const, refusedFinal()]) whenRetryChanges(error, () => wakes++);
   whenRetryChanges(capped, () => wakes++)();
   t.mock.timers.tick(13 * 3600 * 1000);
   assert.deepEqual([wakes, worthRetrying(capped)], [0, true]);
@@ -178,7 +191,7 @@ test("an answer that cannot change with time schedules no wake, and a cancelled 
 
 function refusedFinal(): ApiError {
   return {
-    kind: "refused", status: 404, code: "document_not_found", message: "", retryable: false, retryAfterS: null, documents: [],
+    kind: "refused", status: 404, code: "document_not_found", message: "", retryable: false, retryAt: null, documents: [],
     quota: null, requestId: null,
   };
 }

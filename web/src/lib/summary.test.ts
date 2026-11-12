@@ -74,9 +74,10 @@ test("the source pane resolves a cite of a summary made this session while the e
 });
 
 test("a failed rewrite offers Try again for a refusal that can pass on a second try, not for a missing document or bad options", () => {
+  const arrived = new Date("2026-11-12T12:00:00Z");
   const error = (name: string) => {
     const { status, body, headers } = captured(name);
-    return parseError(status, body, headers["retry-after"] ?? null);
+    return parseError(status, body, headers["retry-after"] ?? null, null, arrived);
   };
   const badOutput = parseError(502, { error: { code: "ai_bad_output", message: "The model returned an empty summary.", retryable: true, details: {} } }, null);
   assert.deepEqual(
@@ -89,9 +90,10 @@ test("a failed rewrite offers Try again for a refusal that can pass on a second 
       badOutput,
       parseError(502, null, null),
       { kind: "offline" } as const,
-    ].map((e) => worthRetrying(e)),
-    [false, false, true, true, true, true, true, true],
+    ].map((e) => worthRetrying(e, arrived)),
+    [false, false, true, false, true, true, true, true],
   );
+  assert.equal(worthRetrying(error("upload-429-rate-limited"), new Date("2026-11-12T12:00:02Z")), true);
 });
 
 test("a rewrite refused by the spending cap offers Try again only once the cap has reset", () => {

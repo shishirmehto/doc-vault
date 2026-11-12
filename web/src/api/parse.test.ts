@@ -10,10 +10,13 @@ import {
 import type { ApiError, ChatId, ComparisonId, DocumentId, Selection, SummaryId, TurnId } from "./domain.ts";
 
 /** A captured response: the API's real status, headers and JSON body. */
+/** When each replayed response arrives: 79118 s, the captured cap refusals' Retry-After, before midnight UTC. */
+const ARRIVED = Date.parse("2026-11-12T02:01:22Z");
+
 function replay<T>(name: string, parse: (w: never) => T, dataStatuses: readonly number[] = []) {
   const { status, headers, body } = JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
   const heard = { retryAfter: headers["retry-after"] ?? null, requestId: headers["x-request-id"] ?? null };
-  return settle(status, JSON.stringify(body), heard, parse as (w: unknown) => T, dataStatuses);
+  return settle(status, JSON.stringify(body), heard, parse as (w: unknown) => T, dataStatuses, new Date(ARRIVED));
 }
 
 /** A response with neither Retry-After nor X-Request-ID. */
@@ -122,7 +125,7 @@ test("upload answers: 202 is new, 200 is the same bytes seen before, 415 is the 
       code: "unsupported_type",
       message: "This looks like a binary file of an unknown type. Upload a PDF, a Word .docx file or a plain text file.",
       retryable: false,
-      retryAfterS: null, quota: null, requestId: null,
+      retryAt: null, quota: null, requestId: null,
       documents: [],
     },
   });
@@ -195,7 +198,7 @@ test("a page keeps its label and text; a missing page is the backend's 404", () 
       code: "page_not_found",
       message: "This document has no page 99. It has 7.",
       retryable: false,
-      retryAfterS: null, quota: null, requestId: null,
+      retryAt: null, quota: null, requestId: null,
       documents: [],
     },
   });
@@ -210,7 +213,7 @@ test("a 422 carries the envelope; a 503 and a 429 carry Retry-After", () => {
       code: "invalid_request",
       message: "The request is not valid. path.doc_id: Input should be a valid UUID, invalid character: found `n` at 0",
       retryable: false,
-      retryAfterS: null, quota: null, requestId: null,
+      retryAt: null, quota: null, requestId: null,
       documents: [],
     },
   });
@@ -222,7 +225,7 @@ test("a 422 carries the envelope; a 503 and a 429 carry Retry-After", () => {
       code: "rate_limited",
       message: "Too many requests. Try again in 2 seconds.",
       retryable: true,
-      retryAfterS: 2, quota: null, requestId: null,
+      retryAt: new Date(ARRIVED + 2_000), quota: null, requestId: null,
       documents: [],
     },
   });
@@ -233,7 +236,7 @@ test("a 422 carries the envelope; a 503 and a 429 carry Retry-After", () => {
     code: "ai_unavailable",
     message: "The AI provider could not complete the request (timeout).",
     retryable: true,
-    retryAfterS: 5, quota: null, requestId: null,
+    retryAt: new Date(ARRIVED + 5_000), quota: null, requestId: null,
     documents: [],
   });
 });
@@ -247,7 +250,7 @@ test("a used-up spending cap is a 429 with the cap, the spend, the reset and the
     return r.ok ? null : r.error;
   };
   const quotaError = (requestId: string) => ({
-    kind: "refused", status: 429, code: "quota_exceeded", message: CAP_MESSAGE, retryable: true, retryAfterS: 79118,
+    kind: "refused", status: 429, code: "quota_exceeded", message: CAP_MESSAGE, retryable: true, retryAt: new Date("2026-11-13T00:00:00Z"),
     documents: [], quota: QUOTA, requestId,
   });
   assert.deepEqual(
@@ -285,7 +288,7 @@ test("an unhandled error is a 500 with the envelope and the id the API logged it
     ok: false,
     error: {
       kind: "refused", status: 500, code: "internal_error", message: "The request failed unexpectedly.", retryable: true,
-      retryAfterS: null, documents: [], quota: null, requestId: "phase-f-500-probe",
+      retryAt: null, documents: [], quota: null, requestId: "phase-f-500-probe",
     },
   });
 });
@@ -301,7 +304,7 @@ test("the id a response echoes is the error's; a page in front of the API keeps 
       {
         ok: false,
         error: {
-          kind: "refused", status: 404, code: "document_not_found", message: "Gone.", retryable: null, retryAfterS: null,
+          kind: "refused", status: 404, code: "document_not_found", message: "Gone.", retryable: null, retryAt: null,
           documents: [], quota: null, requestId: "echoed-2",
         },
       },
@@ -369,7 +372,7 @@ test("a delete answers 204 with no body; a 404 names the document the vault no l
   assert.deepEqual(gone.ok ? null : gone.error, {
     kind: "refused", status: 404, code: "document_not_found",
     message: "No document has the id 00000000-0000-4000-8000-000000000000.",
-    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
+    retryable: false, retryAt: null, quota: null, requestId: null, documents: [],
   });
 });
 
@@ -438,7 +441,7 @@ test("a chat read back marks a document deleted since it started, and asking it 
     code: "documents_deleted",
     message: "1 of 2 documents in this chat were deleted. Start a new chat with the documents you want to ask about.",
     retryable: false,
-    retryAfterS: null, quota: null, requestId: null,
+    retryAt: null, quota: null, requestId: null,
     documents: [{ id: "8b3527b2-b23c-4561-b6f1-f8d8351b1cad", filename: "u5-check2.txt" }],
   });
 });
@@ -467,7 +470,7 @@ test("a 409 names the documents that are not ready", () => {
       code: "documents_not_ready",
       message: "1 of 2 documents are not ready.",
       retryable: false,
-      retryAfterS: null, quota: null, requestId: null,
+      retryAt: null, quota: null, requestId: null,
       documents: [{ id: TEXTLESS, filename: "ui-textless.pdf" }],
     },
   });
@@ -838,19 +841,19 @@ test("comparing refuses one document, a document that is not ready, and an unkno
   assert.deepEqual(one.ok ? null : one.error, {
     kind: "refused", status: 422, code: "invalid_request",
     message: "The request is not valid. body.document_ids: List should have at least 2 items after validation, not 1",
-    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
+    retryable: false, retryAt: null, quota: null, requestId: null, documents: [],
   });
   const busy = replay("compare-409-not-ready", parseComparison);
   assert.deepEqual(busy.ok ? null : busy.error, {
     kind: "refused", status: 409, code: "documents_not_ready", message: "1 of 2 documents are not ready.",
-    retryable: false, retryAfterS: null, quota: null, requestId: null,
+    retryable: false, retryAt: null, quota: null, requestId: null,
     documents: [{ id: "41474e86-1b59-46ad-980b-c0355948cd08", filename: "phase-c-large-86f623.txt" }],
   });
   const missing = replay("comparison-404-not-found", parseComparison);
   assert.deepEqual(missing.ok ? null : missing.error, {
     kind: "refused", status: 404, code: "comparison_not_found",
     message: "No comparison has the id 00000000-0000-4000-8000-000000000000.",
-    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
+    retryable: false, retryAt: null, quota: null, requestId: null, documents: [],
   });
 });
 
@@ -967,20 +970,20 @@ test("summarising refuses a document that is not ready and an unknown length; li
   const busy = replay("summary-409-not-ready", parseSummary);
   assert.deepEqual(busy.ok ? null : busy.error, {
     kind: "refused", status: 409, code: "documents_not_ready", message: "1 of 1 documents are not ready.",
-    retryable: false, retryAfterS: null, quota: null, requestId: null,
+    retryable: false, retryAt: null, quota: null, requestId: null,
     documents: [{ id: "2da79ec2-177a-4c59-9c06-fc2ae84f83d6", filename: "phase-d-large-1cd9f3.txt" }],
   });
   const short = replay("summary-422-length", parseSummary);
   assert.deepEqual(short.ok ? null : short.error, {
     kind: "refused", status: 422, code: "invalid_request",
     message: "The request is not valid. body.length: Input should be 'brief', 'standard' or 'detailed'",
-    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
+    retryable: false, retryAt: null, quota: null, requestId: null, documents: [],
   });
   const missing = replay("summaries-404-not-found", parseSummaryPage);
   assert.deepEqual(missing.ok ? null : missing.error, {
     kind: "refused", status: 404, code: "document_not_found",
     message: "No document has the id 00000000-0000-4000-8000-000000000000.",
-    retryable: false, retryAfterS: null, quota: null, requestId: null, documents: [],
+    retryable: false, retryAt: null, quota: null, requestId: null, documents: [],
   });
 });
 

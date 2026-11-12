@@ -206,6 +206,7 @@ export function settle<WireT, T>(
   headers: ReplyHeaders,
   parse: (w: WireT) => T,
   dataStatuses: readonly number[] = [],
+  now: Date = new Date(),
 ): Result<T> {
   if (status === 0) return { ok: false, error: { kind: "offline" } };
   if ((status >= 200 && status < 300) || dataStatuses.includes(status)) {
@@ -221,5 +222,5 @@ export function settle<WireT, T>(
   } catch {
     // A proxy error page or an empty body: parseError reads null as "broken".
   }
-  return { ok: false, error: P.parseError(status, body, headers.retryAfter, headers.requestId) };
+  return { ok: false, error: P.parseError(status, body, headers.retryAfter, headers.requestId, now) };
 }

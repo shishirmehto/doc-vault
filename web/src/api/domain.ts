@@ -229,7 +229,8 @@ export type ApiError =
       code: string;
       message: string;
       retryable: boolean | null;
-      retryAfterS: number | null;
+      /** The instant Retry-After names: the response's arrival plus its seconds. */
+      retryAt: Date | null;
       /** The documents a refusal names: not ready (409), missing (404) or deleted from a chat (409). */
       documents: readonly RefusedDocument[];
       /** Set only for quota_exceeded whose details parse. */

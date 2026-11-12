@@ -1,4 +1,4 @@
-import type { ApiError, CellCite, ComparedDoc, CompareCell, CompareRow, Comparison, Doc, DocumentId, Quota } from "../api/domain.ts";
+import type { ApiError, CellCite, ComparedDoc, CompareCell, CompareRow, Comparison, Doc, DocumentId } from "../api/domain.ts";
 
 /** POST /comparisons takes 2 to 5 documents and a focus of at most 200 characters. */
 export const COMPARE_MIN = 2;
@@ -55,11 +55,11 @@ export function columns(chosen: ReadonlySet<DocumentId>, docs: readonly Doc[]): 
 }
 
 /**
- * A used-up spending cap fails again until it resets.
+ * A used-up spending cap fails again until it resets, and a rate limit until its Retry-After has passed.
  */
 export function worthRetrying(error: ApiError, now: Date = new Date()): boolean {
-  const quota = usedUpCap(error);
-  if (quota !== null) return now >= quota.resetsAt;
+  const until = failsUntil(error);
+  if (until !== null) return now >= until;
   return !(error.kind === "refused" && error.retryable === false && error.code !== "documents_not_ready");
 }
 
@@ -67,19 +67,22 @@ export function worthRetrying(error: ApiError, now: Date = new Date()): boolean 
 const LONGEST_WAIT_MS = 2 ** 31 - 1;
 
 /**
- * Calls `onChange` when worthRetrying(error) may have turned true: at a used-up cap's reset, the only answer that
- * changes with time. Returns the cancel. The caller reads worthRetrying again, and calls this again if it is still no.
+ * Calls `onChange` when worthRetrying(error) may have turned true: at a used-up cap's reset or a rate limit's
+ * Retry-After, the only answers that change with time. Returns the cancel. The caller reads worthRetrying again, and
+ * calls this again if it is still no.
  */
 export function whenRetryChanges(error: ApiError, onChange: () => void): () => void {
-  const quota = usedUpCap(error);
-  if (quota === null || worthRetrying(error)) return () => {};
-  const timer = setTimeout(onChange, Math.min(LONGEST_WAIT_MS, quota.resetsAt.getTime() - Date.now()));
+  const until = failsUntil(error);
+  if (until === null || worthRetrying(error)) return () => {};
+  const timer = setTimeout(onChange, Math.min(LONGEST_WAIT_MS, until.getTime() - Date.now()));
   return () => clearTimeout(timer);
 }
 
-/** The cap and its reset, when `error` is a used-up spending cap whose details parsed. */
-function usedUpCap(error: ApiError): Quota | null {
-  return error.kind === "refused" && error.code === "quota_exceeded" ? error.quota : null;
+/** The instant before which `error` would only come back: a used-up cap's reset, or a rate limit's Retry-After. */
+function failsUntil(error: ApiError): Date | null {
+  if (error.kind !== "refused") return null;
+  if (error.code === "quota_exceeded") return error.quota?.resetsAt ?? null;
+  return error.code === "rate_limited" ? error.retryAt : null;
 }
 
 export function visibleRows(rows: readonly CompareRow[], only: boolean): { row: CompareRow; index: number }[] {

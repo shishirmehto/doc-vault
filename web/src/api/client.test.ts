@@ -98,7 +98,8 @@ test("a streamed ask refused before its stream, or ended by an error event, carr
   ]);
 });
 
-test("an upload sends a request id on its XHR, and its refusal carries the id the API echoed", async () => {
+test("an upload sends a request id on its XHR, and its refusal carries the id the API echoed", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-11-12T12:00:00Z") });
   const { status, headers, body } = captured("upload-429-rate-limited");
   const sent: Record<string, string>[] = [];
   class FakeXhr {
@@ -126,8 +127,8 @@ test("an upload sends a request id on its XHR, and its refusal carries the id th
   globalThis.XMLHttpRequest = FakeXhr as unknown as typeof XMLHttpRequest;
   try {
     const r = await api.upload(new File(["x"], "a.txt"), () => {});
-    assert.deepEqual(!r.ok && r.error.kind === "refused" && [r.error.code, r.error.retryAfterS, r.error.requestId], [
-      "rate_limited", 2, "echoed-upload",
+    assert.deepEqual(!r.ok && r.error.kind === "refused" && [r.error.code, r.error.retryAt, r.error.requestId], [
+      "rate_limited", new Date("2026-11-12T12:00:02Z"), "echoed-upload",
     ]);
     assert.match(sent[0]?.["X-Request-ID"] ?? "", UUID);
   } finally {

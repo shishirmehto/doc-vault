@@ -155,7 +155,7 @@ test("a malformed event mid-stream is no verdict either, so its turn may still l
 test("an error event is the server's verdict, so Try again is offered once history lacks the turn", () => {
   const refused: ThreadEvent = {
     type: "ask-failed", accepted: true,
-    error: { kind: "refused", status: 200, code: "ai_unavailable", message: "", retryable: true, retryAfterS: null,
+    error: { kind: "refused", status: 200, code: "ai_unavailable", message: "", retryable: true, retryAt: null,
       documents: [], quota: null, requestId: null },
   };
   const t = run([{ type: "sent", question: worldCup.question }, refused, { type: "history", result: { ok: true, value: [] } }]);

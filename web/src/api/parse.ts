@@ -349,9 +349,10 @@ export function parseHealth(w: W.HealthOut): Health {
 
 /**
  * Any non-2xx. `body` is the parsed JSON, or null when the body was not JSON. `requestId` is the response's
- * X-Request-ID, or the one the request sent.
+ * X-Request-ID, or the one the request sent. `now` is when the response arrived, which Retry-After counts from.
  */
-export function parseError(status: number, body: unknown, retryAfter: string | null, requestId: string | null = null): ApiError {
+export function parseError(status: number, body: unknown, retryAfter: string | null, requestId: string | null = null,
+  now: Date = new Date()): ApiError {
   const envelope = isRecord(body) && isRecord(body.error) ? body.error : null;
   if (envelope === null || typeof envelope.code !== "string" || typeof envelope.message !== "string") {
     return { kind: "broken", status, requestId };
@@ -364,7 +365,7 @@ export function parseError(status: number, body: unknown, retryAfter: string | n
     code: envelope.code,
     message: envelope.message,
     retryable: typeof envelope.retryable === "boolean" ? envelope.retryable : null,
-    retryAfterS: Number.isFinite(seconds) ? seconds : null,
+    retryAt: Number.isFinite(seconds) ? new Date(now.getTime() + seconds * 1000) : null,
     documents: ["not_ready", "missing", "deleted"].flatMap((key) => refusedDocuments(details[key])),
     quota: envelope.code === "quota_exceeded" ? quota(details) : null,
     requestId,

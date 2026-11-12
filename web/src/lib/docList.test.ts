@@ -92,7 +92,7 @@ test("version 1 read before version 2 was uploaded gives way to version 2's even
 
 test("a read by id that fails for any reason but a 404 is a failure to try again, not a missing document", () => {
   const refused = (status: number, code: string): ApiError => ({
-    kind: "refused", status, code, message: "", retryable: null, retryAfterS: null, documents: [], quota: null, requestId: null,
+    kind: "refused", status, code, message: "", retryable: null, retryAt: null, documents: [], quota: null, requestId: null,
   });
   const reads: (Result<Doc> | null)[] = [
     null,

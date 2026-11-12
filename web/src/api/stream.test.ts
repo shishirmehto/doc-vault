@@ -61,7 +61,7 @@ test("an error event ends the stream as the backend's refusal", async () => {
   assert.deepEqual(result, {
     ok: false,
     error: {
-      kind: "refused", status: 200, code: "ai_unavailable", retryable: true, retryAfterS: null, documents: [],
+      kind: "refused", status: 200, code: "ai_unavailable", retryable: true, retryAt: null, documents: [],
       message: "The AI provider could not complete the request (server_error).", quota: null, requestId: STREAM_ID,
     },
   });
@@ -96,7 +96,7 @@ test("the cap reached after the stream started ends it with the quota refusal an
     assert.deepEqual(result, {
       ok: false,
       error: {
-        kind: "refused", status: 200, code: "quota_exceeded", retryable: true, retryAfterS: null, documents: [],
+        kind: "refused", status: 200, code: "quota_exceeded", retryable: true, retryAt: null, documents: [],
         message: "Today's AI spending cap of $0.000001 is used up. It resets at midnight UTC.",
         quota: { limitUsd: 0.000001, spentTodayUsd: 0.01, resetsAt: new Date("2026-11-13T00:00:00Z") },
         requestId: STREAM_ID,
