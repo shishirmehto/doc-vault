@@ -6,14 +6,13 @@ from uuid import UUID, uuid4
 import httpx2
 import pytest
 
-from docvault import documents, pages, prompts, summaries
+from docvault import documents, prompts, summaries
 from docvault.ai import FakeChat
 from docvault.api import app
 from docvault.domain import (
     ErrorCode,
     Failure,
     Page,
-    PageBasis,
     Summary,
     SummaryLength,
     SummaryOptions,
@@ -28,6 +27,7 @@ from .conftest import ENDORSEMENT, POLICY, SAMPLES, scalar
 from .test_ai import openai_chat, openai_client
 from .test_compare import completion
 from .test_insights import indexed, post, provider_down, with_chat
+from .test_pages import extracted
 
 BRIEF, STANDARD = SummaryLength.BRIEF, SummaryLength.STANDARD
 PLAIN, FORMAL, CLIENT = SummaryTone.PLAIN, SummaryTone.FORMAL, SummaryTone.CLIENT
@@ -44,13 +44,9 @@ def test_the_focus_is_trimmed_lowercased_and_single_spaced_and_a_blank_one_is_no
     assert SummaryOptions.of(BRIEF, focus, CLIENT) == SummaryOptions(BRIEF, key, CLIENT)
 
 
-def sample_pages(name: str) -> tuple[PageBasis, tuple[Page, ...]]:
-    doc = pages.extract(pages.sniff_kind(SAMPLES / name), SAMPLES / name, max_pages=100)
-    return doc.basis, doc.pages
-
-
 def test_the_prompt_is_the_insights_pages_then_the_word_target_the_readers_interest_and_the_tone():
-    basis, policy = sample_pages(POLICY)
+    doc = extracted(POLICY)
+    basis, policy = doc.basis, doc.pages
     insights_prompt, _ = prompts.insights(POLICY, basis, policy, budget_chars=2500)
 
     prompt = prompts.summary(POLICY, basis, policy, options(BRIEF, " Flood  Sublimit", CLIENT), budget_chars=2500)

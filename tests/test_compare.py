@@ -7,31 +7,39 @@ from uuid import UUID, uuid4
 
 import httpx2
 import pytest
-from pydantic import BaseModel
 
-from docvault import compare, documents, insights, pages, prompts
-from docvault.ai import AI, ComparisonOwner, FakeChat, FakeEmbedder, ProviderError, RawCompletion, Tokens
+from docvault import compare, documents, insights, prompts
+from docvault.ai import ComparisonOwner, FakeChat, ProviderError
 from docvault.api import app
-from docvault.config import Settings
 from docvault.domain import (
     Cell,
     ComparisonId,
-    ErrorCode,
-    Failure,
     KeyFact,
     Page,
     PageBasis,
     Purpose,
     Row,
     Usage,
-    VaultError,
 )
 from docvault.prompts import CellDraft, CompareDoc, ComparisonDraft, Msg, Prompt, RowDraft
 from docvault.ratelimit import RateLimiter
 
 from .conftest import ENDORSEMENT, POLICY, QUOTE, SAMPLES, scalar
-from .test_ai import CHAT_COMPLETION, openai_chat, openai_client
+from .test_ai import (
+    CHAT_COMPLETION,
+    GOOD,
+    Limit,
+    ScriptedChat,
+    failure_of,
+    gateway,
+    openai_chat,
+    openai_client,
+    reply,
+    unavailable,
+)
+from .test_ai import rows as ledger_rows
 from .test_insights import indexed, post, with_chat
+from .test_pages import extracted
 
 
 def row(*values: str | None) -> Row:
@@ -58,39 +66,19 @@ def test_a_row_differs_on_distinct_values_or_an_empty_cell_beside_a_filled_one(v
     assert row(*values).differs is differs
 
 
-class Rows(BaseModel):
-    rows: list[str]
-
-
-class FailsOnceChat(FakeChat):
-    def __init__(self) -> None:
-        super().__init__()
-        self.timeouts: list[float] = []
-
-    def complete_json(self, prompt, output, *, timeout_s, on_text=None):
-        self.timeouts.append(timeout_s)
-        if len(self.timeouts) == 1:
-            raise ProviderError("server_error", retryable=True)
-        return RawCompletion('{"rows": []}'), Tokens(10, 0, 3)
-
-
 def test_a_comparison_gets_one_attempt_of_90_seconds_billed_to_the_comparison(db):
-    chat, sleeps = FailsOnceChat(), []
-    gateway = AI(chat, FakeEmbedder(), db, Settings(_env_file=None, ai_max_attempts=3), sleep=sleeps.append)
+    chat, sleeps = ScriptedChat([ProviderError("server_error", retryable=True), reply(GOOD, 10, 0, 3)]), []
     comparison_id = ComparisonId(UUID("00000000-0000-0000-0000-00000000c001"))
     prompt = Prompt(name="compare", version="compare-v1", purpose=Purpose.COMPARE, tier="main",
                     system="Compare the documents.", messages=(Msg("user", "D1, D2"),))
 
-    with pytest.raises(VaultError) as raised:
-        gateway.complete(prompt, Rows, owner=ComparisonOwner(comparison_id))
+    failure = failure_of(lambda: gateway(db, chat, sleeps).complete(prompt, Limit,
+                                                                    owner=ComparisonOwner(comparison_id)))
 
-    assert raised.value.failure == Failure(
-        ErrorCode.AI_UNAVAILABLE, "The AI provider could not complete the request (server_error).", True)
+    assert failure == unavailable("server_error", True)
     assert (chat.timeouts, sleeps) == ([90.0], [])
-    with db.connection() as conn:
-        ledger = [tuple(row.values()) for row in conn.execute(
-            "SELECT purpose, document_id, turn_id, comparison_id, ok, error_code FROM llm_calls")]
-    assert ledger == [("compare", None, None, comparison_id, False, "server_error")]
+    assert ledger_rows(db, "purpose, document_id, turn_id, comparison_id, ok, error_code") == [
+        ("compare", None, None, comparison_id, False, "server_error")]
 
 
 POLICY_PAGES = (Page(1, "a" * 30), Page(2, ""), Page(3, "b" * 30), Page(4, "c" * 30))
@@ -134,13 +122,10 @@ The text above stops at p. 3 of 4.
     assert (prompt.name, prompt.version, prompt.purpose, prompt.tier) == ("compare", "compare-v1", "compare", "main")
 
 
-def sample(label: str, name: str) -> CompareDoc:
-    doc = pages.extract(pages.sniff_kind(SAMPLES / name), SAMPLES / name, max_pages=100)
-    return CompareDoc(label, name, doc.basis, (), doc.pages)
-
-
 def test_the_fake_aligns_every_label_the_policy_and_the_renewal_quote_share():
-    prompt, _ = prompts.compare([sample("D1", POLICY), sample("D2", QUOTE)], None, budget_chars=240_000)
+    policy, quote = extracted(POLICY), extracted(QUOTE)
+    prompt, _ = prompts.compare([CompareDoc("D1", POLICY, policy.basis, (), policy.pages),
+                                 CompareDoc("D2", QUOTE, quote.basis, (), quote.pages)], None, budget_chars=240_000)
 
     raw, _ = FakeChat().complete_json(prompt, ComparisonDraft, timeout_s=90.0)
 
@@ -248,15 +233,13 @@ def test_the_openai_path_stores_grounded_cells_and_tries_a_failing_call_once(ctx
     live = with_chat(ctx, openai_chat(client))
 
     stored = compare.create(live, [policy, quote], None)
-    with pytest.raises(VaultError) as raised:
-        compare.create(live, [quote, policy], None)
+    failure = failure_of(lambda: compare.create(live, [quote, policy], None))
 
     assert (stored.rows, stored.dropped_cells) == ((Row("Property Damage Deductible", (
         Cell("$2,500 per occurrence", 2, "Property Damage Deductible $2,500 per occurrence"), None)),), 1)
     assert (stored.model, stored.prompt_version, stored.usage) == (
         "gpt-6.1-sol", "compare-v1", Usage(1, 2000, 300, Decimal("0.005100")))
-    assert raised.value.failure == Failure(
-        ErrorCode.AI_UNAVAILABLE, "The AI provider could not complete the request (server_error).", True)
+    assert failure == unavailable("server_error", True)
     assert len(sent) == 2
     path, request = sent[0]
     response_format = request["response_format"]
