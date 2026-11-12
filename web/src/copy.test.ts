@@ -7,7 +7,7 @@ import {
 import { readAskStream } from "./api/client.ts";
 import type { ApiError, DocumentId } from "./api/domain.ts";
 import {
-  cannotOpen, chatAsks, clockTime, compareBlocked, compareFailed, comparedNames, comparing, deletedColumns, differCount, docMeta, dollars,
+  askAbout, cannotOpen, chatAsks, clockTime, compareBlocked, compareFailed, comparedNames, comparing, deletedColumns, differCount, docMeta, dollars,
   droppedCells, explain, fieldCount, focusLine, hitRate, newerVersion, noCap, noFieldsNext, notReadyNames, otherVersions, partlyRead,
   retrying, rewriteOptions, rewriting, rewrittenBy, sourceLabel, sourcesNote, usageLine, versionCompareBlocked,
   versionLine, versionMeta, withVersion, wordTarget,
@@ -32,6 +32,13 @@ test("a row's meta leads with the document type once insights know it, and skips
       other: "Text, 1 section, 147 B",
       failed: "PDF, 1 KB",
     },
+  );
+});
+
+test("the question box hint counts the documents instead of naming a file, so a long filename never runs out of the box", () => {
+  assert.deepEqual(
+    [askAbout(1), askAbout(2), askAbout(5)],
+    ["Ask about this document", "Ask about these 2 documents", "Ask about these 5 documents"],
   );
 });
 

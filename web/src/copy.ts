@@ -147,6 +147,10 @@ export function usageLine(turn: Turn): string {
   return `${calls} model ${callWord}, ${n(inputTokens)} tokens in, ${n(outputTokens)} out, ${cost}, ${formatMs(turn.latencyMs)}`;
 }
 
+export function askAbout(documents: number): string {
+  return documents === 1 ? "Ask about this document" : `Ask about these ${documents} documents`;
+}
+
 export function searching(documents: number | null): string {
   return documents === null ? "Searching" : `Searching ${documents === 1 ? "1 document" : `${documents} documents`}`;
 }

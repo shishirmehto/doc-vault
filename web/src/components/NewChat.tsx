@@ -9,7 +9,7 @@ import { threads } from "@/hooks/useThread";
 import { useCompareRun } from "@/hooks/useCompareRun";
 import { COMPARE_MIN, columns, compareRequest, type CompareRequest } from "@/lib/compare";
 import { CHAT_MAX_DOCUMENTS } from "@/lib/find";
-import { COMPARE_BUSY, COMPARE_FOCUS_HINT, compareBlocked, documentNames, explain, formatWhen, listNames, notReadyNames } from "@/copy";
+import { COMPARE_BUSY, COMPARE_FOCUS_HINT, askAbout, compareBlocked, documentNames, explain, formatWhen, listNames, notReadyNames } from "@/copy";
 import { Composer } from "./Composer";
 import { DropZone } from "./DropZone";
 import { InAppLink } from "./InAppLink";
@@ -81,7 +81,7 @@ export function NewChat({ docs, failed, deleted, onDismiss, onOpen, onFiles, onC
             placeholder={
               scope === null
                 ? "Choose documents above, then ask"
-                : `Ask about ${scope.length === 1 ? ready.find((d) => d.id === scope[0])?.filename : `these ${scope.length} documents`}`
+                : askAbout(scope.length)
             }
             extra={comparable && (
               <button type="button" className="button secondary" disabled={busy || compareBlock !== null}

@@ -15,7 +15,7 @@ import type { LookedUp } from "@/lib/docList";
 import { stillFollowing } from "@/lib/follow";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { chatVersion } from "@/lib/versions";
-import { askStatus, chatAsks, documentNames, explain, listNames, NOT_FOUND, usageLine, withVersion } from "@/copy";
+import { askAbout, askStatus, chatAsks, documentNames, explain, listNames, NOT_FOUND, usageLine, withVersion } from "@/copy";
 import { Composer } from "./Composer";
 import { LoadFailed, MissingChat } from "./Missing";
 import { SourcePane, type SourceView } from "./SourcePane";
@@ -129,7 +129,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
               !accepting
                 ? "Start a new chat to ask more"
                 : documents
-                  ? `Ask about ${documents.length === 1 ? documents[0].filename : `these ${documents.length} documents`}`
+                  ? askAbout(documents.length)
                   : "Ask a question"
             }
           />
