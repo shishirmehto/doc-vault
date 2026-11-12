@@ -129,13 +129,15 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 
 One live run with the OpenAI key, on 2026-11-12, cost $3.17 on the ledger. It covered:
 - **The eval set:** the numbers are in `docs/evals.md`, live and fake side by side.
-- **The 19 real documents.** Before any paid call, the lead agent wrote the expected answer and page for 31 broker questions from the documents' own text. Five of the questions have no answer in their document.
-  - 28 answers were right.
-  - 3 were partial and said what the excerpts did not show:
-    - the waiting period in the 246-page manual was not retrieved;
-    - two answers on ransomware cover missed that remediation costs include extortion costs.
-  - No answer invented a figure. That held on a certificate whose limits are blank and on each question with no answer in its document.
-  - Every citation was on the page it named.
+- **The 19 real documents.** Before any paid call, the lead agent wrote the expected answer and page for 31 broker questions from the documents' own text. Six of the questions have no answer in their document.
+  - Of the 25 answerable questions, 21 were answered right.
+  - 4 were partial:
+    - the waiting period in the 246-page manual was not retrieved, and the answer said so;
+    - two answers on ransomware cover missed that remediation costs include extortion costs;
+    - one answer on defamation cited only the legal-expenses section and missed the professional liability cover for statements made in good faith.
+  - Of the 6 questions with no answer in their document, 5 were declined. The sixth, on pets under workers' compensation, was answered "No" by inference from the coverage grant.
+  - No answer invented a figure. That held on a certificate whose limits are blank.
+  - Every citation was on the page it named. Where a quote's words differed from a reference reader's, the page held the same letters with different spacing.
 - **Other features on the real documents:**
   - 7 comparisons took 15 to 28 s, inside the 90 s limit, with 1 cell dropped out of about 320;
   - 4 summaries took 4 to 16 s, at the requested lengths and focus, with no source dropped;
