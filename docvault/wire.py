@@ -180,6 +180,7 @@ def _no_nul(text: str) -> str:
 
 
 NoNul = AfterValidator(_no_nul)   # Postgres text refuses NUL, so it is a 422 here rather than a 500 at the INSERT
+Focus = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200), NoNul]
 
 
 class StartChatIn(BaseModel):
@@ -258,7 +259,7 @@ class CompareIn(BaseModel):
     document_ids: Annotated[list[UUID], AfterValidator(_distinct)] = Field(
         min_length=2, max_length=5, description="The documents to compare, 2 to 5, each once. They become the "
                                                 "columns, in this order.")
-    focus: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200), NoNul] | None = Field(
+    focus: Focus | None = Field(
         None, description='What to compare, e.g. "deductibles". Absent or blank: the fields a broker compares.')
 
 
@@ -305,7 +306,7 @@ class ComparisonPage(BaseModel):
 class SummaryIn(BaseModel):
     length: SummaryLength = Field(SummaryLength.STANDARD, description="brief (about 60 words), standard (about 150) "
                                                                       "or detailed (about 300).")
-    focus: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200), NoNul] | None = Field(
+    focus: Focus | None = Field(
         None, description='What the reader cares about, e.g. "deductibles"; the summary leads with it. At most 200 '
                           "characters after trimming, and compared lowercase with single spaces, so two ways of "
                           "writing it get the same summary. Absent or blank: what a broker checks first.")
@@ -524,8 +525,7 @@ def comparison_out(comparison: Comparison) -> ComparisonOut:
     return ComparisonOut(
         id=comparison.id, focus=comparison.focus, dropped_cells=comparison.dropped_cells, model=comparison.model,
         prompt_version=comparison.prompt_version, created_at=comparison.created_at,
-        documents=[ComparedDocumentOut(id=doc.id, filename=doc.filename, version=doc.version, deleted=doc.deleted,
-                                       pages_read=doc.pages_read, page_count=doc.page_count) for doc in docs],
+        documents=[ComparedDocumentOut.model_validate(doc, from_attributes=True) for doc in docs],
         rows=[RowOut(field=row.field, differs=row.differs,
                      cells=[_cell_out(doc, cell) for doc, cell in zip(docs, row.cells, strict=True)])
               for row in comparison.rows],

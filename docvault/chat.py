@@ -464,9 +464,10 @@ def suggestions(follow_ups: Sequence[str], question: str) -> tuple[str, ...]:
     seen = {_same_question(question)}
     kept: list[str] = []
     for raw in follow_ups:
-        text = " ".join(raw.split())
-        if text.endswith("?") and len(text) <= MAX_SUGGESTION_CHARS and _same_question(text) not in seen:
-            seen.add(_same_question(text))
+        text = pages.collapse_whitespace(raw)
+        key = text.casefold()
+        if text.endswith("?") and len(text) <= MAX_SUGGESTION_CHARS and key not in seen:
+            seen.add(key)
             kept.append(text)
     return tuple(kept[:MAX_SUGGESTIONS])
 
@@ -486,7 +487,7 @@ def fact_suggestions(labels: Sequence[Sequence[str]], question: str) -> tuple[st
 
 
 def _same_question(text: str) -> str:
-    return " ".join(text.split()).casefold()
+    return pages.collapse_whitespace(text).casefold()
 
 
 # ------------------------------------------------------------------ grounding

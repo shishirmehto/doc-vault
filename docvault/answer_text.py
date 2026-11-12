@@ -17,7 +17,7 @@ from enum import Enum, auto
 
 _JSON_WHITESPACE = frozenset(" \t\n\r")
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
-_LITERAL = frozenset("0123456789+-.eEtrufalsn")
+_LITERAL_CHARS = frozenset("0123456789+-.eEtrufalsn")
 _ESCAPES = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
 
 
@@ -84,7 +84,7 @@ class AnswerField:
             self._string_step(ch)
             return
         if self._state is _Scan.LITERAL:
-            if ch in _LITERAL:
+            if ch in _LITERAL_CHARS:
                 return
             self._state = _Scan.COMMA_OR_CLOSE
         if ch in _JSON_WHITESPACE:
@@ -109,7 +109,7 @@ class AnswerField:
                 self._open("}", _Scan.KEY_OR_CLOSE)
             case (_Scan.VALUE | _Scan.VALUE_OR_CLOSE), "[":
                 self._open("]", _Scan.VALUE_OR_CLOSE)
-            case (_Scan.VALUE | _Scan.VALUE_OR_CLOSE), _ if ch in _LITERAL:
+            case (_Scan.VALUE | _Scan.VALUE_OR_CLOSE), _ if ch in _LITERAL_CHARS:
                 self._state = _Scan.LITERAL
             case _Scan.COMMA_OR_CLOSE, ",":
                 self._state = _Scan.KEY if self._closers[-1] == "}" else _Scan.VALUE
@@ -178,7 +178,6 @@ class AnswerField:
 
 class _Marker(Enum):
     TEXT = auto()
-    PAD = auto()
     OPEN = auto()
     LABEL = auto()
     NUMBER = auto()
@@ -211,17 +210,15 @@ class MarkerFilter:
 
     def _step(self, ch: str) -> str:
         match self._state:
-            case _Marker.TEXT | _Marker.PAD if ch in " \t":
+            case _Marker.TEXT if ch in " \t":
                 self._pad += ch
-                self._state = _Marker.PAD
                 return ""
-            case _Marker.TEXT | _Marker.PAD if ch == "[":
+            case _Marker.TEXT if ch == "[":
                 self._marker = ch
                 self._state = _Marker.OPEN
                 return ""
-            case _Marker.TEXT | _Marker.PAD:
+            case _Marker.TEXT:
                 released, self._pad = self._pad, ""
-                self._state = _Marker.TEXT
                 return released + ch
         following = _following(self._state, ch)
         if following is None:

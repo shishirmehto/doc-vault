@@ -89,14 +89,14 @@ MAX_RETRY_WAIT_S = 10.0
 # tries. Retrying them here too would multiply the attempts and hold both while sleeping.
 BACKGROUND = frozenset({Purpose.EMBED_CHUNKS, Purpose.INSIGHTS})
 
-# One provider attempt per call, with no gateway retry: Celery retries BACKGROUND, and the UI's Try again a comparison
-# or a summary.
-ONE_ATTEMPT = BACKGROUND | {Purpose.COMPARE, Purpose.SUMMARY}
-
-# No repair turn either. A comparison and a summary are synchronous and the web proxy gives up at 120 s, so one call of
+# No repair turn. A comparison and a summary are synchronous and the web proxy gives up at 120 s, so one call of
 # at most compare_timeout_s or summary_timeout_s (90 s) lets the API answer first; invalid output fails as a
 # retryable 502, for the UI's Try again.
 NO_REPAIR = frozenset({Purpose.COMPARE, Purpose.SUMMARY})
+
+# One provider attempt per call, with no gateway retry: Celery retries BACKGROUND, and the UI's Try again a comparison
+# or a summary.
+ONE_ATTEMPT = BACKGROUND | NO_REPAIR
 
 SPEND_TTL_S = 10.0   # how stale today's spend may be when a budget check reads it
 EMBEDDING_TTL_S = 30 * 24 * 3600
