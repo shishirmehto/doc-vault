@@ -57,6 +57,19 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
   - any sideways page scroll.
 
   The final UI pass ran it on 53 screens at four window sizes, on the dev stack and on a fresh one, and it returned nothing on any of them. Keyboard-only walks checked that every control in the top bar, the document actions and the comparison table takes focus with a visible ring.
+- **Real documents.** 19 public insurance documents ran through an isolated stack on the fake provider:
+  - policy forms in two editions;
+  - declarations pages;
+  - cyber and professional liability wordings;
+  - a 246-page flood manual;
+  - a Word checklist built as one long table.
+
+  The documents are not in the repo, because some are copyrighted. Every page count matched an independent PDF reader, and the text matched within 1% on all but one file. That file's only gap is a regulator's stamp line. Each answer's citation was checked against that reader's text of the cited page. The run found three bugs that the generated samples could not show:
+  - an encrypted PDF that anyone can open failed as damaged;
+  - text printed twice for bold came out as "PPoolliiccyy";
+  - words broken at line ends read as "infor- mation".
+
+  All three were fixed test-first and checked again on the same files.
 - **Behaviour pinned during the clean-up.** Before the quality pass changed any code, it saved:
   - a byte-level dump of the API schema and the rendered prompts;
   - the eval results;
@@ -85,6 +98,8 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 | The spending-cap docs said search keeps working over the cap, but chat is the only search, and it is capped | The second owner of that phase. The docs now say uploads are still indexed |
 | After a delete, a capped document list shrank and stayed short | An independent review agent. The list now reads again after a delete |
 | The visibility check called every page link in a wide comparison table unreachable | A probe that reached every link. The check was fixed, and its negative probes still fail as they should |
+| The fix for doubled bold text would also have halved template placeholders, so "YYYY" read "YY" | The lead agent ran the new extraction on the real documents before accepting it. The flood manual has seven "YYYY" date fields |
+| The first citation check on real documents flagged correct quotes as off the page | Reading the pages: the reference reader's layout mode had merged two columns. The check switched to reading order and word overlap |
 
 ## AI inside the product
 
@@ -115,7 +130,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
   - streamed answers and follow-up suggestions;
   - comparisons and rewritten summaries, with their 90 s limits;
   - the relevance threshold for its embeddings, calibrated with the command in `docs/evals.md`.
-- The eval numbers in `docs/evals.md` come from the fake provider. They measure the plumbing (retrieval, grounding, refusals, comparison grounding), not answer quality. The fake lines up only identical field labels, so it misses the premium in the demo comparison, where the two documents label it differently.
+- The eval numbers in `docs/evals.md` come from the fake provider. They measure the plumbing (retrieval, grounding, refusals, comparison grounding), not answer quality. The fake lines up only identical field labels, so it misses the premium in the demo comparison, where the two documents label it differently. On real policy wordings its comparison rows are noise, so comparison quality on real documents is untested until the live run.
 
 ## Reproduce the checks
 
