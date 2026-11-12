@@ -15,20 +15,13 @@ import { DropZone } from "./DropZone";
 import { InAppLink } from "./InAppLink";
 import { Picker } from "./Picker";
 
-/**
- * The screen with nothing selected: choose ready documents and ask the first question, compare them, or reopen a
- * recent chat. An empty vault shows the steps from upload to first question instead.
- */
 export function NewChat({ docs, failed, deleted, onDismiss, onOpen, onFiles, onCompare }: {
   docs: readonly Doc[] | null;
-  /** The last failed read of the document list, which is retried on its own. */
   failed: ApiError | null;
-  /** The filename of a document just deleted, to confirm it. */
   deleted: string | null;
   onDismiss(): void;
   onOpen(id: ChatId): void;
   onFiles(files: File[]): void;
-  /** Compares the ticked documents, with the question as the focus, on the compare screen. */
   onCompare(request: CompareRequest): void;
 }) {
   const [chosen, setChosen] = useState<ReadonlySet<DocumentId>>(() => new Set());
@@ -105,7 +98,6 @@ export function NewChat({ docs, failed, deleted, onDismiss, onOpen, onFiles, onC
   );
 }
 
-/** An empty vault: the real sequence from upload to first question, with the upload target in step 1. */
 function FirstSteps({ onFiles }: { onFiles(files: File[]): void }) {
   const drop = useFileDrop(onFiles);
   return (
@@ -128,7 +120,6 @@ function FirstSteps({ onFiles }: { onFiles(files: File[]): void }) {
   );
 }
 
-/** Takes focus when it appears, because the screen the reader acted on is gone. */
 function DeletedNote({ filename, onDismiss }: { filename: string; onDismiss(): void }) {
   const note = useRef<HTMLParagraphElement>(null);
   useEffect(() => note.current?.focus(), []);

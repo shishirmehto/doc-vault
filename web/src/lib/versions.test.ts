@@ -5,7 +5,6 @@ import { applyVersionEvent, chatVersion, familyOf, hasVersions, laterVersion } f
 
 const FAMILY = "00000000-0000-4000-8000-000000000001" as FamilyId;
 
-/** Version `number` of `latest` in FAMILY, with the id ...00n. */
 function version(number: number, latest: number, lifecycle: Lifecycle = { status: "ready" }, family = FAMILY): Doc {
   return {
     id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}` as DocumentId,

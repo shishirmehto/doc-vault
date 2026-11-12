@@ -1,15 +1,9 @@
-// The rail's list: the latest version of the newest LIST_LIMIT documents, newest first, kept current by upload and
-// retry responses and by live events between list reads. It holds one row per family.
-
 import type { Doc, DocEvent } from "../api/domain.ts";
 
-/** `complete` is false when the vault holds documents older than the last one listed. */
 export type DocList = { docs: Doc[]; complete: boolean };
 
-/** How many documents a list read asks for. */
 export const LIST_LIMIT = 100;
 
-/** The server's order, created_at DESC then id DESC. Negative when `a` is listed before `b`. */
 function compareNewestFirst(a: Doc, b: Doc): number {
   const byTime = b.createdAt.getTime() - a.createdAt.getTime();
   if (byTime !== 0) return byTime;
@@ -33,7 +27,6 @@ export function upsertDoc(list: DocList, doc: Doc): DocList {
   const known = list.docs.findIndex((d) => d.id === doc.id);
   if (known !== -1) return { ...list, docs: list.docs.map((d, i) => (i === known ? doc : d)) };
   const last = list.docs.at(-1);
-  // Past the last listed document the vault holds others this list never read, so this one is not in the newest.
   if (!list.complete && last !== undefined && compareNewestFirst(doc, last) > 0) return list;
   const at = list.docs.findIndex((d) => compareNewestFirst(doc, d) < 0);
   const docs = at === -1 ? [...list.docs, doc] : [...list.docs.slice(0, at), doc, ...list.docs.slice(at)];

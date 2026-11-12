@@ -96,12 +96,10 @@ function versionOf(w: W.DocumentOut): DocVersion {
   return { family: required(family, "a family id"), number: w.version, latest: w.latest_version };
 }
 
-/** GET /documents/{id}/versions: the family, oldest first. */
 export function parseVersionList(w: W.VersionList): Doc[] {
   return w.items.map(parseDoc);
 }
 
-/** An event of GET /events/documents. Throws on an event or data the contract does not name. */
 export function parseDocEvent(m: SseMessage): DocEvent {
   const data: unknown = JSON.parse(m.data);
   switch (m.event) {
@@ -195,12 +193,11 @@ export function parseTurn(w: W.TurnOut): Turn {
 
 const STAGES: readonly AskStage[] = ["condensing", "searching", "answering"];
 
-/** An event of POST /chats/{id}/messages/stream: progress, or its end (the final turn, or the error envelope). */
 export type AskEvent = AskProgress | { kind: "turn"; turn: Turn } | { kind: "error"; error: ApiError };
 
 /**
  * The stream answered 200, so an `error` event is a refusal whose status is that 200; its code and
- * `retryable` say what failed, and `requestId` is the 200's. Throws on an event or data the contract does not name.
+ * `retryable` say what failed, and `requestId` is the 200's.
  */
 export function parseAskEvent(m: SseMessage, requestId: string | null): AskEvent {
   const data: unknown = JSON.parse(m.data);
@@ -264,12 +261,6 @@ function usage(w: W.TurnOut["usage"]): Usage {
   return { calls: w.calls, inputTokens: w.input_tokens, outputTokens: w.output_tokens, costUsd: w.cost_usd };
 }
 
-// ------------------------------------------------------------------ comparison
-
-/**
- * Throws when a row does not line up with the columns: a different cell count, a cell for another document, or a
- * cell that is neither empty (every field null) nor whole (a value with its page, page label and quote).
- */
 export function parseComparison(w: W.ComparisonOut): Comparison {
   const documents: ComparedDoc[] = w.documents.map((d) => ({
     id: documentId(d.id), filename: d.filename, version: d.version, deleted: d.deleted, pagesRead: d.pages_read,
@@ -303,17 +294,13 @@ function compareCell(w: W.ComparisonOut["rows"][number]["cells"][number], doc: C
   };
 }
 
-/** Newest first. */
 export function parseComparisonPage(w: W.ComparisonPage): Comparison[] {
   return w.items.map(parseComparison);
 }
 
-// ------------------------------------------------------------------ rewritten summaries
-
 const WIRE_LENGTHS: readonly SummaryLength[] = ["brief", "standard", "detailed"];
 const WIRE_TONES: readonly SummaryTone[] = ["plain", "formal", "client"];
 
-/** Throws on a length or tone the contract does not name, a source on no page, or a `cached` that is not a boolean. */
 export function parseSummary(w: W.SummaryOut): Summary {
   if (typeof w.cached !== "boolean") throw new TypeError(`not a cached flag: ${JSON.stringify(w.cached)}`);
   return {

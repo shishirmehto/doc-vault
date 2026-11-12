@@ -3,10 +3,6 @@
 export type SseMessage = { event: string; data: string };
 
 export type SseReader = {
-  /**
-   * Takes decoded text split anywhere. Returns the messages it completes, in order. A message whose blank
-   * line never arrives is never returned, as the spec discards it when the body ends.
-   */
   push(text: string): SseMessage[];
 };
 
@@ -18,7 +14,6 @@ export function createSseReader(): SseReader {
   let event = "";
   let data: string[] = [];
 
-  // A comment line (leading colon) parses as the field "", which matches nothing.
   function take(line: string): SseMessage[] {
     if (line === "") {
       const done = data.length === 0 ? [] : [{ event: event || "message", data: data.join("\n") }];
@@ -36,7 +31,6 @@ export function createSseReader(): SseReader {
 
   return {
     push(text) {
-      // A decoder returns "" for a chunk that ends inside a character; a pending CR must survive it.
       if (text === "") return [];
       const body = skipLf && text.startsWith("\n") ? text.slice(1) : text;
       skipLf = text.endsWith("\r");

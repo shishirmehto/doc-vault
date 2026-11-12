@@ -67,7 +67,6 @@ button { font: inherit; }
   padding: 0 var(--s6); border-bottom: 1px solid var(--rule); background: var(--desk);
 }
 .wordmark { align-self: center; font-weight: 600; font-size: var(--t-body); text-decoration: none; letter-spacing: -0.01em; white-space: nowrap; }
-/* The sections read as tabs on the bar's bottom edge; the current one carries a carbon underline. */
 .sections { display: flex; gap: var(--s6); }
 .sections a {
   display: flex; align-items: center; min-height: var(--topbar); padding: 0 2px; margin-bottom: -1px;
@@ -88,8 +87,6 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
   border-radius: var(--r-control); background: var(--sheet); color: var(--ink); font-size: var(--t-meta);
   box-shadow: 0 12px 28px -18px rgb(28 38 49 / 0.45);
 }
-/* Below 427 px the button wraps to a second row of the bar, under the fixed top above, so the note goes below
-   whichever is lower, the bar's first row or the button. */
 @supports (anchor-name: --a) {
   button.service { anchor-name: --service; }
   .service-note { position-anchor: --service; top: calc(max(var(--topbar), anchor(bottom)) + var(--s1)); }
@@ -108,10 +105,8 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
 .text-button:hover:not(:disabled, [aria-disabled="true"]) { text-decoration: underline; }
 .text-button:disabled, .text-button[aria-disabled="true"] { color: var(--graphite); cursor: not-allowed; }
 .text-button.quiet-action { color: var(--graphite); }
-/* Stamp marks failures, and the one action that cannot be undone. */
 .button.danger { background: var(--stamp); }
 .button.danger:hover:not(:disabled) { background: #8a2923; }
-/* A second action beside a primary one: the same carbon, drawn as an outline on paper. */
 .button.secondary { background: var(--sheet); color: var(--carbon); box-shadow: inset 0 0 0 1.5px var(--carbon); }
 .button.secondary:hover:not(:disabled) { background: var(--carbon-tint); }
 
@@ -150,8 +145,6 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
 .rail { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; border-right: 1px solid var(--rule); }
 .rail[data-dragging] { background: var(--desk-raised); box-shadow: inset 0 0 0 2px var(--carbon); }
 .rail-body { grid-row: -2; overflow-y: auto; min-height: 0; padding: var(--s4) var(--s4) var(--s8); }
-/* The phone layout's "Documents (n)" button, and the documents in flight shown while it is folded; the wide
-   layout always shows the list. */
 .rail-toggle, .rail-flight { display: none; }
 
 .dropzone {
@@ -225,7 +218,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .centre { padding: var(--s8) var(--s12) 0; }
 .document, .new-chat { padding-bottom: var(--s8); }
 
-/* The chat and new-chat screens: the content scrolls, and the question box is the row under it. */
 .centre.with-composer { display: grid; grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; padding: 0; }
 .centre-scroll { overflow-y: auto; min-height: 0; padding: var(--s8) var(--s12) var(--s6); }
 .centre-footer { display: grid; gap: var(--s3); padding: var(--s3) var(--s12) var(--s4); border-top: 1px solid var(--rule); }
@@ -251,7 +243,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .pick-count { font-size: var(--t-meta); color: var(--graphite); padding: 6px 0; font-variant-numeric: tabular-nums; }
 .picker > .quiet { margin-bottom: var(--s2); }
 
-/* An empty vault: the sequence from upload to first question, numbered like the sections of a form. */
 .steps { display: grid; gap: var(--s6); counter-reset: step; }
 .steps > li { display: grid; grid-template-columns: 2ch minmax(0, 1fr); column-gap: var(--s3); row-gap: var(--s3); counter-increment: step; }
 .steps > li::before {
@@ -281,7 +272,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .recent time { color: var(--graphite); font-size: var(--t-meta); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .recent-meta { font-size: var(--t-meta); color: var(--graphite); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
-/* The compare screen's footer: the focus field and Compare on one row. A run in flight takes the picker's place. */
 .compare-row { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s2) var(--s3); max-width: 68ch; }
 .compare-row .find { margin-bottom: 0; flex-basis: 24ch; }
 .compare-row .find input { padding: 8px var(--s3); }
@@ -361,10 +351,8 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 .usage { font-size: var(--t-meta); color: var(--graphite); font-variant-numeric: tabular-nums; }
 
-/* Provisional text while the answer streams: the same type as an answer, a shade lighter until it is grounded. */
 .answer.provisional { color: var(--graphite); }
 
-/* Follow-up questions under the latest turn. Each asks itself in one click. */
 .suggestions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: calc(-1 * var(--s4)); }
 .suggestion {
   border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--sheet); color: var(--carbon);
@@ -397,8 +385,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .doc-actions-use { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .doc-actions-file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s4); }
 .doc-status { display: grid; gap: 2px; }
-/* Versions. The line reads like a form's edition notice; an earlier version carries a carbon margin rule, because the
-   note points at another document, as carbon points at a source everywhere else. */
 .doc-version { font-size: var(--t-meta); color: var(--graphite); font-variant-numeric: tabular-nums; }
 .doc-version-number { font-weight: 600; color: var(--ink); }
 .doc-version a, .newer-version a, .version-list a { color: var(--carbon); font-weight: 600; text-underline-offset: 3px; }
@@ -419,8 +405,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .coverage { border-left: 3px solid var(--graphite); padding-left: var(--s3); max-width: 60ch; }
 .written-by { font-size: var(--t-meta); color: var(--graphite); margin-top: var(--s4); }
 
-/* The summary written again for another reader: a disclosure under the summary that reads as a text button, its
-   options on one row that wraps, and the result on the key-facts schedule's white paper. */
 .rewrite > summary { width: fit-content; font-weight: 600; cursor: pointer; scroll-margin-top: var(--s4); }
 .rewrite > summary:hover { color: var(--carbon); }
 .rewrite-body { display: grid; gap: var(--s4); margin-top: var(--s3); }
@@ -430,7 +414,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .rewrite-form legend { padding: 0; margin-bottom: 2px; font-size: var(--t-meta); font-weight: 600; color: var(--graphite); }
 .rewrite-form fieldset .quiet { margin-top: 2px; font-size: var(--t-meta); }
 .rewrite-form .find { margin-bottom: 0; }
-/* The tone and Rewrite wrap together, so Rewrite never starts a line on its own. */
 .rewrite-send { display: flex; align-items: end; gap: var(--s3); }
 .rewrite-send .button { padding: 7px 18px; }
 .segments label { position: relative; padding: 6px 12px; background: var(--sheet); color: var(--ink); cursor: pointer; }
@@ -480,18 +463,13 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .page-tab:hover { background: var(--carbon); color: var(--sheet); }
 .page-tab[aria-pressed="true"] { background: var(--canary); color: var(--ink); }
 
-/* ------------------------------------------------------------- comparison */
-
 .comparison { display: grid; gap: var(--s4); padding-bottom: var(--s8); }
 .comparison-header { display: grid; gap: var(--s2); max-width: 68ch; }
-/* Like a chat's, the title lists filenames, so it sits a step below a page title. */
 .comparison-header h1 { font-size: var(--t-h1-list); letter-spacing: -0.01em; }
 .comparison-header .written-by { margin-top: 0; }
 .only-differences { display: flex; align-items: center; gap: var(--s2); justify-self: start; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
 .only-differences input { accent-color: var(--carbon); margin: 0; width: 15px; height: 15px; }
 
-/* The key-facts schedule carried across documents: white paper, hairline rules, a page tab on every value. Each
-   column wraps, so at phone width the field and the first document stay readable and the rest scrolls in the box. */
 .compare-table {
   border-collapse: collapse; width: 100%; max-width: calc(18ch + var(--columns) * 26ch); background: var(--sheet);
   box-shadow: 0 0 0 1px var(--rule); border-radius: var(--r-control); font-variant-numeric: tabular-nums;
@@ -507,14 +485,12 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* The floors sit on the body cells: a ch of the smaller header type would leave about 10ch of text at 375 px. */
 .compare-table tbody th { min-width: calc(12ch + 2 * var(--s3)); font-weight: 400; color: var(--graphite); }
 .compare-table td { min-width: calc(14ch + 2 * var(--s3)); }
-/* The revision bar: the change bar an amended wording prints in the margin beside a changed line. */
 .compare-table tbody th[data-differs] { box-shadow: inset 3px 0 0 var(--ink); color: var(--ink); }
 .differs {
   display: block; width: fit-content; margin-top: var(--s1); border: 1px solid var(--ink); border-radius: var(--r-tab);
   padding: 0 5px; font-size: 12px; font-weight: 600; line-height: 1.4; color: var(--ink); white-space: nowrap;
 }
 .compare-table td[data-active] { background: var(--canary-soft); }
-/* The page tab sits under its value at every column width, so the tabs line up down each column. */
 .cell { display: grid; justify-items: start; gap: var(--s1); }
 .not-stated, .page-gone { color: var(--graphite); }
 .page-gone { font-size: var(--t-meta); white-space: nowrap; }
@@ -572,7 +548,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .progress > span, .stage > span { transition: none; }
 }
 
-/* Narrow screens: the pane covers the centre column; below 760px the rail sits above the centre column. */
 @media (max-width: 1100px) {
   .workspace[data-pane="open"] { grid-template-columns: var(--rail) minmax(0, 1fr) 0; }
   .pane { position: absolute; z-index: 3; top: 0; right: 0; bottom: 0; width: min(100% - var(--rail), 640px); box-shadow: -12px 0 32px -24px rgb(28 38 49 / 0.5); }
@@ -594,8 +569,6 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .rail-toggle::after { content: ""; margin-left: auto; width: 8px; height: 8px; border: solid var(--graphite); border-width: 0 2px 2px 0; rotate: 45deg; translate: 0 -2px; }
   .rail-toggle[aria-expanded="true"]::after { rotate: 225deg; translate: 0 2px; }
   .rail[data-open="false"] .rail-body { display: none; }
-  /* The folded body's row, so the half-height cap scrolls the rows instead of spilling over the centre, and
-     "N more processing" stays in view under them. */
   .rail-flight { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-row: -2; min-height: 0; padding-bottom: var(--s3); }
   .rail-flight > .rows { overflow-y: auto; min-height: 0; padding: 0 var(--s4); }
   .rail-flight > .text-button { margin: var(--s2) var(--s4) 0; }

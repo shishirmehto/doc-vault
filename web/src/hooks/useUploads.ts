@@ -9,7 +9,6 @@ import { admit, nextToSend, type Upload } from "@/lib/uploads";
 class UploadQueue {
   private items: readonly Upload[] = [];
   private files = new Map<string, File>();
-  /** The document each upload is a new version of, when it was started as one. */
   private replaces = new Map<string, DocumentId>();
   private listeners = new Set<() => void>();
   private seq = 0;
@@ -71,7 +70,6 @@ class UploadQueue {
 
 export function useUploads(onDocument: (doc: Doc) => void): {
   uploads: readonly Upload[];
-  /** With `replaces`, each file becomes the next version of that document. */
   add(files: Iterable<File>, limitBytes: number | null, replaces?: DocumentId): void;
   dismiss(key: string): void;
 } {

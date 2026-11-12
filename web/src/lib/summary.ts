@@ -1,6 +1,3 @@
-// A rewritten summary's options, its run as a pure state machine, and which summary the document screen shows.
-// The run holds only the request; each summary it returns joins the list.
-
 import type {
   ApiError, Result, Summary, SummaryCite, SummaryId, SummaryLength, SummaryList, SummaryOptions, SummaryTone,
 } from "../api/domain.ts";
@@ -17,7 +14,6 @@ export const LENGTHS: Record<SummaryLength, { label: string; words: number }> = 
   detailed: { label: "Detailed", words: 300 },
 };
 
-/** In display order. */
 export const TONES: Record<SummaryTone, string> = { plain: "Plain", formal: "Formal", client: "For the client" };
 
 /** The backend's rule: trimmed, lowercase, single spaces, and blank is none. */
@@ -25,7 +21,6 @@ export function normaliseFocus(raw: string): string | null {
   return raw.trim().replace(/\s+/g, " ").toLowerCase() || null;
 }
 
-/** One request at a time. A failure keeps its options, so Try again sends them again. */
 export type Run =
   | { kind: "idle" }
   | { kind: "running"; options: SummaryOptions; startedAt: number }
@@ -56,21 +51,15 @@ export function step(run: Run, e: RunEvent): Run {
   }
 }
 
-/** The summary at the head and no other entry with its id, so a stored one asked for again moves up. */
 export function mergeSummary(list: readonly Summary[], summary: Summary): Summary[] {
   return [summary, ...list.filter((s) => s.id !== summary.id)];
 }
 
-/** The summary the disclosure shows: the one the URL cites, else the one chosen, else none. */
 export function shownSummary(list: readonly Summary[], chosen: SummaryId | null, cite: SummaryCite | null): Summary | null {
   const id = cite?.summary ?? chosen;
   return list.find((s) => s.id === id) ?? null;
 }
 
-/**
- * The list the source pane resolves a cite against. While the earlier rewrites load, or after they fail, a cite of a
- * summary made this session still opens its passage: this session's results stand in for the list, marked incomplete.
- */
 export function paneList(list: Result<SummaryList> | null, made: readonly Summary[], cite: SummaryCite | null): Result<SummaryList> | null {
   if (list?.ok !== true && cite !== null && made.some((s) => s.id === cite.summary)) {
     return { ok: true, value: { summaries: made, complete: false } };

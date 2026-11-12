@@ -707,8 +707,6 @@ test("the URL selects the metrics view; 24h is the default window", () => {
   assert.equal(selectionQuery({ kind: "metrics", window: "7d" }), "?view=metrics&window=7d");
 });
 
-// ------------------------------------------------------------------ comparison
-
 const ENDORSEMENT = "054b85f0-6107-4030-8274-f72b9ae7a80b" as DocumentId;
 const DEDUCTIBLE_ROW = {
   field: "Property Damage Deductible",
@@ -916,8 +914,6 @@ test("the URL selects a comparison, then one cell's page, a page away from it, a
   assert.deepEqual(sel("compare=d7f2d3b9"), { kind: "missing", what: "comparison" });
   assert.deepEqual(sel("compare="), { kind: "missing", what: "comparison" });
 });
-
-// ------------------------------------------------------------------ rewritten summaries
 
 const REWRITTEN = "5cb8a257-f588-415e-a12c-df8a997cecdb" as DocumentId;
 const BRIEF = "8b9267e2-7aa6-409a-9e54-84740ab28388" as SummaryId;

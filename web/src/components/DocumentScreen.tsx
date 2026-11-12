@@ -31,11 +31,8 @@ type Props = {
   onRetry(id: DocumentId): Promise<ApiError | null>;
   /** Starts a chat on this document and opens it. Resolves to the refusal, if any. */
   onAsk(id: DocumentId): Promise<ApiError | null>;
-  /** Deletes it and leaves for the home screen. Resolves to the refusal, if any. */
   onDelete(doc: Doc): Promise<ApiError | null>;
-  /** Compares two versions of this document and lands on the comparison. */
   onCompareVersions(request: CompareRequest): void;
-  /** Uploads files as the next version of this document. */
   onUploadVersion(files: File[]): void;
 };
 
@@ -165,10 +162,6 @@ export function DocumentScreen({
   );
 }
 
-/**
- * Resolves the URL's pane request against the loaded insights, or the document's rewritten summaries: which page,
- * and which passage to mark.
- */
 function sourceView(doc: Doc, pane: PaneRequest, insights: Result<Insights> | null, summaries: Result<SummaryList> | null): SourceView {
   if (pane.kind === "page") return { kind: "page", doc, page: pane.page, mark: null };
   if (pane.cite.kind === "summary") return summarySourceView(summaries, pane.cite, pane.page, doc);
@@ -311,7 +304,6 @@ function sentenceCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Busy on its own, so the disclosure beside it is not. */
 function SummarySkeleton({ label }: { label: string }): ReactNode {
   return (
     <div aria-busy="true">

@@ -7,7 +7,6 @@ import { parseSelection } from "@/api/parse";
 import { useHealth } from "@/hooks/useHealth";
 import { useLiveStatus } from "@/hooks/useLiveFeed";
 
-/** One note at a time: a service that is down, then live updates that are paused, then the fake provider. */
 function ServiceNote() {
   const health = useHealth();
   const live = useLiveStatus();
@@ -30,10 +29,6 @@ function ServiceNote() {
   return null;
 }
 
-/**
- * The section this screen sits in. `at` is "page" when the section's link leads to exactly this screen, and "true"
- * when the screen sits inside the section, as a chat sits inside Ask.
- */
 type Current = { section: "ask" | "compare" | "metrics"; at: "page" | "true" } | null;
 
 function Sections({ current }: { current: Current }) {

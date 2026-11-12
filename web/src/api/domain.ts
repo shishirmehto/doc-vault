@@ -5,7 +5,6 @@ declare const brand: unique symbol;
 type Brand<T, B extends string> = T & { readonly [brand]: B };
 
 export type DocumentId = Brand<string, "DocumentId">;
-/** The versions of one document share it: the first version's id, which may since have been deleted. */
 export type FamilyId = Brand<string, "FamilyId">;
 export type ChatId = Brand<string, "ChatId">;
 export type TurnId = Brand<string, "TurnId">;
@@ -32,10 +31,6 @@ export type PageUnit = "page" | "section";
 
 export type Layout = { pageCount: number; unit: PageUnit; emptyPages: readonly number[] };
 
-/**
- * Where a document sits among the uploads of one file: version `number`, numbered from 1 in upload order, of a
- * family whose highest number is now `latest`. A deleted version leaves a gap, so `latest` is not a count.
- */
 export type DocVersion = { family: FamilyId; number: number; latest: number };
 
 export type Doc = {
@@ -45,7 +40,6 @@ export type Doc = {
   sizeBytes: number;
   lifecycle: Lifecycle;
   insights: InsightsStatus;
-  /** The insights' document type ("policy", "quote", "other"); null until insights are ready. */
   documentType: string | null;
   /** Null until parsing has run. */
   layout: Layout | null;
@@ -56,10 +50,6 @@ export type Doc = {
 
 export type UploadReceipt = { doc: Doc; duplicate: boolean };
 
-/**
- * One event of GET /events/documents. `document` carries the body GET /documents/{id} would return after the
- * change; `resync` means events may have been missed, so the list must be read again.
- */
 export type DocEvent = { kind: "document"; doc: Doc } | { kind: "deleted"; id: DocumentId } | { kind: "resync" };
 
 /** A passage on a page. Key facts and chat citations both become this. */
@@ -132,27 +122,17 @@ export type Turn = {
   outcome: Outcome;
   usage: Usage;
   latencyMs: number;
-  /** Up to three follow-up questions to offer under the turn, each ending in "?". */
   suggestions: readonly string[];
   /** Stored for the same first question on the same documents and served with no model call; usage reads 0 calls. */
   cached: boolean;
 };
 
-/** The step a streamed answer is on. "condensing" reads a follow-up against the turns before it. */
 export type AskStage = "condensing" | "searching" | "answering";
 
-/**
- * One event of the streamed ask before its end. `text` is provisional answer text with the source markers
- * removed; `reset` discards the text so far. The stream ends with a Turn or an ApiError instead.
- */
 export type AskProgress = { kind: "stage"; stage: AskStage } | { kind: "text"; text: string } | { kind: "reset" };
-
-// ------------------------------------------------------------------ comparison
 
 export type ComparisonId = Brand<string, "ComparisonId">;
 
-/** A column. A deleted document keeps its filename, and its cells keep their values and page labels. */
-/** `version` is the document's version when it was compared; null for a comparison stored before versions. */
 export type ComparedDoc = {
   id: DocumentId;
   filename: string;
@@ -162,7 +142,6 @@ export type ComparedDoc = {
   pageCount: number;
 };
 
-/** A value found on the page it cites. pageLabel is the backend's ("p. 2" or "section 1"). */
 export type CompareCell = { source: SourceRef; value: string; pageLabel: string };
 
 /** `cells[i]` belongs to the comparison's `documents[i]`; null where that document does not state the field. */
@@ -171,21 +150,14 @@ export type CompareRow = { field: string; cells: readonly (CompareCell | null)[]
 export type Comparison = {
   id: ComparisonId;
   documents: readonly ComparedDoc[];
-  /** What the comparison was asked to look at; null for the fields a broker compares. */
   focus: string | null;
   rows: readonly CompareRow[];
-  /**
-   * Values the backend left out because they could not be checked against the page they cite: an unknown or repeated
-   * document, no page or quote, or a quote not on that page. Rows past the 30 it keeps are not read, so not counted.
-   */
   droppedCells: number;
   model: string;
   promptVersion: string;
   usage: Usage;
   createdAt: Date;
 };
-
-// ------------------------------------------------------------------ rewritten summaries
 
 export type SummaryId = Brand<string, "SummaryId">;
 
@@ -195,40 +167,30 @@ export type SummaryTone = "plain" | "formal" | "client";
 /** `focus` as the backend compares it: trimmed, lowercase, single spaces; null for none. */
 export type SummaryOptions = { length: SummaryLength; focus: string | null; tone: SummaryTone };
 
-/** A passage found on the page it cites. pageLabel is the backend's ("p. 2" or "section 2"). */
 export type SummarySource = { page: number; pageLabel: string; quote: string };
 
-/** The document's summary written again at another length, about one topic, or for another reader. */
 export type Summary = {
   id: SummaryId;
   documentId: DocumentId;
   options: SummaryOptions;
   text: string;
   sources: readonly SummarySource[];
-  /** Sources the backend left out because the quote was not on the page they cite. */
   droppedSources: number;
   writtenBy: { model: string; promptVersion: string };
-  /** The same options were summarised before, so this response made no model call. */
   cached: boolean;
   createdAt: Date;
 };
 
-/** Newest first. `complete` is false when older summaries exist past this page. */
 export type SummaryList = { summaries: readonly Summary[]; complete: boolean };
 
 // ------------------------------------------------------------------ the URL
 
 /** A key fact's passage, by its index in the document's insights. */
 export type FactCite = { kind: "fact"; index: number };
-/** A rewritten summary's passage, by the summary and its index among the summary's sources, from 0. */
 export type SummaryCite = { kind: "summary"; summary: SummaryId; index: number };
 /** A chat citation, by the turn that made it and its [n]. */
 export type TurnCite = { turn: TurnId; ref: number };
 
-/**
- * The document view's pane: a key fact's or a rewritten summary's passage (on its page, or another page after
- * paging), or a bare page.
- */
 export type PaneRequest =
   | { kind: "cite"; cite: FactCite | SummaryCite; page: number | null }
   | { kind: "page"; page: number };
@@ -236,10 +198,8 @@ export type PaneRequest =
 /** The chat's pane: always a citation, so it always knows its document. `page` is set after paging. */
 export type ChatPane = { cite: TurnCite; page: number | null };
 
-/** A comparison's cell, by its index in `rows` and its column, both from 0. */
 export type CellCite = { row: number; col: number };
 
-/** The comparison's pane: always a cell, so it always knows its document. `page` is set after paging. */
 export type ComparisonPane = { cite: CellCite; page: number | null };
 
 export type MetricsWindow = "24h" | "7d";
@@ -250,11 +210,8 @@ export type Selection =
   | { kind: "metrics"; window: MetricsWindow }
   | { kind: "doc"; doc: DocumentId; pane: PaneRequest | null }
   | { kind: "chat"; chat: ChatId; pane: ChatPane | null }
-  /** The screen that starts a comparison. `with` is ticked in its picker when it is ready. */
   | { kind: "compare"; with: DocumentId | null }
-  /** `only`: the table shows only the fields that differ. */
   | { kind: "comparison"; comparison: ComparisonId; pane: ComparisonPane | null; only: boolean }
-  /** The URL names a document, chat or comparison by something that cannot be an id. */
   | { kind: "missing"; what: "doc" | "chat" | "comparison" };
 
 /** Today's AI spending cap is used up: the cap, the spend, and the next 00:00 UTC, when asking works again. */

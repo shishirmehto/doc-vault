@@ -16,7 +16,6 @@ import { VersionMark } from "./VersionMark";
 
 type Props = {
   docs: readonly Doc[] | null;
-  /** False when the vault holds more documents than the list fetched. */
   complete: boolean;
   connection: ApiError | null;
   uploads: readonly Upload[];
@@ -29,17 +28,10 @@ type Props = {
 
 const IN_FLIGHT_SHOWN = 3;
 
-/**
- * The documents column. The whole rail takes dropped files. Below 760px it folds into a "Documents (n)"
- * button over the centre column: open while the vault is empty or uploads are listed, so the upload target
- * and their progress show, and closed once a document is opened from it. Folded, it still shows the documents
- * in flight, so one uploaded elsewhere shows its progress.
- */
 export function Rail({ docs, complete, connection, uploads, selected, onFiles, onDismiss, onOpen, onRetry }: Props) {
   const drop = useFileDrop(onFiles);
   const [query, setQuery] = useState("");
   const [choice, setChoice] = useState<boolean | null>(null);
-  // A new upload hands the fold back to the default, which is open while uploads are listed.
   const [uploadCount, setUploadCount] = useState(uploads.length);
   if (uploads.length !== uploadCount) {
     setUploadCount(uploads.length);
@@ -60,7 +52,6 @@ export function Rail({ docs, complete, connection, uploads, selected, onFiles, o
       <button ref={toggle} type="button" className="rail-toggle" aria-expanded={open} aria-controls="rail-body" onClick={() => setChoice(!open)}>
         Documents{docs ? ` (${docs.length})` : ""}
       </button>
-      {/* Outside the fold, so a phone shows it with the list folded away. */}
       {connection && <p className="rail-note rail-alert" data-tone="failed" role="alert">{retrying(connection)}</p>}
       {inFlight.length > 0 && (
         <div className="rail-flight">
@@ -75,7 +66,6 @@ export function Rail({ docs, complete, connection, uploads, selected, onFiles, o
               className="text-button"
               aria-controls="rail-body"
               onClick={() => {
-                // This button goes once the rail opens; the toggle keeps the focus where the reader was.
                 toggle.current?.focus();
                 setChoice(true);
               }}

@@ -1,6 +1,3 @@
-// Finding documents in a long list, and choosing many at once for a chat.
-
-/** The find field shows only when the list is longer than this. */
 export const FIND_AFTER = 6;
 
 /** A chat answers from at most this many documents (the API's limit). */
@@ -20,15 +17,10 @@ export function findDocs<T extends { filename: string; documentType: string | nu
   });
 }
 
-/** True when "Select all ready" has nothing left to add: every one of `ids` is chosen, or the cap is reached. */
 export function allChosen<Id>(chosen: ReadonlySet<Id>, ids: readonly Id[], max: number): boolean {
   return ids.length > 0 && (ids.every((id) => chosen.has(id)) || (chosen.size >= max && ids.some((id) => chosen.has(id))));
 }
 
-/**
- * "Select all ready": when `allChosen`, unchoose `ids`; otherwise choose them too, up to `max` in all. `capped`
- * says some were left out.
- */
 export function chooseAll<Id>(chosen: ReadonlySet<Id>, ids: readonly Id[], max: number): { chosen: ReadonlySet<Id>; capped: boolean } {
   if (allChosen(chosen, ids, max)) {
     return { chosen: new Set([...chosen].filter((id) => !ids.includes(id))), capped: false };

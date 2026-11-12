@@ -8,21 +8,14 @@ import { docMeta, statusLine } from "@/copy";
 import { FindField } from "./FindField";
 import { VersionMark } from "./VersionMark";
 
-/**
- * How many documents can be ticked. A chat offers "Select all ready" and stops it at `max`; a comparison disables the
- * unticked rows once `max` are ticked, and says why in `note`.
- */
 export type PickLimit = { kind: "select-all"; max: number } | { kind: "hard"; max: number; note: string };
 
-/** The ready documents to tick, with a find field over a long list. Only ready documents can be ticked. */
 export function Picker({ docs, chosen, onChange, findLabel, limit, noneReady, busy }: {
   docs: readonly Doc[];
   chosen: ReadonlySet<DocumentId>;
   onChange(next: ReadonlySet<DocumentId>): void;
-  /** Each screen names its own field, so no two fields on screen share a name. */
   findLabel: string;
   limit: PickLimit;
-  /** Shown while no document is ready. */
   noneReady: string;
   busy: boolean;
 }) {

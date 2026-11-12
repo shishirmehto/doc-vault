@@ -13,20 +13,11 @@ const RETRY_MS = 5000;
 
 export type Documents = {
   data: DocList | null;
-  /** The last failed read of the list. The list from before it stays visible. */
   error: ApiError | null;
-  /** Read the list now. */
   refresh(): void;
-  /** Apply a response already in hand (an upload, a retry). While the live feed is not open, also read the list. */
   patch(update: Update): void;
 };
 
-/**
- * The newest documents, kept current by the live feed. The list is read on mount, each time the feed opens, and
- * on resync. While the feed is not open the list is polled instead: every second while a document can still
- * change, and 5 s after a failed read. A failed read is retried while the feed is open too, since nothing else
- * would bring the list it missed.
- */
 export function useDocuments(): Documents {
   const [sync] = useState(() => new ListSync());
   const [state, setState] = useState<{ data: DocList | null; error: ApiError | null }>({ data: null, error: null });

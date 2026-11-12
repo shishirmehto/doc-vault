@@ -1,16 +1,10 @@
-// The page's one connection to GET /events/documents. It opens for the first listener, opens again after the
-// browser gives up on it, and says when live updates have been down long enough to tell the reader.
-
 import type { DocEvent } from "../api/domain.ts";
 import { parseDocEvent } from "../api/parse.ts";
 
-/** A listener hears the stream's events, and each time the stream opens or stops being open. */
 export type FeedEvent = DocEvent | { kind: "open" } | { kind: "down" };
 
-/** "live" also covers the first PAUSED_AFTER_MS of each connection; "off" while nothing listens. */
 export type LiveStatus = "off" | "live" | "paused";
 
-/** The part of EventSource the feed uses. */
 export type FeedSource = {
   readonly readyState: number;
   addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void;
@@ -49,7 +43,6 @@ export class LiveFeed {
     this.connect = connect;
   }
 
-  /** True while the stream is open, so no change can be missed. */
   get open(): boolean {
     return this.isOpen;
   }
@@ -67,7 +60,7 @@ export class LiveFeed {
   };
 
   /**
-   * A hidden page gives its stream back, and showing it opens a new one, which reads the list again. Over HTTP/1.1
+   * Over HTTP/1.1
    * a browser allows six connections to one host across all its tabs, so streams held by background tabs would
    * leave the visible one none for its requests.
    */
@@ -84,7 +77,6 @@ export class LiveFeed {
     if (wasOpen) this.emit({ kind: "down" });
   };
 
-  /** Hears status changes without opening the stream, so the top bar can read it on any page. */
   watch = (watcher: () => void): (() => void) => {
     this.watchers.add(watcher);
     return () => {
@@ -121,7 +113,6 @@ export class LiveFeed {
       this.setStatus("live");
       this.emit({ kind: "open" });
     });
-    // Fires on every failed attempt, so only the change from open starts the pause clock and tells listeners.
     source.addEventListener("error", () => {
       if (!current()) return;
       if (this.isOpen) {

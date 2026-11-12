@@ -15,18 +15,11 @@ import { InAppLink } from "./InAppLink";
 import { Picker } from "./Picker";
 
 const RECENT = 10;
-/** After this long, the run says that a long document takes a while. */
 const LONG_AFTER_MS = 5000;
 
-/**
- * The screen that starts a comparison: tick 2 to 5 ready documents, optionally name a focus, and compare. While a run
- * is in flight, or after it failed, the run takes the picker's place. Recent comparisons sit below.
- */
 export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }: {
   docs: readonly Doc[] | null;
-  /** The last failed read of the document list, which is retried on its own. */
   failed: ApiError | null;
-  /** Ticked from the start: the document whose page offered "Compare with...". */
   initial: DocumentId | null;
   onCompare(request: CompareRequest): void;
   onOpen(id: ComparisonId): void;
@@ -39,7 +32,6 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
   const [chosen, setChosen] = useState<ReadonlySet<DocumentId>>(() => new Set(initial ? [initial] : []));
   const [focus, setFocus] = useState("");
 
-  // The live list holds the newest 100. "Compare with..." from an older document reads that one document instead.
   const lookUp = initial !== null && live !== null && !live.some((d) => d.id === initial) ? initial : null;
   const older = useFetched(`compare-with:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
   const docs = live && withDoc(live, older.result?.ok ? older.result.value : null);
@@ -101,14 +93,12 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
   );
 }
 
-/** The ask's status line and progress, and after a few seconds a word on how long a long document takes. */
 function RunStatus({ run }: { run: Extract<Run, { phase: "running" }> }) {
   const [long, setLong] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setLong(true), Math.max(0, run.startedAt + LONG_AFTER_MS - Date.now()));
     return () => clearTimeout(timer);
   }, [run.startedAt]);
-  // The run replaces a picker that may have been scrolled past, so it brings itself into view.
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     box.current?.scrollIntoView({ block: "nearest" });
@@ -132,7 +122,6 @@ function RunFailed({ run, docs, onRetry, onChange }: {
 }) {
   const [first, ...rest] = compareFailed(run.error, notReadyNames(run.error, docs));
   const retry = useWorthRetrying(run.error);
-  // Compare and its footer are gone, so focus moves to the first way on, in view.
   const actions = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     actions.current?.scrollIntoView({ block: "nearest" });
@@ -150,7 +139,6 @@ function RunFailed({ run, docs, onRetry, onChange }: {
   );
 }
 
-/** Many comparisons share their documents, so each row also gives its focus, how many fields differ, and when. */
 function RecentComparisons({ onOpen }: { onOpen(id: ComparisonId): void }) {
   const { result, reload } = useFetched("recent-comparisons", () => api.comparisons(RECENT));
   if (result === null) return null;

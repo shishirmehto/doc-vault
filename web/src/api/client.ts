@@ -14,22 +14,12 @@ import { LIST_LIMIT, type DocList } from "../lib/docList.ts";
 const BASE = "/api";
 
 export const api = {
-  /**
-   * The latest version of the newest LIST_LIMIT documents. Earlier versions, and documents older than these, are read
-   * one at a time. Older documents need cursor paging, which pass 1 leaves out.
-   */
   documents: (): Promise<Result<DocList>> => call("GET", `/documents?latest=true&limit=${LIST_LIMIT}`, P.parseDocumentPage),
 
-  /** Every version of the document's family, oldest first. */
   versions: (id: DocumentId): Promise<Result<Doc[]>> => call("GET", `/documents/${id}/versions`, P.parseVersionList),
 
-  /**
-   * Removes the document, its pages and its insights. Chats keep their turns, whose citations carry their own
-   * quotes. A 404 means it is already gone.
-   */
   deleteDocument: (id: DocumentId): Promise<Result<null>> => call("DELETE", `/documents/${id}`, () => null),
 
-  /** One document, for a link to one older than the newest 100 the list holds. */
   document: (id: DocumentId): Promise<Result<Doc>> => call("GET", `/documents/${id}`, P.parseDoc),
 
   /** Re-runs whichever stage failed: indexing for a failed document, analysis for failed insights. */
@@ -53,30 +43,19 @@ export const api = {
   /** The newest five, for the new-chat screen. */
   recentChats: (): Promise<Result<Chat[]>> => call("GET", "/chats?limit=5", P.parseChatPage),
 
-  /**
-   * Compares 2 to 5 ready documents, which become the columns in this order. A blank focus compares the fields a
-   * broker compares. 409 documents_not_ready names the documents that are not ready; 429 shares the ask budget.
-   */
   compare: (ids: readonly DocumentId[], focus: string | null): Promise<Result<Comparison>> =>
     call("POST", "/comparisons", P.parseComparison, {
       body: { document_ids: [...ids], focus: focus?.trim() || null } satisfies W.CompareIn,
     }),
 
-  /** One stored comparison, with any document deleted since marked. */
   comparison: (id: ComparisonId): Promise<Result<Comparison>> => call("GET", `/comparisons/${id}`, P.parseComparison),
 
-  /** The newest `limit`, newest first. */
   comparisons: (limit: number): Promise<Result<Comparison[]>> =>
     call("GET", `/comparisons?limit=${limit}`, P.parseComparisonPage),
 
-  /**
-   * Writes the document's summary again with these options. 201 is a new summary; 200 is the one stored for the same
-   * options, served with no model call. 409 documents_not_ready until it is ready; 429 shares the ask budget.
-   */
   summarize: (id: DocumentId, { length, focus, tone }: SummaryOptions): Promise<Result<Summary>> =>
     call("POST", `/documents/${id}/summaries`, P.parseSummary, { body: { length, focus, tone } satisfies W.SummaryIn }),
 
-  /** The newest `limit` of the document's summaries, newest first. */
   summaries: (id: DocumentId, limit: number): Promise<Result<SummaryList>> =>
     call("GET", `/documents/${id}/summaries?limit=${limit}`, P.parseSummaryPage),
 
@@ -89,11 +68,6 @@ export const api = {
   ask: (chat: ChatId, question: string): Promise<Result<Turn>> =>
     call("POST", `/chats/${chat}/messages`, P.parseTurn, { body: { question } satisfies W.AskIn }),
 
-  /**
-   * The same ask, streamed: onProgress hears each stage, piece of provisional text and reset as it arrives,
-   * and the result is the final turn. A refusal before the stream starts (404, 409, 422, 429) and an error
-   * event are "refused". A body that ends without a turn or an error is "offline", like a lost response.
-   */
   askStream: async (chat: ChatId, question: string, onProgress: (p: AskProgress) => void): Promise<Result<Turn>> => {
     const id = newRequestId();
     let res: Response;
@@ -118,8 +92,6 @@ export const api = {
   /**
    * XHR, because fetch reports no upload progress. 202 is a new document; 200 means the same
    * bytes were uploaded before and nothing was reprocessed. 413, 415, 422 and 429 arrive as "refused".
-   * With `replaces`, new bytes become the next version of that document's family whatever their name; 404 when it is
-   * gone. Without it, new bytes under a stored document's name become its next version.
    */
   upload: (file: File, onProgress: (sent: number, total: number) => void, replaces: DocumentId | null = null): Promise<Result<UploadReceipt>> =>
     new Promise((resolve) => {
@@ -179,8 +151,7 @@ function heard(header: (name: string) => string | null, sent: string | null): Re
 }
 
 /**
- * Reads a streamed ask's body to its turn or error event. Bytes are decoded in stream mode, so a character
- * split across network chunks arrives whole. `requestId` is the 200's, which an error event carries.
+ * `requestId` is the 200's, which an error event carries.
  */
 export async function readAskStream(
   body: ReadableStream<Uint8Array>,

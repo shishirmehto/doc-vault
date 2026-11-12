@@ -28,7 +28,6 @@ export function SourcePane({ view, onPage, onClose }: Props) {
     close.current = onClose;
   });
   useEffect(() => {
-    // Escape in an open dialog or popover closes that, and Escape in a field belongs to the field.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || document.querySelector("dialog[open], :popover-open")) return;
       if (e.target instanceof Element && e.target.closest("input, textarea, select")) return;

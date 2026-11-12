@@ -38,8 +38,6 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   const turns = thread?.history.kind === "loaded" ? thread.history.turns : null;
   const open = (cite: TurnCite) => push({ kind: "chat", chat: id, pane: { cite, page: null } });
 
-  // The live list holds the latest version of the newest 100 documents. A citation of an earlier version, which a chat
-  // started on it still answers from, or of an older document, reads that one document instead.
   const cited = pane && turns ? citationAt(turns, pane.cite) : null;
   const listed = cited && docs ? (docs.find((d) => d.id === cited.source.documentId) ?? null) : null;
   const lookUp = cited && docs !== null && listed === null ? cited.source.documentId : null;
@@ -149,7 +147,6 @@ function citationAt(turns: readonly Turn[], cite: TurnCite): Citation | null {
   return (outcome?.kind === "answered" ? outcome.citations.find((c) => c.ref === cite.ref) : undefined) ?? null;
 }
 
-/** The URL names a turn and a citation number; the loaded history resolves them, and `doc` is the cited document. */
 function sourceView(pane: ChatPane, turns: readonly Turn[] | null, doc: Doc | null, resolving: boolean): SourceView {
   if (turns === null || resolving) return { kind: "resolving" };
   const citation = citationAt(turns, pane.cite);
@@ -274,7 +271,6 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
       return (
         <article className="turn" aria-busy="true">
           <h2 className="question">{ask.question}</h2>
-          {/* Plain text, no citations yet: the grounded turn replaces it when it lands. */}
           {ask.text !== "" && <p className="answer provisional">{ask.text}</p>}
           <p className="quiet" role="status">{askStatus(ask, scope?.length ?? null)}</p>
           <div className="progress indeterminate"><span /></div>

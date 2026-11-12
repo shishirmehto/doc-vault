@@ -1,24 +1,13 @@
-// A document's versions as the document page shows them: the line that names the version, the other versions it links
-// to, the newer one an earlier version points at, and which one "Compare with version N" compares. Pure, so the hook
-// that reads the family and follows its live events only feeds it.
-
 import type { Doc, DocEvent, FamilyId } from "../api/domain.ts";
 
-/** The number a "v2" mark shows: any version after the first. */
 export function laterVersion(doc: Doc): number | null {
   return doc.version.number > 1 ? doc.version.number : null;
 }
 
-/** Version 1 of 1 has no family to show. */
 export function hasVersions(doc: Doc): boolean {
   return doc.version.number > 1 || doc.version.latest > 1;
 }
 
-/**
- * `others` are the family's other versions, oldest first. `newest` is the latest version when this is an earlier one.
- * `compareWith` is what "Compare with version N" compares this with: the latest from an earlier version, and the newest
- * earlier version from the latest. Null until the family is read, and when no other version exists.
- */
 export type Family = { others: readonly Doc[]; newest: Doc | null; compareWith: Doc | null };
 
 export function familyOf(doc: Doc, versions: readonly Doc[]): Family {
@@ -39,7 +28,6 @@ export function chatVersion(doc: Doc | null, listed: readonly Doc[] | null): Cha
   return { number: doc.version.number, newer };
 }
 
-/** The family read once, kept current by the events that name its members. */
 export function applyVersionEvent(versions: readonly Doc[], family: FamilyId, event: Exclude<DocEvent, { kind: "resync" }>): readonly Doc[] {
   switch (event.kind) {
     case "document":

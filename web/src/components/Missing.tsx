@@ -5,7 +5,6 @@ type Way = { href: string; label: string };
 
 const ASK: Way = { href: "/", label: "Ask your documents" };
 
-/** Something the address names is not there: say what, and offer the way back. */
 export function Missing({ title, way = ASK, children }: { title: string; way?: Way; children: ReactNode }) {
   return (
     <section className="missing" aria-labelledby="missing-title">

@@ -6,27 +6,18 @@ import type { DocumentId, Result, Summary, SummaryCite, SummaryId, SummaryLength
 import { useFetched } from "@/hooks/useFetched";
 import { LISTED, idle, mergeSummary, paneList, shownSummary, step, type Run, type RunEvent } from "@/lib/summary";
 
-/** The options as typed; the focus is normalised when it is sent. */
 type Draft = { length: SummaryLength; focus: string; tone: SummaryTone };
 
 export type Rewrites = ReturnType<typeof useRewrites>;
 
-/**
- * One document's rewritten summaries, the request in flight, and the disclosure's state. The document screen holds
- * it, because the source pane resolves a summary's cite against the same summaries. `closeCite` takes the cite out
- * of the URL.
- */
 export function useRewrites(id: DocumentId, cite: SummaryCite | null, closeCite: () => void) {
   const listed = useFetched(`summaries:${id}`, () => api.summaries(id, LISTED));
-  // This session's results, newest first: the list read on opening does not hold them.
   const [made, setMade] = useState<readonly Summary[]>([]);
-  // The result the live region announces, until the next run starts.
   const [landed, setLanded] = useState<Summary | null>(null);
   const [chosen, setChosen] = useState<SummaryId | null>(cite?.summary ?? null);
   const [open, setOpen] = useState(cite !== null);
   const [draft, setDraft] = useState<Draft>({ length: "standard", focus: "", tone: "plain" });
 
-  // A cite that arrives (a link, Back) opens the disclosure on its summary, which stays shown after Close.
   const cited = cite?.summary ?? null;
   const [seen, setSeen] = useState(cited);
   if (seen !== cited) {
@@ -37,12 +28,10 @@ export function useRewrites(id: DocumentId, cite: SummaryCite | null, closeCite:
     }
   }
 
-  // The shown summary always owns the open cite, so choosing another summary, or a run landing, closes it.
   useEffect(() => {
     if (cite !== null && chosen !== cite.summary) closeCite();
   }, [cite, chosen, closeCite]);
 
-  // The ref decides, so a second start in the same tick cannot send a second request.
   const runRef = useRef<Run>(idle);
   const [run, setRun] = useState<Run>(idle);
   const send = (event: RunEvent): boolean => {
@@ -70,7 +59,6 @@ export function useRewrites(id: DocumentId, cite: SummaryCite | null, closeCite:
     : listed.result;
 
   return {
-    /** The earlier rewrites as the list shows them, with this session's results; its failure is the GET's. */
     list,
     paneList: paneList(list, made, cite),
     reload: listed.reload,
@@ -82,7 +70,6 @@ export function useRewrites(id: DocumentId, cite: SummaryCite | null, closeCite:
     open,
     setOpen,
     draft,
-    /** A changed option makes a failure's Try again, which sends the old options, misleading, so the failure goes. */
     edit: (change: Partial<Draft>) => {
       setDraft((d) => ({ ...d, ...change }));
       send({ type: "reset" });

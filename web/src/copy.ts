@@ -61,7 +61,6 @@ export function formatBytes(n: number): string {
 
 const WHEN = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-/** "11 Nov, 16:23", in the reader's time zone. */
 export function formatWhen(at: Date): string {
   return WHEN.format(at);
 }
@@ -148,16 +147,10 @@ export function usageLine(turn: Turn): string {
   return `${calls} model ${callWord}, ${n(inputTokens)} tokens in, ${n(outputTokens)} out, ${cost}, ${formatMs(turn.latencyMs)}`;
 }
 
-/** "Searching 3 documents". The count is unknown until the chat's header loads. */
 export function searching(documents: number | null): string {
   return documents === null ? "Searching" : `Searching ${documents === 1 ? "1 document" : `${documents} documents`}`;
 }
 
-/**
- * The status line under a question in flight. It follows the server's steps in the order it names them, and
- * until it names the first one the question is only being sent. `quiet`: text stopped arriving, so the
- * citations are being checked.
- */
 export function askStatus(ask: InFlight, documents: number | null): string {
   if (ask.phase === "asking" || ask.stage === null) return "Sending the question";
   switch (ask.stage) {
@@ -179,10 +172,6 @@ export function listNames(names: readonly string[]): string {
   return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
-/**
- * A refusal's documents that are not ready, each with its status now: "a.pdf (indexing 3 of 9 passages)". A document
- * gone from the list keeps the filename the refusal gave.
- */
 export function notReadyNames(error: ApiError, docs: readonly Doc[]): string[] {
   const notReady = error.kind === "refused" && error.code === "documents_not_ready" ? error.documents : [];
   return notReady.map(({ id, filename }) => {
@@ -191,9 +180,6 @@ export function notReadyNames(error: ApiError, docs: readonly Doc[]): string[] {
   });
 }
 
-// ------------------------------------------------------------------ comparison
-
-/** Why Compare is disabled, or null when it is not. `focus` is the text the comparison would focus on. */
 export function compareBlocked(ticked: number, focus: string): string | null {
   if (ticked < COMPARE_MIN) {
     return ticked === 1 ? "Tick one more ready document to compare." : "Tick at least two ready documents to compare.";
@@ -208,14 +194,11 @@ export function compareBlocked(ticked: number, focus: string): string | null {
   return null;
 }
 
-/** One comparison runs at a time. */
 export const COMPARE_BUSY = "A comparison is already running. Compare opens up again when it finishes.";
-/** Under the new-chat footer while Compare is offered, because Compare reads the question box as its focus. */
 export const COMPARE_FOCUS_HINT = "Compare uses the question as its focus. Leave it empty to compare every field a broker checks.";
 
 export const COMPARE_FULL = `A comparison takes at most ${COMPARE_MAX} documents. Untick one to choose another.`;
 
-/** After a few seconds of a comparison or a rewritten summary. */
 export const LONG_DOCUMENT = "A long document can take up to a minute and a half.";
 
 export const NO_COMPARISONS = "No comparisons yet. Tick two documents above to make the first.";
@@ -226,7 +209,6 @@ export const NONE_DIFFER = "None of the fields differ.";
 
 export const NO_CELL = "This comparison has no value in that cell, so there is no page to open.";
 
-/** A failed run: what did not happen, the backend's reason, and the documents that are not ready, if any. */
 export function compareFailed(error: ApiError, notReady: readonly string[]): string[] {
   const lines = [`The comparison was not made. ${explain(error)}`];
   if (notReady.length > 0) {
@@ -240,12 +222,10 @@ export function cannotOpen(doc: { filename: string; deleted: boolean }): string 
   return doc.deleted ? `${doc.filename} was deleted, so its pages can no longer be opened.` : `${doc.filename} is no longer in the vault.`;
 }
 
-/** "a.pdf, b.pdf (deleted) and c.pdf": a chat's or a comparison's documents. */
 export function documentNames(documents: readonly { filename: string; deleted?: boolean }[]): string {
   return listNames(documents.map((d) => (d.deleted ? `${d.filename} (deleted)` : d.filename)));
 }
 
-/** "Comparing a.pdf, b.pdf (deleted) and c.pdf". */
 export function comparing(names: string): string {
   return `Comparing ${names}`;
 }
@@ -258,7 +238,6 @@ export function focusLine(focus: string | null): string {
   return focus === null ? "No focus: the fields a broker compares" : `Focus: ${focus}`;
 }
 
-/** "12 fields, 5 differ". */
 export function fieldCount(rows: readonly CompareRow[]): string {
   if (rows.length === 0) return "No fields were found to compare";
   const differ = rows.filter((r) => r.differs).length;
@@ -278,7 +257,6 @@ export function noFieldsNext(focus: string | null, documents: readonly { deleted
   return `${why} ${next}`;
 }
 
-/** "5 of 12 fields differ", for a list of comparisons. */
 export function differCount(rows: readonly CompareRow[]): string {
   if (rows.length === 0) return "No fields found";
   const differ = rows.filter((r) => r.differs).length;
@@ -291,7 +269,6 @@ export function droppedCells(n: number): string {
     : `${n} values were left out because they could not be checked against the pages they cite.`;
 }
 
-/** Shown only for a document the comparison read part of. */
 export function partlyRead(doc: ComparedDoc, unit: PageUnit): string {
   const units = unitName(unit, doc.pageCount);
   return `Of the ${doc.pageCount} ${units} in ${doc.filename}, only the first ${doc.pagesRead} ${doc.pagesRead === 1 ? "was" : "were"} read, so fields on later ${unitName(unit, 2)} are not compared.`;
@@ -303,36 +280,28 @@ export function deletedColumns(filenames: readonly string[]): string {
     : `${listNames(filenames)} were deleted. Their values stay, but their pages can no longer be opened.`;
 }
 
-// ------------------------------------------------------------------ rewritten summaries
-
 export const REWRITE_LEAD =
   "Write it again at another length, about one topic, or for your client. Every quote is checked against its page.";
 
-/** "About 150 words." */
 export function wordTarget(length: SummaryLength): string {
   return `About ${LENGTHS[length].words} words.`;
 }
 
 const TONE_PHRASE: Record<SummaryTone, string> = { plain: "plain", formal: "formal", client: "for your client" };
 
-/** "Brief, for your client, about “deductibles”" or "Standard, plain": a summary's heading and its line in a list. */
 export function rewriteOptions({ length, focus, tone }: SummaryOptions): string {
   return `${LENGTHS[length].label}, ${TONE_PHRASE[tone]}${focus === null ? "" : `, about “${focus}”`}`;
 }
 
 const TONE_CLAUSE: Record<SummaryTone, string> = { plain: "", formal: " in a formal tone", client: " for your client" };
 
-/** "Writing a brief summary for your client about “deductibles”." */
 export function rewriting({ length, focus, tone }: SummaryOptions): string {
   return `Writing a ${LENGTHS[length].label.toLowerCase()} summary${TONE_CLAUSE[tone]}${focus === null ? "" : ` about “${focus}”`}.`;
 }
 
-/** Said once a new summary lands. */
 export const REWRITTEN = "Rewritten.";
-/** Said once a stored summary comes back, and the line on its sheet. */
 export const SAVED_EARLIER = "Saved earlier, no new model call.";
 
-/** Said under a summary's sources when it has none, or when the backend left some out; null otherwise. */
 export function sourcesNote({ sources, droppedSources: dropped }: Summary): string | null {
   if (sources.length === 0) {
     return dropped === 0
@@ -348,7 +317,6 @@ export function sourcesNote({ sources, droppedSources: dropped }: Summary): stri
 const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
 
-/** "14:03" today, "14:03 on 11 Nov" before, in the reader's time zone. */
 export function clockTime(at: Date, now: Date): string {
   return at.toDateString() === now.toDateString() ? TIME.format(at) : timeAndDay(at);
 }
@@ -358,12 +326,10 @@ export function timeAndDay(at: Date): string {
   return `${TIME.format(at)} on ${DAY.format(at)}`;
 }
 
-/** "Written by fake-chat with prompt summary-v1 at 14:03." */
 export function rewrittenBy(summary: Summary, now: Date): string {
   return `Written by ${summary.writtenBy.model} with prompt ${summary.writtenBy.promptVersion} at ${clockTime(summary.createdAt, now)}.`;
 }
 
-/** "Source 2 of 4: show the passage on p. 2". */
 export function sourceLabel(index: number, count: number, pageLabel: string): string {
   return `Source ${index + 1} of ${count}: show the passage on ${pageLabel}`;
 }
@@ -373,7 +339,6 @@ export const NO_REWRITES =
   "No rewrites yet. The first one you make is kept here, and asking again with the same options reuses it.";
 export const MORE_REWRITES = `Showing the newest ${LISTED}.`;
 
-/** A URL cites a summary the list does not hold: past the newest the list reads, or none of this document's. */
 export function rewriteNotListed(complete: boolean): string {
   return complete
     ? "This document has no rewritten summary with that link, so there is no passage to open."
@@ -382,21 +347,16 @@ export function rewriteNotListed(complete: boolean): string {
 
 export const NO_SUCH_SOURCE = "This rewritten summary has no source with that number, so there is no passage to open.";
 
-// ------------------------------------------------------------------ versions
-
-/** "Version 2 of 3": its number, and the family's highest number now. */
 export function versionLine(doc: Doc): string {
   return `Version ${doc.version.number} of ${doc.version.latest}`;
 }
 
-/** What the version line says before its links to the `count` other versions, or instead of them when none is left. */
 export function otherVersions(doc: Doc, count: number): string {
   if (count === 0) return doc.version.number > 1 ? "The earlier versions were deleted." : "";
   const latest = doc.version.number === doc.version.latest;
   return `${latest ? "Earlier" : "Other"} version${count === 1 ? "" : "s"}:`;
 }
 
-/** The note an earlier version opens with. `newest` is null until the family is read. */
 export function newerVersion(doc: Doc, newest: Doc | null): string {
   return newest === null
     ? `A newer version of this document, version ${doc.version.latest}, is in the vault.`
@@ -407,15 +367,12 @@ export function chatAsks(doc: Doc): string {
   return `This chat asks version ${doc.version.number} of ${doc.filename}.`;
 }
 
-/** When the family could not be read, in place of the links to the other versions. */
 export const VERSIONS_FAILED = "The other versions could not be listed.";
 
-/** One line of the Versions list under its number: the file it was uploaded as, when, and where it stands. */
 export function versionMeta(doc: Doc): string {
   return `${doc.filename}. Uploaded ${formatWhen(doc.createdAt)}. ${statusLine(doc).text}.`;
 }
 
-/** Why "Compare with version N" cannot run now, or null when it can. Both versions must be ready. */
 export function versionCompareBlocked(doc: Doc, other: Doc, running: boolean): string | null {
   if (running) return COMPARE_BUSY;
   for (const [d, name] of [[doc, "This version"], [other, `Version ${other.version.number}`]] as const) {
@@ -425,12 +382,10 @@ export function versionCompareBlocked(doc: Doc, other: Doc, running: boolean): s
   return null;
 }
 
-/** "terms.txt (version 2)", or the bare filename when no version is named. */
 export function withVersion(filename: string, version: number | null): string {
   return version === null ? filename : `${filename} (version ${version})`;
 }
 
-/** The delete dialog's word on the family, for a document that has other versions. */
 export const OTHER_VERSIONS_STAY = "Its other versions stay in the vault, with their numbers.";
 
 // ------------------------------------------------------------------ the spending cap and the caches

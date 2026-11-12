@@ -5,10 +5,6 @@ import { api } from "@/api/client";
 import type { Comparison, Result } from "@/api/domain";
 import { idle, step, type CompareRequest, type Run, type RunEvent } from "@/lib/compare";
 
-/**
- * The run lives here, outside React: it is started from the new-chat screen and shown on the compare screen, and
- * no remount can send it twice.
- */
 class CompareRuns {
   private run: Run = idle;
   private listeners = new Set<() => void>();
@@ -36,7 +32,6 @@ class CompareRuns {
     this.dispatch({ type: "dismissed" });
   }
 
-  /** False when the event changed nothing. */
   private dispatch(event: RunEvent): boolean {
     const next = step(this.run, event);
     if (next === this.run) return false;

@@ -56,7 +56,6 @@ test("a delete removes the document and leaves complete as it was", () => {
   assert.deepEqual(applyDocEvent(list(true, doc(3, 30)), { kind: "deleted", id: id(9) }), list(true, doc(3, 30)));
 });
 
-/** Version `number` of `latest` in the family of document 1, uploaded at `second`. */
 function version(n: number, second: number, number: number, latest: number): Doc {
   return { ...doc(n, second), filename: `terms v${number}.txt`, version: { family: id(1) as string as FamilyId, number, latest } };
 }

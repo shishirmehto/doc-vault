@@ -25,13 +25,11 @@ type Props = {
   replace(s: Selection): void;
 };
 
-/** One stored comparison: its header, the table of fields across its documents, and the cited page beside them. */
 export function ComparisonScreen({ id, docs, pane, only, push, replace }: Props) {
   const { result, reload } = useFetched(`comparison:${id}`, () => api.comparison(id));
   const comparison = result?.ok ? result.value : null;
   const at = (next: ComparisonPane | null, nextOnly = only): Selection => ({ kind: "comparison", comparison: id, pane: next, only: nextOnly });
 
-  // The live list holds the newest 100 documents. A cell from an older one reads that one document instead.
   const target = comparison && pane ? cellAt(comparison, pane.cite) : null;
   const listed = target && docs ? (docs.find((d) => d.id === target.doc.id) ?? null) : null;
   const lookUp = target && !target.doc.deleted && docs !== null && listed === null ? target.doc.id : null;

@@ -57,7 +57,6 @@ export function NewerVersionNote({ doc, newest, onOpen, lead }: { doc: Doc; newe
   );
 }
 
-/** Every version, oldest first, with what it was uploaded as, when, and where it stands. */
 export function VersionList({ id, doc, family, onOpen }: { id: string; doc: Doc; family: Family; onOpen: Open }) {
   const all = [...family.others, doc].sort((a, b) => a.version.number - b.version.number);
   return (
@@ -74,7 +73,6 @@ export function VersionList({ id, doc, family, onOpen }: { id: string; doc: Doc;
   );
 }
 
-/** "Upload a new version": one file, sent as the next version of this document whatever its name. */
 export function UploadVersion({ onFiles }: { onFiles(files: File[]): void }) {
   const input = useRef<HTMLInputElement>(null);
   return (

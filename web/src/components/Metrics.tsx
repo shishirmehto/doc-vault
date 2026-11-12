@@ -355,7 +355,6 @@ function HitRate({ counts }: { counts: Counts }) {
   return hitRate(counts) ?? <span role="img" aria-label="no lookups">–</span>;
 }
 
-/** A table that scrolls sideways inside its own box when it is wider than the column. */
 function Figures({ caption, children }: { caption: string; children: ReactNode }) {
   return (
     <div className="table-box" role="region" aria-label={caption} tabIndex={0} data-scroll-x>

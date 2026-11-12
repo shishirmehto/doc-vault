@@ -16,11 +16,6 @@ export type History =
 export type Ask =
   | { phase: "idle" }
   | { phase: "asking"; question: string }
-  /**
-   * The answer streams: the step the server last named (null before it names one) and the provisional text so
-   * far, which the final turn replaces. `quiet` is set when text stopped arriving for a while, so the answer is
-   * being checked, not written.
-   */
   | { phase: "streaming"; question: string; stage: AskStage | null; text: string; quiet: boolean }
   | { phase: "checking"; question: string; error: ApiError }
   /** History shows no turn for the question: asking again is safe. */
@@ -39,7 +34,6 @@ export type ThreadEvent =
   | { type: "history-early"; result: Result<readonly Turn[]> }
   | { type: "sent"; question: string }
   | { type: "progress"; progress: AskProgress }
-  /** No text has arrived for a while. hooks/useThread.ts times it. */
   | { type: "quiet" }
   | { type: "answered"; turn: Turn }
   | { type: "ask-failed"; error: ApiError }
@@ -56,7 +50,6 @@ export function canAsk(t: Thread): boolean {
   return t.history.kind === "loaded" && (t.ask.phase === "idle" || t.ask.phase === "failed");
 }
 
-/** The latest turn's follow-up questions, offered only while a click can ask at once. */
 export function offered(t: Thread): readonly string[] {
   return t.history.kind === "loaded" && t.ask.phase === "idle" ? (t.history.turns.at(-1)?.suggestions ?? []) : [];
 }
@@ -90,7 +83,6 @@ export function step(t: Thread, e: ThreadEvent): Thread {
   }
 }
 
-/** Progress only moves a question in flight. Text implies the answering step, whatever came before it. */
 function afterProgress(ask: Ask, p: AskProgress): Ask {
   if (ask.phase !== "asking" && ask.phase !== "streaming") return ask;
   const now: Ask & { phase: "streaming" } = ask.phase === "streaming" ? ask : { phase: "streaming", question: ask.question, stage: null, text: "", quiet: false };

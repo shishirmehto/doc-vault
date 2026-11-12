@@ -1,6 +1,5 @@
 "use client";
 
-/** Filters a long list by filename or type as you type. */
 export function FindField({ label, value, onChange }: { label: string; value: string; onChange(v: string): void }) {
   return (
     <label className="find">

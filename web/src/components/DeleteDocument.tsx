@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import type { ApiError, Doc } from "@/api/domain";
 import { explain, OTHER_VERSIONS_STAY } from "@/copy";
 
-/** "Delete", then a modal that names the file and what happens to the chats that used it and to its other versions. */
 export function DeleteDocument({ doc, otherVersions, onDelete }: {
   doc: Doc;
   otherVersions: boolean;

@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 
 const MAX_QUESTION = 2000;
 
-/** Enter sends; Shift+Enter is a new line. `extra` sits beside the send button: another action on the same text. */
 export function Composer({ value, onChange, onSend, ready, placeholder, label, extra }: {
   value: string;
   onChange(v: string): void;

@@ -2,7 +2,6 @@
 
 import { useState, type DragEvent } from "react";
 
-/** Drag-and-drop handlers for an element that takes files, and whether files are over it now. */
 export function useFileDrop(onFiles: (files: File[]) => void) {
   const [dragging, setDragging] = useState(false);
   return {

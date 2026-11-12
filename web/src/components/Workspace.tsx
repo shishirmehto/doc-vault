@@ -70,7 +70,6 @@ export function Workspace() {
     [replace],
   );
 
-  // Shown on the home screen after a delete, until the reader dismisses it or leaves the home screen.
   const [deleted, setDeleted] = useState<string | null>(null);
   const [screen, setScreen] = useState(selection.kind);
   if (screen !== selection.kind) {
@@ -82,7 +81,7 @@ export function Workspace() {
     async (doc: Doc): Promise<ApiError | null> => {
       const result = await api.deleteDocument(doc.id);
       if (!result.ok && !(result.error.kind === "refused" && result.error.status === 404)) return result.error;
-      // Replace, so Back does not land on the deleted document. Next applies the URL in a transition, so the
+      // Next applies the URL in a transition, so the
       // list changes in one too; otherwise one frame shows the document page with its document gone.
       replace({ kind: "none" });
       startTransition(() => {
@@ -98,14 +97,11 @@ export function Workspace() {
   const complete = documents.data?.complete ?? true;
   const selectedDoc = selection.kind === "doc" ? selection.doc : null;
   const listed = selectedDoc && docs ? (docs.find((d) => d.id === selectedDoc) ?? null) : null;
-  // The list holds the latest version of the newest 100. A link to an earlier version or an older document reads that
-  // one document instead, and a document read that way that is gone shows the missing-document page.
   const lookUp = selectedDoc !== null && docs !== null && listed === null ? selectedDoc : null;
   const older = useFetched(`older:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
   const reloadOlder = older.reload;
   useEffect(() => {
     if (lookUp === null) return;
-    // The list never holds this document, so its own read follows the events that name it or that may have missed it.
     return liveFeed.subscribe((event) => {
       if (event.kind === "down") return;
       if (event.kind === "document" && event.doc.id !== lookUp) return;

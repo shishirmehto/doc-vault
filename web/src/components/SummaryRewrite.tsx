@@ -10,13 +10,8 @@ import {
   explain, rewriteOptions, rewriting, rewrittenBy, sourceLabel, sourcesNote, wordTarget,
 } from "@/copy";
 
-/** After this long, the run says that a long document takes a while. */
 const LONG_AFTER_MS = 5000;
 
-/**
- * The document's summary written again at another length, about one topic, or for the reader's client: the options,
- * the request in flight, the summary shown with a page tab per source, and the summaries made before.
- */
 export function SummaryRewrite({ rewrites, cite, onOpenSource, disclosure }: {
   rewrites: Rewrites;
   cite: SummaryCite | null;
@@ -41,7 +36,6 @@ export function SummaryRewrite({ rewrites, cite, onOpenSource, disclosure }: {
               {retry && (
                 <>
                   {" "}
-                  {/* The run replaces this button, so focus goes to Rewrite, which holds it while the run is in flight. */}
                   <button type="button" className="text-button" onClick={() => {
                     submit.current?.focus();
                     void rewrites.start(run.options);
@@ -115,7 +109,6 @@ function Running({ run }: { run: Extract<Run, { kind: "running" }> }) {
   );
 }
 
-/** On the white paper of the key-facts schedule: a second copy of the summary, for another reader. */
 function RewriteSheet({ summary, cite, onOpenSource }: {
   summary: Summary;
   cite: SummaryCite | null;
@@ -157,7 +150,6 @@ function EarlierRewrites({ rewrites }: { rewrites: Rewrites }) {
       ) : !list.ok ? (
         <p className="notice" data-tone="failed">
           {explain(list.error)}{" "}
-          {/* The reload replaces this button, so focus goes to the heading, which stays. */}
           <button type="button" className="text-button" onClick={() => {
             heading.current?.focus();
             rewrites.reload();

@@ -6,7 +6,6 @@ import type { Chat, ChatId, DocumentId, NonEmpty, Result } from "@/api/domain";
 import { canAsk, opening, started, step, type Thread, type ThreadEvent } from "@/lib/thread";
 
 const MAX_QUESTION = 2000;
-/** Text that stops arriving for this long means the answer is written and its citations are being checked. */
 const QUIET_MS = 300;
 /**
  * When a stream breaks after it started, the server still finishes the answer and stores the turn, which
@@ -68,7 +67,6 @@ class Threads {
     await this.loadHistory(id);
   }
 
-  /** Reads history again after the first read failed. */
   reload(id: ChatId): void {
     if (this.threads.get(id)?.history.kind !== "failed") return;
     this.set(id, opening);

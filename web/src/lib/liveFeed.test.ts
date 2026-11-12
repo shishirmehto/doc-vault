@@ -31,13 +31,11 @@ class FakeSource implements FeedSource {
     this.send("open");
   }
 
-  /** A network drop: the browser keeps the source and retries. */
   drop(): void {
     this.readyState = 0;
     this.send("error");
   }
 
-  /** A non-200 answer: the browser closes the source for good. */
   refuse(): void {
     this.readyState = 2;
     this.send("error");
