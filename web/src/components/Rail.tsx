@@ -7,7 +7,7 @@ import { FIND_AFTER, findDocs } from "@/lib/find";
 import { isSettled } from "@/lib/lifecycle";
 import { laterVersion } from "@/lib/versions";
 import type { Upload } from "@/lib/uploads";
-import { docMeta, explain, formatBytes, statusLine } from "@/copy";
+import { docMeta, explain, formatBytes, retrying, statusLine } from "@/copy";
 import { DropZone } from "./DropZone";
 import { FindField } from "./FindField";
 import { InAppLink } from "./InAppLink";
@@ -61,7 +61,7 @@ export function Rail({ docs, complete, connection, uploads, selected, onFiles, o
         Documents{docs ? ` (${docs.length})` : ""}
       </button>
       {/* Outside the fold, so a phone shows it with the list folded away. */}
-      {connection && <p className="rail-note rail-alert" data-tone="failed" role="alert">{explain(connection)} Retrying.</p>}
+      {connection && <p className="rail-note rail-alert" data-tone="failed" role="alert">{retrying(connection)}</p>}
       {inFlight.length > 0 && (
         <div className="rail-flight">
           <ul className="rows">

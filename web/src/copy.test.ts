@@ -1,12 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseComparison, parseComparisonPage, parseDocumentPage, parseSummary, parseVersionList } from "./api/parse.ts";
+import {
+  parseComparison, parseComparisonPage, parseDocumentPage, parseError, parseHealth, parseSummary, parseTurn, parseVersionList,
+} from "./api/parse.ts";
+import { readAskStream } from "./api/client.ts";
 import type { ApiError, DocumentId } from "./api/domain.ts";
 import {
-  cannotOpen, clockTime, compareBlocked, compareFailed, comparing, deletedColumns, differCount, docMeta, droppedCells,
-  fieldCount, focusLine, newerVersion, notReadyNames, otherVersions, partlyRead, rewriteOptions, rewriting, rewrittenBy,
-  sourceLabel, sourcesNote, versionCompareBlocked, versionLine, versionMeta, withVersion, wordTarget,
+  cannotOpen, clockTime, compareBlocked, compareFailed, comparing, deletedColumns, differCount, docMeta, dollars,
+  droppedCells, explain, fieldCount, focusLine, hitRate, newerVersion, noCap, notReadyNames, otherVersions, partlyRead,
+  retrying, rewriteOptions, rewriting, rewrittenBy, sourceLabel, sourcesNote, usageLine, versionCompareBlocked,
+  versionLine, versionMeta, withVersion, wordTarget,
 } from "./copy.ts";
 
 const page = JSON.parse(readFileSync(new URL("./api/fixtures/documents-page.json", import.meta.url), "utf8"));
@@ -204,5 +208,92 @@ test("the version line, its links' label, an earlier version's note, the Version
       "This version is still being indexed. Compare opens when it is ready.",
       "A comparison is already running. Compare opens up again when it finishes.",
     ],
+  );
+});
+
+// ------------------------------------------------------------------ phase F
+
+test("a cap of a millionth of a dollar is written with all six of its decimals", () => {
+  assert.equal(dollars(1e-6), "$0.000001");
+});
+
+test("a whole-dollar cap is written with two decimals", () => {
+  assert.equal(dollars(5), "$5.00");
+});
+
+test("a cap in cents is written with two decimals, no more", () => {
+  assert.equal(dollars(0.25), "$0.25");
+});
+
+test("a turn served from the cache reads as saved earlier where a model-written one gives its calls", () => {
+  assert.deepEqual([usageLine(parseTurn(fixture("turn-answered-cached"))), usageLine(parseTurn(fixture("turn-answered-one-citation")))], [
+    "Saved earlier, no new model call.",
+    "2 model calls, 1,994 tokens in, 23 out, $0, 13 ms",
+  ]);
+});
+
+test("a server failure ends with its request id; a refusal below 500, or a failure with no id, does not", () => {
+  const { status, headers, body } = JSON.parse(readFileSync(new URL("./api/fixtures/constructed/error-500-internal.json", import.meta.url), "utf8"));
+  const gone = JSON.parse(readFileSync(new URL("./api/fixtures/delete-404-not-found.json", import.meta.url), "utf8"));
+  assert.deepEqual(
+    [
+      explain(parseError(status, body, null, headers["x-request-id"])),
+      explain(parseError(502, null, null, "6f1c0a52-3b7e-4d0e-9b61-8f2a4c1d7e90")),
+      explain(parseError(gone.status, gone.body, null, "6f1c0a52-3b7e-4d0e-9b61-8f2a4c1d7e90")),
+      explain(parseError(502, null, null, null)),
+      explain({ kind: "offline" }),
+    ],
+    [
+      "The request failed unexpectedly. Reference phase-f-500-probe.",
+      "The vault service couldn't handle this request (HTTP 502). Reference 6f1c0a52-3b7e-4d0e-9b61-8f2a4c1d7e90.",
+      "No document has the id 00000000-0000-4000-8000-000000000000.",
+      "The vault service couldn't handle this request (HTTP 502).",
+      "Can't reach the vault. Check that the web server and the API are running.",
+    ],
+  );
+});
+
+test("an error event inside a streamed ask is a failure while answering, so it carries the stream's reference; a used-up cap does not", async () => {
+  const event = (code: string, message: string) =>
+    `event: stage\ndata: {"stage": "answering"}\n\nevent: error\ndata: ${JSON.stringify({ error: { code, message, retryable: true, details: {} } })}\n\n`;
+  const read = async (body: string) => {
+    const r = await readAskStream(new Response(body).body!, () => {}, "0ed48ac5-6b3a-4b04-a2f2-7815b1eb4b28");
+    return r.ok ? "answered" : explain(r.error);
+  };
+  assert.deepEqual(
+    [
+      await read(event("internal_error", "Answering failed unexpectedly. Try again.")),
+      await read(event("ai_unavailable", "The AI provider could not complete the request (timeout).")),
+      await read(readFileSync(new URL("./api/fixtures/constructed/ask-stream-error-quota-exceeded.txt", import.meta.url), "utf8")),
+    ].map((line) => line.replace(/ at .* on .*, when/, " at <reset>, when")),
+    [
+      "Answering failed unexpectedly. Try again. Reference 0ed48ac5-6b3a-4b04-a2f2-7815b1eb4b28.",
+      "The AI provider could not complete the request (timeout). Reference 0ed48ac5-6b3a-4b04-a2f2-7815b1eb4b28.",
+      "Today's AI spending cap of $0.000001 is used up. Asking, comparing and rewriting start again at <reset>, when it resets.",
+    ],
+  );
+});
+
+test("a list that reads itself again says why it failed and that it is retrying, with no reference to change on every retry", () => {
+  const { status, headers, body } = JSON.parse(readFileSync(new URL("./api/fixtures/constructed/error-500-internal.json", import.meta.url), "utf8"));
+  assert.deepEqual(
+    [retrying(parseError(502, null, null, "6f1c0a52-3b7e-4d0e-9b61-8f2a4c1d7e90")), retrying(parseError(status, body, null, headers["x-request-id"]))],
+    ["The vault service couldn't handle this request (HTTP 502). Retrying.", "The request failed unexpectedly. Retrying."],
+  );
+});
+
+test("with no cap reported, Spending cap says none is set, unless the database is down and the cap cannot be read", () => {
+  const health = parseHealth(fixture("health"));
+  assert.deepEqual([noCap(health), noCap({ ...health, unreachable: ["db"] }), noCap({ ...health, unreachable: ["redis"] })], [
+    "No daily spending cap is set. Set DAILY_AI_BUDGET_USD for the api and worker to add one.",
+    "The spending cap can't be read while the database is unreachable. Refresh once it is back.",
+    "No daily spending cap is set. Set DAILY_AI_BUDGET_USD for the api and worker to add one.",
+  ]);
+});
+
+test("a cache's hit rate is its hits over its lookups, and nothing with no lookups", () => {
+  assert.deepEqual(
+    [hitRate({ hits: 2, misses: 1 }), hitRate({ hits: 0, misses: 4 }), hitRate({ hits: 3, misses: 0 }), hitRate({ hits: 1, misses: 999 }), hitRate({ hits: 0, misses: 0 })],
+    ["66.7%", "0%", "100%", "0.1%", null],
   );
 });

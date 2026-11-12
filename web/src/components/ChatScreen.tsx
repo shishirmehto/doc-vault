@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
-import type { ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Result, Selection, Turn, TurnCite } from "@/api/domain";
+import type { ApiError, ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Result, Selection, Turn, TurnCite } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { threads, useThread } from "@/hooks/useThread";
+import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { askStatus, documentNames, explain, listNames, NOT_FOUND, usageLine } from "@/copy";
 import { Composer } from "./Composer";
@@ -276,19 +277,7 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
         </article>
       );
     case "failed":
-      return (
-        <article className="turn ask-failed">
-          <h2 className="question">{ask.question}</h2>
-          <p role="alert">{explain(ask.error)}</p>
-          <p className="actions">
-            {/* A refusal the backend marks as final (a deleted document, a missing chat) would only fail again. */}
-            {!(ask.error.kind === "refused" && ask.error.retryable === false) && (
-              <button type="button" className="button" onClick={() => onRetry(ask.question)}>Try again</button>
-            )}
-            <button type="button" className="text-button" onClick={() => onEdit(ask.question)}>Edit the question</button>
-          </p>
-        </article>
-      );
+      return <FailedAsk question={ask.question} error={ask.error} onRetry={onRetry} onEdit={onEdit} />;
     case "unconfirmed":
       return (
         <article className="turn ask-failed">
@@ -307,4 +296,27 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
       return unknown;
     }
   }
+}
+
+/**
+ * The question was not recorded. Try again is left out for a refusal that would only fail again: a final one (a
+ * deleted document, a missing chat), or a used-up spending cap until it resets, when Try again comes back by itself.
+ */
+function FailedAsk({ question, error, onRetry, onEdit }: {
+  question: string;
+  error: ApiError;
+  onRetry(question: string): void;
+  onEdit(question: string): void;
+}) {
+  const retry = useWorthRetrying(error);
+  return (
+    <article className="turn ask-failed">
+      <h2 className="question">{question}</h2>
+      <p role="alert">{explain(error)}</p>
+      <p className="actions">
+        {retry && <button type="button" className="button" onClick={() => onRetry(question)}>Try again</button>}
+        <button type="button" className="text-button" onClick={() => onEdit(question)}>Edit the question</button>
+      </p>
+    </article>
+  );
 }

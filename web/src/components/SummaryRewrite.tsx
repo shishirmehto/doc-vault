@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type Ref } from "react";
 import type { Summary, SummaryCite, SummaryId, SummaryLength, SummaryTone } from "@/api/domain";
 import type { Rewrites } from "@/hooks/useRewrites";
-import { worthRetrying } from "@/lib/compare";
+import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { FOCUS_MAX, LENGTHS, TONES, normaliseFocus, type Run } from "@/lib/summary";
 import {
   LOADING_REWRITES, LONG_DOCUMENT, MORE_REWRITES, NO_REWRITES, REWRITE_LEAD, REWRITTEN, SAVED_EARLIER, clockTime,
@@ -24,6 +24,7 @@ export function SummaryRewrite({ rewrites, cite, onOpenSource }: {
 }) {
   const { run, shown, landed } = rewrites;
   const submit = useRef<HTMLButtonElement>(null);
+  const retry = useWorthRetrying(run.kind === "failed" ? run.error : null);
   return (
     <details className="rewrite" open={rewrites.open} onToggle={(e) => rewrites.setOpen(e.currentTarget.open)}>
       <summary>Rewrite the summary</summary>
@@ -36,7 +37,7 @@ export function SummaryRewrite({ rewrites, cite, onOpenSource }: {
           ) : run.kind === "failed" ? (
             <p className="notice" data-tone="failed">
               {explain(run.error)}
-              {worthRetrying(run.error) && (
+              {retry && (
                 <>
                   {" "}
                   {/* The run replaces this button, so focus goes to Rewrite, which holds it while the run is in flight. */}

@@ -3,11 +3,15 @@
 import type { ReactNode } from "react";
 import { api } from "@/api/client";
 import type {
-  AiUsage, CodeCount, DocumentMetrics, MetricsWindow, ProcessingMetrics, Purpose, Result, Spread, Step, TurnOutcome,
+  AiUsage, CacheFigures, CodeCount, Counts, DocumentMetrics, Health, MetricsWindow, ProcessingMetrics, Purpose, Result,
+  Spread, Step, TurnOutcome,
 } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { useHealth } from "@/hooks/useHealth";
-import { explain, formatBytes, formatMs, formatUsd } from "@/copy";
+import {
+  CACHE_OFF, CACHE_UNREACHABLE, NOTHING_CACHED, cacheSince, capFigures, explain, formatBytes, formatMs, formatUsd, hitRate,
+  noCap,
+} from "@/copy";
 
 const WINDOWS: Record<MetricsWindow, string> = { "24h": "Last 24 hours", "7d": "Last 7 days" };
 
@@ -42,10 +46,14 @@ const SINCE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short",
 
 const n = (x: number) => x.toLocaleString("en-US");
 
-/** The two routes load and fail separately, so one failing never hides the other. */
+/**
+ * Each route loads and fails on its own, so one failing never hides the others. /health is read here as well as by the
+ * page's shared poll, so the cap and the cache load, fail and refresh like the other halves.
+ */
 export function Metrics({ window, onWindow }: { window: MetricsWindow; onWindow(w: MetricsWindow): void }) {
   const documents = useFetched("metrics:documents", api.documentMetrics);
   const processing = useFetched(`metrics:processing:${window}`, () => api.processingMetrics(window));
+  const status = useFetched("metrics:health", api.health);
   const health = useHealth();
   const fake = health?.ok === true && health.value.aiMode === "fake";
 
@@ -54,7 +62,7 @@ export function Metrics({ window, onWindow }: { window: MetricsWindow; onWindow(
       <section className="metrics" aria-labelledby="metrics-title">
         <header className="metrics-header">
           <h1 id="metrics-title">Metrics</h1>
-          <button type="button" className="text-button" onClick={() => { documents.reload(); processing.reload(); }}>
+          <button type="button" className="text-button" onClick={() => { documents.reload(); processing.reload(); status.reload(); }}>
             Refresh
           </button>
         </header>
@@ -71,6 +79,22 @@ export function Metrics({ window, onWindow }: { window: MetricsWindow; onWindow(
           </div>
         </div>
         <Half result={processing.result} retry={processing.reload}>{(m) => <ProcessingFigures m={m} fake={fake} />}</Half>
+
+        <h2>Spending cap</h2>
+        <Half result={status.result} retry={status.reload}>{(h) => <CapFigures health={h} />}</Half>
+
+        <h2>Caches</h2>
+        {/* The counts come with the processing figures. Without them, /health says whether the cache is off or down. */}
+        <Half result={processing.result} retry={processing.reload}>
+          {(m) =>
+            m.cache ? (
+              <CacheTable cache={m.cache} />
+            ) : (
+              <Half result={status.result} retry={status.reload}>
+                {(h) => <p className="quiet">{h.cache === "off" ? CACHE_OFF : CACHE_UNREACHABLE}</p>}
+              </Half>
+            )}
+        </Half>
       </section>
     </main>
   );
@@ -207,6 +231,55 @@ function ProcessingFigures({ m, fake }: { m: ProcessingMetrics; fake: boolean })
       </Figures>
     </>
   );
+}
+
+function CapFigures({ health }: { health: Health }) {
+  if (health.aiBudget === null) return <p className="quiet">{noCap(health)}</p>;
+  const { rows, stopped } = capFigures(health.aiBudget, new Date());
+  return (
+    <>
+      {stopped && <p className="notice" data-tone="failed">{stopped}</p>}
+      <Figures caption="Today's AI spending">
+        <tbody>
+          {rows.map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value}</td></tr>)}
+        </tbody>
+      </Figures>
+    </>
+  );
+}
+
+const CACHES: Record<keyof Omit<CacheFigures, "countedSince">, string> = { embedding: "Embeddings", answer: "First answers" };
+
+function CacheTable({ cache }: { cache: CacheFigures }) {
+  if (cache.countedSince === null) return <p className="quiet">{NOTHING_CACHED}</p>;
+  return (
+    <>
+      <p className="metrics-lead">{cacheSince(cache.countedSince)}</p>
+      <Figures caption="Lookups by cache">
+        <thead>
+          <tr><th scope="col">Cache</th><th scope="col">Hits</th><th scope="col">Misses</th><th scope="col">Hit rate</th></tr>
+        </thead>
+        <tbody>
+          {(Object.keys(CACHES) as (keyof typeof CACHES)[]).map((c) => (
+            <tr key={c}>
+              <th scope="row">{CACHES[c]}</th>
+              <td>{n(cache[c].hits)}</td>
+              <td>{n(cache[c].misses)}</td>
+              <td><HitRate counts={cache[c]} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </Figures>
+    </>
+  );
+}
+
+/**
+ * The dash is named for screen readers by role and label, not by a visually hidden span: absolutely placed in a cell at
+ * the right edge of a narrow window, the span's text runs past the page and makes it scroll sideways.
+ */
+function HitRate({ counts }: { counts: Counts }) {
+  return hitRate(counts) ?? <span role="img" aria-label="no lookups">–</span>;
 }
 
 /** A table that scrolls sideways inside its own box when it is wider than the column. */

@@ -9,7 +9,7 @@ import { threads } from "@/hooks/useThread";
 import { useCompareRun } from "@/hooks/useCompareRun";
 import { COMPARE_MIN, columns, type CompareRequest } from "@/lib/compare";
 import { CHAT_MAX_DOCUMENTS } from "@/lib/find";
-import { COMPARE_BUSY, COMPARE_FOCUS_HINT, compareBlocked, documentNames, explain, formatWhen, listNames, notReadyNames } from "@/copy";
+import { COMPARE_BUSY, COMPARE_FOCUS_HINT, compareBlocked, documentNames, explain, formatWhen, listNames, notReadyNames, retrying } from "@/copy";
 import { Composer } from "./Composer";
 import { DropZone } from "./DropZone";
 import { InAppLink } from "./InAppLink";
@@ -64,7 +64,7 @@ export function NewChat({ docs, failed, deleted, onDismiss, onOpen, onFiles, onC
             with the passage marked, so you can check it against the source.
           </p>
           {docs === null && failed ? (
-            <p className="notice" data-tone="failed">{explain(failed)} Retrying.</p>
+            <p className="notice" data-tone="failed">{retrying(failed)}</p>
           ) : docs === null ? (
             <div aria-busy="true">{[70, 55, 62].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}</div>
           ) : docs.length === 0 ? (

@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { parseComparison, parseDocumentPage, parseError } from "../api/parse.ts";
 import type { ApiError, Comparison, Doc, DocumentId } from "../api/domain.ts";
 import {
-  cellAt, columns, columnVersion, idle, step, visibleRows, withDoc, worthRetrying, type CompareRequest, type Run,
+  cellAt, columns, columnVersion, idle, step, visibleRows, whenRetryChanges, withDoc, worthRetrying, type CompareRequest,
+  type Run,
 } from "./compare.ts";
 
 function captured(name: string): Comparison {
@@ -151,3 +152,33 @@ test("a used-up spending cap is not worth retrying until it resets, and is from 
     [false, false, true, true, true],
   );
 });
+
+test("Try again comes back at the cap's reset without a reload: the timer wakes then, not a millisecond before", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.parse("2026-11-12T23:59:00Z") });
+  const { status, headers, body } = JSON.parse(readFileSync(new URL("../api/fixtures/compare-429-quota-exceeded.json", import.meta.url), "utf8"));
+  const capped = parseError(status, body, headers["retry-after"], headers["x-request-id"]);
+  const offered: boolean[] = [];
+  whenRetryChanges(capped, () => offered.push(worthRetrying(capped)));
+  t.mock.timers.tick(59_999);
+  assert.deepEqual([offered, worthRetrying(capped)], [[], false]);
+  t.mock.timers.tick(1);
+  assert.deepEqual([offered, worthRetrying(capped)], [[true], true]);
+});
+
+test("an answer that cannot change with time schedules no wake, and a cancelled wake never comes", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.parse("2026-11-12T12:00:00Z") });
+  const { status, headers, body } = JSON.parse(readFileSync(new URL("../api/fixtures/summary-429-quota-exceeded.json", import.meta.url), "utf8"));
+  const capped = parseError(status, body, headers["retry-after"], headers["x-request-id"]);
+  let wakes = 0;
+  for (const error of [LIMITED, { kind: "offline" } as const, refusedFinal()]) whenRetryChanges(error, () => wakes++);
+  whenRetryChanges(capped, () => wakes++)();
+  t.mock.timers.tick(13 * 3600 * 1000);
+  assert.deepEqual([wakes, worthRetrying(capped)], [0, true]);
+});
+
+function refusedFinal(): ApiError {
+  return {
+    kind: "refused", status: 404, code: "document_not_found", message: "", retryable: false, retryAfterS: null, documents: [],
+    quota: null, requestId: null,
+  };
+}

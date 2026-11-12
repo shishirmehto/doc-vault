@@ -65,6 +65,19 @@ export function worthRetrying(error: ApiError, now: Date = new Date()): boolean 
   return !(error.kind === "refused" && error.retryable === false && error.code !== "documents_not_ready");
 }
 
+/** setTimeout fires at once for a longer wait. A cap resets within a day, so only a malformed reset gets near it. */
+const LONGEST_WAIT_MS = 2 ** 31 - 1;
+
+/**
+ * Calls `onChange` when worthRetrying(error) may have turned true: at a used-up cap's reset, the only answer that
+ * changes with time. Returns the cancel. The caller reads worthRetrying again, and calls this again if it is still no.
+ */
+export function whenRetryChanges(error: ApiError, onChange: () => void): () => void {
+  if (error.kind !== "refused" || error.quota === null || worthRetrying(error)) return () => {};
+  const timer = setTimeout(onChange, Math.min(LONGEST_WAIT_MS, error.quota.resetsAt.getTime() - Date.now()));
+  return () => clearTimeout(timer);
+}
+
 /** The rows "Only differences" leaves, each with its index in `rows`, which is what a cell's URL names. */
 export function visibleRows(rows: readonly CompareRow[], only: boolean): { row: CompareRow; index: number }[] {
   return rows.flatMap((row, index) => (only && !row.differs ? [] : [{ row, index }]));

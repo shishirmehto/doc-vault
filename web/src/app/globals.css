@@ -130,7 +130,8 @@ button.service { cursor: pointer; text-decoration: underline dotted; text-underl
 /* Read by screen readers, never drawn. The usual pattern adds overflow: hidden. It is left out because visible.js
    reports an overflow-hidden box narrower than its text as clipped, and clip-path alone hides the text. */
 .visually-hidden { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); white-space: nowrap; }
-.notice { font-size: var(--t-body); max-width: 60ch; }
+/* A failure can end with a request id, which wraps rather than run past the column. */
+.notice { font-size: var(--t-body); max-width: 60ch; overflow-wrap: anywhere; }
 [data-tone="failed"].notice, .row-message[data-tone="failed"] { color: var(--stamp); }
 
 .skeleton { display: block; background: var(--skeleton); border-radius: 3px; }
@@ -199,7 +200,7 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .row-status[data-tone="working"] { color: var(--carbon); }
 .row-status[data-tone="done"] { color: var(--bound); }
 .row-status[data-tone="failed"] { color: var(--stamp); font-weight: 600; }
-.row-message { font-size: var(--t-meta); }
+.row-message { font-size: var(--t-meta); overflow-wrap: anywhere; }
 .failure { display: grid; gap: var(--s2); margin-top: var(--s1); }
 .failure .button { padding: 4px 10px; font-size: var(--t-meta); }
 .skeleton-row { gap: var(--s2); }
@@ -286,7 +287,7 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .compare-row .button { padding: 10px 18px; }
 .run { display: grid; gap: var(--s2); }
 
-.start-refusal, .ask-failed { border-left: 3px solid var(--stamp); padding-left: var(--s3); display: grid; gap: var(--s2); }
+.start-refusal, .ask-failed { border-left: 3px solid var(--stamp); padding-left: var(--s3); display: grid; gap: var(--s2); overflow-wrap: anywhere; }
 .start-refusal { color: var(--stamp); }
 
 /* ------------------------------------------------------------- metrics */

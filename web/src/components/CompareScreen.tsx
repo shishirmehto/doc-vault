@@ -5,10 +5,11 @@ import { api } from "@/api/client";
 import type { ApiError, ComparisonId, Doc, DocumentId, Result } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { compareRuns, useCompareRun } from "@/hooks/useCompareRun";
-import { COMPARE_MAX, FOCUS_MAX, columns, withDoc, worthRetrying, type CompareRequest, type Run } from "@/lib/compare";
+import { useWorthRetrying } from "@/hooks/useWorthRetrying";
+import { COMPARE_MAX, FOCUS_MAX, columns, withDoc, type CompareRequest, type Run } from "@/lib/compare";
 import {
   COMPARE_FULL, LONG_DOCUMENT, NO_COMPARISONS, NOTHING_TO_COMPARE, compareBlocked, compareFailed, comparing,
-  differCount, documentNames, explain, focusLine, formatWhen, notReadyNames,
+  differCount, documentNames, explain, focusLine, formatWhen, notReadyNames, retrying,
 } from "@/copy";
 import { InAppLink } from "./InAppLink";
 import { Picker } from "./Picker";
@@ -68,7 +69,7 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
           ) : run.phase === "failed" ? (
             <RunFailed run={run} docs={docs ?? []} onRetry={() => onCompare(run.request)} onChange={() => change(run.request)} />
           ) : docs === null && failed ? (
-            <p className="notice" data-tone="failed">{explain(failed)} Retrying.</p>
+            <p className="notice" data-tone="failed">{retrying(failed)}</p>
           ) : docs === null ? (
             <div aria-busy="true">{[70, 55, 62].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}</div>
           ) : docs.length === 0 ? (
@@ -130,6 +131,7 @@ function RunFailed({ run, docs, onRetry, onChange }: {
   onChange(): void;
 }) {
   const [first, ...rest] = compareFailed(run.error, notReadyNames(run.error, docs));
+  const retry = useWorthRetrying(run.error);
   // Compare and its footer are gone, so focus moves to the first way on, in view.
   const actions = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
@@ -141,7 +143,7 @@ function RunFailed({ run, docs, onRetry, onChange }: {
       <p role="alert">{first}</p>
       {rest.map((line) => <p key={line}>{line}</p>)}
       <p className="actions" ref={actions}>
-        {worthRetrying(run.error) && <button type="button" className="button" onClick={onRetry}>Try again</button>}
+        {retry && <button type="button" className="button" onClick={onRetry}>Try again</button>}
         <button type="button" className="text-button" onClick={onChange}>Change the documents</button>
       </p>
     </div>

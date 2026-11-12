@@ -1,7 +1,9 @@
-// Every sentence the interface writes about state. The backend's own messages are shown verbatim.
+// Every sentence the interface writes about state. The backend's own messages are shown verbatim, except the spending
+// cap's, which is written again with its reset in the reader's time.
 
 import type {
-  ApiError, ComparedDoc, CompareRow, Doc, NotFoundReason, PageUnit, Summary, SummaryLength, SummaryOptions, SummaryTone, Turn,
+  AiBudget, ApiError, ComparedDoc, CompareRow, Counts, Doc, Health, NotFoundReason, PageUnit, Quota, Summary, SummaryLength,
+  SummaryOptions, SummaryTone, Turn,
 } from "./api/domain.ts";
 import { COMPARE_MAX, COMPARE_MIN, FOCUS_MAX } from "./lib/compare.ts";
 import { LENGTHS, LISTED } from "./lib/summary.ts";
@@ -73,11 +75,44 @@ export function formatUsd(usd: number): string {
   return usd === 0 ? "$0" : `$${usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2)}`;
 }
 
-/** One sentence for any failed request. A refusal is the backend's own message. */
+/**
+ * One sentence for any failed request. A refusal is the backend's own message, except a used-up spending cap. A server
+ * failure ends with its request id, so a reader can quote it and an operator can find its log lines.
+ */
 export function explain(error: ApiError): string {
+  const sentence = explained(error);
+  const id = reference(error);
+  return id === null ? sentence : `${sentence} Reference ${id}.`;
+}
+
+/**
+ * The request id of a server failure: a response that is not the vault's envelope, or a refusal of 500 or more. An
+ * error event inside a streamed ask carries the stream's 200, and each one is a failure while answering, except a
+ * used-up cap, which is the 429's refusal arriving late. Null for anything else, and when the id is not known.
+ */
+function reference(error: ApiError): string | null {
+  switch (error.kind) {
+    case "broken":
+      return error.requestId;
+    case "refused":
+      return error.status >= 500 || (error.status === 200 && error.code !== "quota_exceeded") ? error.requestId : null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Under a list that reads itself again every few seconds. No request id: each read sends a new one, so the note would
+ * change, and be announced again, on every retry.
+ */
+export function retrying(error: ApiError): string {
+  return `${explained(error)} Retrying.`;
+}
+
+function explained(error: ApiError): string {
   switch (error.kind) {
     case "refused":
-      return error.message;
+      return error.quota ? capReached(error.quota) : error.message;
     case "broken":
       return error.status >= 500
         ? `The vault service couldn't handle this request (HTTP ${error.status}).`
@@ -103,8 +138,9 @@ export const NOT_FOUND: Record<NotFoundReason, string> = {
     "An answer was drafted, but its quotes could not be found in the documents, so it was held back. Try a narrower question.",
 };
 
-/** "2 model calls, 1,960 tokens in, 11 out, $0, 13 ms". */
+/** "2 model calls, 1,960 tokens in, 11 out, $0, 13 ms", or the saved note for an answer served from the cache. */
 export function usageLine(turn: Turn): string {
+  if (turn.cached) return SAVED_EARLIER;
   const { calls, inputTokens, outputTokens, costUsd } = turn.usage;
   const n = (x: number) => x.toLocaleString("en-US");
   const cost = costUsd === null ? "cost unknown" : formatUsd(costUsd);
@@ -298,7 +334,12 @@ const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" })
 
 /** "14:03" today, "14:03 on 11 Nov" before, in the reader's time zone. */
 export function clockTime(at: Date, now: Date): string {
-  return at.toDateString() === now.toDateString() ? TIME.format(at) : `${TIME.format(at)} on ${DAY.format(at)}`;
+  return at.toDateString() === now.toDateString() ? TIME.format(at) : timeAndDay(at);
+}
+
+/** "05:30 on 13 Nov", in the reader's time zone. */
+export function timeAndDay(at: Date): string {
+  return `${TIME.format(at)} on ${DAY.format(at)}`;
 }
 
 /** "Written by fake-chat with prompt summary-v1 at 14:03." */
@@ -371,3 +412,77 @@ export function withVersion(filename: string, version: number | null): string {
 
 /** The delete dialog's word on the family, for a document that has other versions. */
 export const OTHER_VERSIONS_STAY = "Its other versions stay in the vault, with their numbers.";
+
+// ------------------------------------------------------------------ the spending cap and the caches
+
+/** "$0.000001", "$5.00", "$0.25": two decimals, or as many as the amount needs, as the API writes the cap. */
+export function dollars(usd: number): string {
+  const digits = decimals(usd);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD", minimumFractionDigits: digits, maximumFractionDigits: digits,
+  }).format(usd);
+}
+
+/** The fewest decimals, at least 2, that write `usd` exactly. */
+function decimals(usd: number): number {
+  for (let digits = 2; digits < 12; digits++) if (Number(usd.toFixed(digits)) === usd) return digits;
+  return 12;
+}
+
+/** Said wherever the cap stops a request: on Ask, Compare and Rewrite the summary. */
+export function capReached(quota: Quota): string {
+  return `Today's AI spending cap of ${dollars(quota.limitUsd)} is used up. Asking, comparing and rewriting start again at ${timeAndDay(quota.resetsAt)}, when it resets.`;
+}
+
+/** What Spending cap says when /health reports no cap, which it also does while Postgres is unreachable. */
+export function noCap(health: Health): string {
+  return health.unreachable.includes("db")
+    ? "The spending cap can't be read while the database is unreachable. Refresh once it is back."
+    : "No daily spending cap is set. Set DAILY_AI_BUDGET_USD for the api and worker to add one.";
+}
+
+/**
+ * The Spending cap table's rows, and the line above it once the cap is used up. The cap's day is UTC's, so it resets
+ * at the next 00:00 UTC after `now`, shown in the reader's time. What is left is never below $0.
+ */
+export function capFigures({ limitUsd, spentTodayUsd }: AiBudget, now: Date): { rows: [string, string][]; stopped: string | null } {
+  const resets = timeAndDay(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)));
+  // Rounded to the decimals the two amounts have, so the subtraction's float noise never shows.
+  const left = Math.max(0, Number((limitUsd - spentTodayUsd).toFixed(Math.max(decimals(limitUsd), decimals(spentTodayUsd)))));
+  return {
+    rows: [
+      ["Cap per day (UTC)", dollars(limitUsd)],
+      ["Spent today", dollars(spentTodayUsd)],
+      ["Left", dollars(left)],
+      ["Resets", resets],
+    ],
+    stopped: spentTodayUsd < limitUsd
+      ? null
+      : `The cap is used up. Asking, comparing, rewriting and new insights stop until ${resets}. Uploads are still indexed. Raise DAILY_AI_BUDGET_USD for the api and worker to go on sooner.`,
+  };
+}
+
+export const CACHE_OFF =
+  "The cache is off, so every embedding and every first answer goes to the model. Set CACHE_URL for the api and worker to turn it on.";
+
+export const CACHE_UNREACHABLE =
+  "The cache can't be reached, so every request goes to the model, and still works. Check that the cache service is running. If it restarted, its counts start again from zero.";
+
+/**
+ * The cache keeps nothing on disk and may drop any key to make room, its counts included, so they also start from
+ * nothing after a restart or an eviction.
+ */
+export const NOTHING_CACHED =
+  "Nothing has been counted yet. Upload a document or ask a chat's first question, and its lookups show here. The counts also start again from zero when the cache restarts, or drops them to make room.";
+
+/** The lead line over the cache's table. */
+export function cacheSince(countedSince: Date): string {
+  return `These counts run from ${timeAndDay(countedSince)} and do not follow the window chosen above. They start again from zero when the cache restarts, or drops them to make room.`;
+}
+
+const PERCENT = new Intl.NumberFormat("en-US", { style: "percent", maximumFractionDigits: 1 });
+
+/** "66.7%"; null with no lookups, which the table shows as a dash. */
+export function hitRate({ hits, misses }: Counts): string | null {
+  return hits + misses === 0 ? null : PERCENT.format(hits / (hits + misses));
+}
