@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
-import type { ApiError, ComparisonId, Doc, DocumentId, Result } from "@/api/domain";
+import type { ApiError, ComparisonId, Doc, DocumentId } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
+import { useListedDoc } from "@/hooks/useListedDoc";
 import { compareRuns, useCompareRun } from "@/hooks/useCompareRun";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { COMPARE_MAX, FOCUS_MAX, columns, withDoc, type CompareRequest, type Run } from "@/lib/compare";
@@ -32,9 +33,8 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
   const [chosen, setChosen] = useState<ReadonlySet<DocumentId>>(() => new Set(initial ? [initial] : []));
   const [focus, setFocus] = useState("");
 
-  const lookUp = initial !== null && live !== null && !live.some((d) => d.id === initial) ? initial : null;
-  const older = useFetched(`compare-with:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
-  const docs = live && withDoc(live, older.result?.ok ? older.result.value : null);
+  const { doc } = useListedDoc(initial, live);
+  const docs = live && withDoc(live, doc);
 
   const picked = columns(chosen, docs ?? []);
   const blocked = compareBlocked(picked.length, focus);

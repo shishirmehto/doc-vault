@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import type {
-  ApiError, ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Result, Selection, Turn, TurnCite,
+  ApiError, ChatDocument, ChatId, ChatPane, Citation, Doc, NonEmpty, Selection, Turn, TurnCite,
 } from "@/api/domain";
 import { useChatDocs } from "@/hooks/useChatDocs";
 import { useFetched } from "@/hooks/useFetched";
+import { useListedDoc } from "@/hooks/useListedDoc";
 import { threads, useThread } from "@/hooks/useThread";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
@@ -39,11 +40,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   const open = (cite: TurnCite) => push({ kind: "chat", chat: id, pane: { cite, page: null } });
 
   const cited = pane && turns ? citationAt(turns, pane.cite) : null;
-  const listed = cited && docs ? (docs.find((d) => d.id === cited.source.documentId) ?? null) : null;
-  const lookUp = cited && docs !== null && listed === null ? cited.source.documentId : null;
-  const older = useFetched(`cited:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
-  const citedDoc = listed ?? (older.result?.ok ? older.result.value : null);
-  const resolving = docs === null || (lookUp !== null && older.result === null);
+  const { doc: citedDoc, loading: resolving } = useListedDoc(cited?.source.documentId ?? null, docs);
 
   const column = useRef<HTMLDivElement>(null);
   const turnCount = turns?.length ?? 0;

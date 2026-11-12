@@ -2,13 +2,13 @@
 
 import { startTransition, useCallback, useEffect, useState, type ReactNode } from "react";
 import { api } from "@/api/client";
-import type { ApiError, Doc, DocumentId, Result } from "@/api/domain";
+import type { ApiError, Doc, DocumentId } from "@/api/domain";
 import { parseSelection } from "@/api/parse";
 import { useSelection } from "@/hooks/useSelection";
 import { useDocuments } from "@/hooks/useDocuments";
 import { liveFeed } from "@/hooks/useLiveFeed";
 import { useUploads } from "@/hooks/useUploads";
-import { useFetched } from "@/hooks/useFetched";
+import { useListedDoc } from "@/hooks/useListedDoc";
 import { useHealth } from "@/hooks/useHealth";
 import { applyDocEvent, upsertDoc } from "@/lib/docList";
 import { threads } from "@/hooks/useThread";
@@ -96,20 +96,16 @@ export function Workspace() {
   const docs = documents.data?.docs ?? null;
   const complete = documents.data?.complete ?? true;
   const selectedDoc = selection.kind === "doc" ? selection.doc : null;
-  const listed = selectedDoc && docs ? (docs.find((d) => d.id === selectedDoc) ?? null) : null;
-  const lookUp = selectedDoc !== null && docs !== null && listed === null ? selectedDoc : null;
-  const older = useFetched(`older:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
-  const reloadOlder = older.reload;
+  const { doc: current, loading, lookUp, reload } = useListedDoc(selectedDoc, docs);
   useEffect(() => {
     if (lookUp === null) return;
     return liveFeed.subscribe((event) => {
       if (event.kind === "down") return;
       if (event.kind === "document" && event.doc.id !== lookUp) return;
       if (event.kind === "deleted" && event.id !== lookUp) return;
-      reloadOlder();
+      reload();
     });
-  }, [lookUp, reloadOlder]);
-  const current = listed ?? (older.result?.ok ? older.result.value : null);
+  }, [lookUp, reload]);
   const paneOpen = selection.kind === "chat" || selection.kind === "comparison"
     ? selection.pane !== null
     : current !== null && selection.kind === "doc" && selection.pane !== null;
@@ -147,7 +143,7 @@ export function Workspace() {
             key={selection.doc}
             id={selection.doc}
             doc={current}
-            loading={docs === null || (lookUp !== null && older.result === null)}
+            loading={loading}
             pane={selection.pane}
             push={push}
             replace={replace}

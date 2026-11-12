@@ -3,9 +3,10 @@
 import { useState, type CSSProperties } from "react";
 import { api } from "@/api/client";
 import type {
-  ApiError, CellCite, ComparedDoc, Comparison, ComparisonId, ComparisonPane, Doc, Result, Selection,
+  ApiError, CellCite, ComparedDoc, Comparison, ComparisonId, ComparisonPane, Doc, Selection,
 } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
+import { useListedDoc } from "@/hooks/useListedDoc";
 import { cellAt, columnVersion, visibleRows } from "@/lib/compare";
 import { cellView } from "@/lib/comparisonPane";
 import {
@@ -31,9 +32,7 @@ export function ComparisonScreen({ id, docs, pane, only, push, replace }: Props)
   const at = (next: ComparisonPane | null, nextOnly = only): Selection => ({ kind: "comparison", comparison: id, pane: next, only: nextOnly });
 
   const target = comparison && pane ? cellAt(comparison, pane.cite) : null;
-  const listed = target && docs ? (docs.find((d) => d.id === target.doc.id) ?? null) : null;
-  const lookUp = target && !target.doc.deleted && docs !== null && listed === null ? target.doc.id : null;
-  const older = useFetched(`compared:${lookUp}`, (): Promise<Result<Doc | null>> => (lookUp ? api.document(lookUp) : Promise.resolve({ ok: true, value: null })));
+  const compared = useListedDoc(target && !target.doc.deleted ? target.doc.id : null, docs);
 
   if (result && !result.ok && result.error.kind === "refused" && result.error.code === "comparison_not_found") {
     return <main className="centre"><MissingComparison /></main>;
@@ -58,7 +57,7 @@ export function ComparisonScreen({ id, docs, pane, only, push, replace }: Props)
       </main>
       {pane && (
         <SourcePane
-          view={cellView(result, pane, listed ?? (older.result?.ok ? older.result.value : null), docs === null || (lookUp !== null && older.result === null))}
+          view={cellView(result, pane, compared.doc, compared.loading)}
           onPage={(page) => replace(at({ ...pane, page }))}
           onClose={() => push(at(null))}
         />
