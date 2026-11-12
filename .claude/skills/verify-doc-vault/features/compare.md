@@ -28,7 +28,7 @@ Preconditions: a stack from `launch.sh`, with `sample-cgl-policy.pdf` and `sampl
 - **UI, filter.** Tick **Only differences (n)**. Only rows with the tag remain, and the URL has `only=differences`.
 - **UI, deleted.** Open the deleted-document comparison. Its header marks the file "(deleted)", and its page tabs read "p. n, deleted" as text, not buttons.
 - **UI, running and failed.** Hold the `POST **/api/comparisons` request with a Playwright route to see the running state, and abort it to see the failure with **Try again** and **Change the documents**. Label these runs MOCKED.
-- Run `scripts/visible.js` at 1440x900, 1024x768 and 375x812 on the compare screen (with and without recent comparisons), a comparison with the pane open, "Only differences", and the running and failed states. Every run returns `[]`. At 375 px the field column and the first document's column are readable, and the table scrolls sideways inside its own box (`data-scroll-x`), never the page.
+- Run `scripts/visible.js` on the compare screen (with and without recent comparisons), a comparison with the pane open, "Only differences", and the running and failed states, as `README.md` describes. At 375 px the field column and the first document's column are readable, and the table scrolls sideways inside its own box (`data-scroll-x`), never the page.
 - Keyboard: from the top of the comparison screen, Tab reaches the filter and every page tab, each with the carbon focus ring.
 
 ## Gotchas

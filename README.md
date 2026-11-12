@@ -421,7 +421,6 @@ Known limits:
 - Bytes the vault already holds return the existing document even when `replaces` names another family. Nothing is linked, and the response's `family_id` says which family the bytes belong to.
 - `GET /documents/{id}/versions` returns the whole family in one response, with no paging.
 - In the web UI, the rail and both pickers list only the latest version of each document. An earlier version is opened from a link on its family's document pages. Its own page asks about it ("Ask about this document") and compares it ("Compare with version N", or "Compare with...", which ticks it in the compare picker).
-- A chat keeps the version it was started with, but the chat screen names its files without their version numbers and does not say when a newer version exists.
 - The spending cap is checked before each call to a chat model, not reserved. Calls already running when the cap is reached finish and are billed. Each process reads today's spend at most every 10 s, and the API and each worker child are separate processes. So the day's spend can pass the cap.
 - Embedding calls are never refused, but their cost counts toward the day's spend, so indexing over the cap keeps adding to it.
 - A call to a model with no price entry stores no cost, so it never counts toward the cap.

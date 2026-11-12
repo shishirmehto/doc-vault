@@ -29,7 +29,7 @@ Preconditions: a stack from `launch.sh`, with `sample-cgl-policy.pdf` uploaded a
 - **UI, source.** Click "Source 1 of 2: show the passage on p. 2". The URL gains `cite=sum.<id>.0`, the tab has `aria-pressed="true"`, and the pane reads "Page 2 of 7" with the `mark` on "DEDUCTIBLE". Reload: the disclosure is open, the same tab is pressed and the pane is back.
 - **UI, cached.** Close the pane, press **Rewrite** again with the same options: the live region and the sheet read "Saved earlier, no new model call.", and the `summary` count is unchanged.
 - **UI, running and failed.** Hold the `POST **/api/documents/*/summaries` request with a Playwright route to see the running sentence ("Writing a detailed summary in a formal tone about “named insured”.", then after 5 s "A long document can take up to a minute and a half."), then answer it with a 503 `ai_unavailable` to see the failure with **Try again**. Label these runs MOCKED, and abort a held route before leaving the page, or the browser sends it on.
-- Run `scripts/visible.js` at 1440x900, 1024x768 and 375x812 with the disclosure open, after a fresh result, after a cached result, with a source open, and in the running and failed states. Every run returns `[]`.
+- Run `scripts/visible.js` with the disclosure open, after a fresh result, after a cached result, with a source open, and in the running and failed states, as `README.md` describes.
 - Keyboard: Tab from the disclosure reaches the length group, the focus field, the tone select, **Rewrite**, each source tab and each earlier rewrite, each with the carbon focus ring.
 
 ## Gotchas

@@ -26,6 +26,7 @@ A user starts a chat on one or more ready documents and asks questions. Each ans
 Preconditions:
 
 - `sample-cgl-policy.pdf` (P) and `sample-renewal-quote.pdf` (Q) uploaded and `ready`.
+- P's insights `ready` (`$S/wait-doc.sh <P> insights`), because the **Not found** turn takes its suggestions only from the key facts of ready insights.
 - `H='content-type: application/json'`.
 
 - **Start.** Run `$S/call.sh POST /chats -H "$H" -d '{"document_ids":["<P>"]}'`. Status `201`, and `documents` lists `sample-cgl-policy.pdf`.
@@ -36,24 +37,24 @@ Preconditions:
 - **Two documents.** Start a chat on P and Q and ask `What is the property damage deductible?`. Citations come from both files: P p. 2 `$2,500` and Q p. 2 `$5,000` (facts `policy-deductible` and `quote-deductible`).
 - **History.** Run `$S/call.sh GET /chats/<chat id>/messages`. `turns` holds every question in order, with its status.
 - **Refusals.** Run `POST /chats` with `{"document_ids": []}` and get `422`. With a failed document's id you get `409`, with `error.code == "documents_not_ready"` naming it.
-- **Suggestions.** Every turn above has `suggestions`, at most three, each ending in `?`. The flood turn's come from the policy's key facts (`What is the Policy Number?`). Ask one and get `"status": "answered"`.
+- **Suggestions.** Every turn above has `suggestions`, at most three, each ending in `?`. The **Not found** turn's come from the policy's key facts (`What is the Policy Number?`). Ask one and get `"status": "answered"`.
 
 ## Driving the stream
 
 `call.sh` saves whole bodies, so read the stream with `curl -N` and stamp each line with its arrival time. The answer cache serves a first question that this stack has answered before on the same documents, with one `delta` and no `stage` (`caching.md`). So stream in a new chat on P before **Cited answer** asks the same question:
 
 ```bash
-curl -sN -D - http://localhost:18000/chats/<chat id>/messages/stream -H "$H" \
+curl -sN -D - $API/chats/<chat id>/messages/stream -H "$H" \
   -d '{"question": "What is the property damage deductible?"}' \
   | python3 -c 'import sys,time; t=time.time(); [print(f"{(time.time()-t)*1000:6.0f} ms {l.rstrip()}") for l in sys.stdin]' \
-  | tee "$EVIDENCE_ROOT/$RUN_ID/stream-deductible.txt"
+  | tee "$RUN_DIR/stream-deductible.txt"
 ```
 
 - Headers include `content-type: text/event-stream`, `cache-control: no-cache, no-transform` and `x-accel-buffering: no`.
 - Events come in this order: `stage` `searching`, `stage` `answering`, several `delta` events about 25 ms apart (`FAKE_STREAM_DELAY_MS` in compose), then `turn`. The deltas joined read `Property Damage Deductible $2,500 per occurrence`, without `[S1]`. The `turn` data equals the last turn of `GET /chats/<chat id>/messages`.
 - A follow-up starts with `stage` `condensing`. `Who won the 2022 football World Cup?` sends `stage` `searching`, then `turn` with `"reason": "no_evidence"`, and no `delta`.
 - **Disconnect.** Start a new chat on Q alone, a scope no step above has asked, and run the same command with `--max-time 0.1` to cut the stream mid-answer (curl exits 28). After a second, `GET /chats/<that chat id>/messages` shows the turn as answered, and `$S/sql.sh "SELECT purpose, ok FROM llm_calls WHERE turn_id = '<turn id>'"` shows its `answer` row. It has no `embed_query` row, because the first stream embedded the same question text and the embedding cache serves it.
-- **Through the web proxy.** In the chat from the first stream, where the question is now a follow-up that the answer cache does not serve, run the same command against `http://localhost:13000/api/chats/<chat id>/messages/stream` with `-H 'accept-encoding: gzip'`. The response has no `content-encoding`, and the deltas keep their spacing. If they arrive in one burst at the end, the proxy is compressing the stream.
+- **Through the web proxy.** In the chat from the first stream, where the question is now a follow-up that the answer cache does not serve, run the same command against `$WEB/api/chats/<chat id>/messages/stream` with `-H 'accept-encoding: gzip'`. The response has no `content-encoding`, and the deltas keep their spacing. If they arrive in one burst at the end, the proxy is compressing the stream.
 
 ## Gotchas
 

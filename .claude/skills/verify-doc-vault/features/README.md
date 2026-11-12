@@ -7,12 +7,12 @@ This folder is the maintained source for verifying what a doc-vault user sees an
 - A stack started by `scripts/launch.sh` (project `docvault-verify`, API `http://localhost:18000`, web `http://localhost:13000`), with empty volumes.
 - `scripts/doctor.sh` exits 0.
 - `00-health.json` in the run folder shows `"ai_mode": "fake"`, unless the run set `VERIFY_LIVE=1` on purpose.
-- Run every command from the repo root. `S=.claude/skills/verify-doc-vault/scripts`.
+- Run every command from the repo root, after `S=.claude/skills/verify-doc-vault/scripts; source $S/env.sh`. `env.sh` sets `API`, `WEB`, `RUN_DIR` (the run folder) and the `compose` function, which runs `docker compose` on the verify project. `launch.sh` starts a new run folder, so source `env.sh` again after it.
 - Never drive a stack this run did not start.
 
 ## Driving conventions
 
-- Use only public routes (`/documents`, `/chats`, `/comparisons`, `/metrics`, `/health`) and the UI. Never call Python, insert rows, or edit the database to reach a state. The one exception is the priced `llm_calls` row in `quota-and-logs.md`, on the isolated `docvault-verify` stack only.
+- Use only public routes (`/documents`, `/chats`, `/comparisons`, `/metrics`, `/events`, `/health`) and the UI. Never call Python, insert rows, or edit the database to reach a state. The one exception is the priced `llm_calls` row in `quota-and-logs.md`, on the isolated `docvault-verify` stack only.
 - Take expected values from `samples/facts.yaml` (document, page, exact text). Never take them from an earlier response.
 - In the browser, find elements by role and accessible name, not position.
 - A fresh upload is a fresh hash. To watch processing again, upload a new file. Do not delete a sample just to re-upload it.
@@ -60,7 +60,7 @@ A clean result does not prove that text does not wrap where it should not, or th
 |---|---|
 | [upload-and-indexing.md](upload-and-indexing.md) | `upload-new`, `upload-dedupe`, `upload-reject`, `index-ready`, `index-fail-retry`, `page-read` |
 | [insights.md](insights.md) | `insights-ready`, `insights-grounded`, `insights-coverage`, `insights-fail-isolated` |
-| [chat-with-citations.md](chat-with-citations.md) | `chat-start`, `chat-not-ready`, `chat-cited-answer`, `chat-follow-up`, `chat-multi-doc`, `chat-not-found`, `chat-history` |
+| [chat-with-citations.md](chat-with-citations.md) | `chat-start`, `chat-not-ready`, `chat-cited-answer`, `chat-follow-up`, `chat-multi-doc`, `chat-not-found`, `chat-history`, `chat-stream`, `chat-suggestions` |
 | [metrics.md](metrics.md) | `metrics-documents`, `metrics-processing` |
 | [compare.md](compare.md) | `compare-run`, `compare-focus`, `compare-refuse`, `compare-read`, `ui-compare` |
 | [summaries.md](summaries.md) | `summary-run`, `summary-options`, `summary-cached`, `summary-refuse`, `summary-list`, `ui-summary` |

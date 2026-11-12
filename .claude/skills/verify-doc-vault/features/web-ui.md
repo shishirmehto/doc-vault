@@ -20,7 +20,7 @@ The Next.js app on the `web` service shows the vault in a browser. A user upload
 
 ## How to get to it (user POV)
 
-- Open `http://localhost:13000` (verify stack) in a browser. Prove a UI change at 1440x900, 1024x768 and 375x812, and run `scripts/visible.js` on every screen at each size (see `README.md`). Add 1440x785 for a short window.
+- Open `http://localhost:13000` (verify stack) in a browser. Prove a UI change at the sizes in `README.md`, and run `scripts/visible.js` on every screen at each size.
 - Top bar: the "Doc Vault" link, the "Ask", "Compare" and "Metrics" links (the current one has `aria-current`), and the service note. Under the fake provider, the note is a "Fake AI provider" button that opens its explanation. While the live stream is down it reads "Live updates paused, retrying".
 - Rail: the drop zone, the "Choose files" button, one link per document, and over six documents a "Find a document" searchbox. Below 760 px the rail sits behind a "Documents (n)" button with `aria-expanded`.
 - The empty home screen: three numbered steps, the last "Ask a question or compare documents.", with a second "Choose files" button in step 1.
@@ -62,7 +62,7 @@ Preconditions:
 - The Playwright MCP browser is headed and visible on the desktop. A stray click there changes the URL. Log input events with an init script (`pointerdown`, `click`, `keydown`, `popstate`) and redo any step with input you did not make.
 - A browser that once visited another app on the same port may hold a cached redirect (for example to `/sign-in`). Add a query string (`/?fresh=1`) to get past it.
 - The page pane slides in. Wait for the `mark` before you take the screenshot.
-- An empty vault exists only on a fresh stack. On a stack with documents, a Playwright route that answers `GET /api/documents?limit=100` with `{"items": [], "next_cursor": null}` shows the screen; label that screenshot MOCKED.
+- An empty vault exists only on a fresh stack. On a stack with documents, a Playwright route that answers `GET /api/documents?latest=true&limit=100` with `{"items": [], "next_cursor": null}` shows the screen; label that screenshot MOCKED.
 - The fake provider sends its stages within a millisecond of each other, so React often renders two of them at once. A status log can skip a step; it must not go backwards.
 - Each document checkbox is named by its filename through `aria-labelledby`, so use `getByRole('checkbox', { name: 'sample-cgl-policy.pdf', exact: true })`. Some accessibility-tree tools do not resolve `aria-labelledby` and show the checkboxes as "on". Playwright's role queries do resolve it.
 - The chat header comes from `GET /chats/{id}`, so a chat link names its documents in any browser.
