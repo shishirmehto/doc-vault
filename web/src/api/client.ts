@@ -78,7 +78,10 @@ export const api = {
       return { ok: false, error: { kind: "offline" } };
     }
     const headers = heard((name) => res.headers.get(name), id);
-    if (res.status !== 200 || res.body === null) return settle(res.status, await res.text(), headers, P.parseTurn);
+    if (res.status !== 200 || res.body === null) {
+      const text = await bodyText(res);
+      return text === null ? { ok: false, error: { kind: "offline" } } : settle(res.status, text, headers, P.parseTurn);
+    }
     return readAskStream(res.body, onProgress, headers.requestId);
   },
 
@@ -126,7 +129,18 @@ async function call<WireT, T>(
   } catch {
     return { ok: false, error: { kind: "offline" } };
   }
-  return settle(res.status, await res.text(), heard((name) => res.headers.get(name), id), parse, dataStatuses);
+  const text = await bodyText(res);
+  if (text === null) return { ok: false, error: { kind: "offline" } };
+  return settle(res.status, text, heard((name) => res.headers.get(name), id), parse, dataStatuses);
+}
+
+/** Null when the connection drops after the headers, before the body ends. */
+async function bodyText(res: Response): Promise<string | null> {
+  try {
+    return await res.text();
+  } catch {
+    return null;
+  }
 }
 
 /** A page served over plain HTTP from another host has no randomUUID. The API then makes the id, and echoes it. */

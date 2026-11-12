@@ -134,3 +134,30 @@ test("an upload sends a request id on its XHR, and its refusal carries the id th
     globalThis.XMLHttpRequest = real;
   }
 });
+
+function cutMidBody(status: number): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"items": ['));
+      controller.error(new TypeError("network error"));
+    },
+  });
+  return new Response(body, { status, headers: { "Content-Type": "application/json" } });
+}
+
+test("a body cut mid-read is offline, never a rejected promise", async (t) => {
+  const CHAT = "579aa94e-85de-458e-b749-cb774b9d6ca7" as ChatId;
+  const calls: [string, number, () => Promise<unknown>][] = [
+    ["documents", 200, () => api.documents()],
+    ["history", 200, () => api.history(CHAT)],
+    ["compare", 201, () => api.compare([POLICY, RENEWAL], null)],
+    ["summarize", 201, () => api.summarize(POLICY, { length: "brief", focus: null, tone: "plain" })],
+    ["a refused streamed ask", 429, () => api.askStream(CHAT, "What is the deductible?", () => {})],
+  ];
+  const outcomes: [string, unknown][] = [];
+  for (const [name, status, run] of calls) {
+    t.mock.method(globalThis, "fetch", async () => cutMidBody(status));
+    outcomes.push([name, await run().catch((err: unknown) => `rejected: ${String(err)}`)]);
+  }
+  assert.deepEqual(outcomes, calls.map(([name]) => [name, { ok: false, error: { kind: "offline" } }]));
+});
