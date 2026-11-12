@@ -9,7 +9,7 @@ import { useFetched } from "@/hooks/useFetched";
 import { cellAt, columnVersion, visibleRows } from "@/lib/compare";
 import { cellView } from "@/lib/comparisonPane";
 import {
-  NONE_DIFFER, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, noFieldsNext, partlyRead, withVersion,
+  NONE_DIFFER, comparedNames, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, noFieldsNext, partlyRead,
 } from "@/copy";
 import { InAppLink } from "./InAppLink";
 import { MissingComparison } from "./Missing";
@@ -103,7 +103,7 @@ function ComparisonView({ c, docs, active, only: inUrl, onOpen, onOnly, onNew }:
     <section className="comparison" aria-labelledby="comparison-title">
       <header className="comparison-header">
         <h1 id="comparison-title">
-          {comparing(c.documents.map((d) => ({ ...d, filename: withVersion(d.filename, columnVersion(c.documents, d)) })))}
+          {comparing(comparedNames(c.documents))}
         </h1>
         <p className="quiet">
           {focusLine(c.focus)}. {fieldCount(c.rows)}.{" "}

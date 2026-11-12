@@ -7,7 +7,7 @@ import {
 import { readAskStream } from "./api/client.ts";
 import type { ApiError, DocumentId } from "./api/domain.ts";
 import {
-  cannotOpen, clockTime, compareBlocked, compareFailed, comparing, deletedColumns, differCount, docMeta, dollars,
+  cannotOpen, clockTime, compareBlocked, compareFailed, comparedNames, comparing, deletedColumns, differCount, docMeta, dollars,
   droppedCells, explain, fieldCount, focusLine, hitRate, newerInChat, newerVersion, noCap, noFieldsNext, notReadyNames, otherVersions, partlyRead,
   retrying, rewriteOptions, rewriting, rewrittenBy, sourceLabel, sourcesNote, usageLine, versionCompareBlocked,
   versionLine, versionMeta, withVersion, wordTarget,
@@ -59,7 +59,7 @@ test("a comparison's header names its documents, its focus and how many fields d
   const gone = parseComparison(fixture("comparison-get-deleted-document"));
   const focused = parseComparison(fixture("compare-201-focus-deductible"));
   assert.deepEqual(
-    [comparing(plain.documents), comparing(gone.documents), focusLine(plain.focus), focusLine(focused.focus),
+    [comparing(comparedNames(plain.documents)), comparing(comparedNames(gone.documents)), focusLine(plain.focus), focusLine(focused.focus),
       fieldCount(plain.rows), fieldCount(focused.rows), fieldCount([]), fieldCount(gone.rows.slice(1))],
     [
       "Comparing sample-cgl-policy.pdf and sample-renewal-quote.pdf",
@@ -71,6 +71,15 @@ test("a comparison's header names its documents, its focus and how many fields d
       "No fields were found to compare",
       "1 field, none differ",
     ],
+  );
+});
+
+test("two versions of one file are named apart wherever their comparison is named", () => {
+  const doc = { id: "70eebfea-0db0-468f-b3e3-58c67c2f6d5f" as DocumentId, filename: "terms.txt", version: 1, deleted: false, pagesRead: 1, pageCount: 1 };
+  const next = { ...doc, id: "70eebfea-0db0-468f-b3e3-58c67c2f6d60" as DocumentId, version: 2, deleted: true };
+  assert.deepEqual(
+    [comparedNames([doc, next]), comparedNames([doc, { ...next, filename: "quote.pdf", version: 1 }]), comparedNames([{ ...doc, version: null }, next])],
+    ["terms.txt (version 1) and terms.txt (version 2) (deleted)", "terms.txt and quote.pdf (deleted)", "terms.txt and terms.txt (version 2) (deleted)"],
   );
 });
 

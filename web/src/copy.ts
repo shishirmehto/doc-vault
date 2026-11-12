@@ -5,7 +5,7 @@ import type {
   AiBudget, ApiError, ComparedDoc, CompareRow, Counts, Doc, Health, NotFoundReason, PageUnit, Quota, Summary, SummaryLength,
   SummaryOptions, SummaryTone, Turn,
 } from "./api/domain.ts";
-import { COMPARE_MAX, COMPARE_MIN, FOCUS_MAX } from "./lib/compare.ts";
+import { COMPARE_MAX, COMPARE_MIN, FOCUS_MAX, columnVersion } from "./lib/compare.ts";
 import { LENGTHS, LISTED } from "./lib/summary.ts";
 import type { Ask } from "./lib/thread.ts";
 
@@ -246,8 +246,16 @@ export function documentNames(documents: readonly { filename: string; deleted?: 
 }
 
 /** "Comparing a.pdf, b.pdf (deleted) and c.pdf". */
-export function comparing(documents: readonly { filename: string; deleted?: boolean }[]): string {
-  return `Comparing ${documentNames(documents)}`;
+export function comparing(names: string): string {
+  return `Comparing ${names}`;
+}
+
+/**
+ * A stored comparison's documents, each named with its version where `columnVersion` gives one, so two versions of one
+ * file read "terms.txt (version 1) and terms.txt (version 2)" wherever the comparison is named.
+ */
+export function comparedNames(documents: readonly ComparedDoc[]): string {
+  return documentNames(documents.map((d) => ({ ...d, filename: withVersion(d.filename, columnVersion(documents, d)) })));
 }
 
 export function focusLine(focus: string | null): string {

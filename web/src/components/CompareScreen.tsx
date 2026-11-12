@@ -8,7 +8,7 @@ import { compareRuns, useCompareRun } from "@/hooks/useCompareRun";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { COMPARE_MAX, FOCUS_MAX, columns, withDoc, type CompareRequest, type Run } from "@/lib/compare";
 import {
-  COMPARE_FULL, LONG_DOCUMENT, NO_COMPARISONS, NOTHING_TO_COMPARE, compareBlocked, compareFailed, comparing,
+  COMPARE_FULL, LONG_DOCUMENT, NO_COMPARISONS, NOTHING_TO_COMPARE, compareBlocked, compareFailed, comparedNames, comparing,
   differCount, documentNames, explain, focusLine, formatWhen, notReadyNames, retrying,
 } from "@/copy";
 import { InAppLink } from "./InAppLink";
@@ -116,7 +116,7 @@ function RunStatus({ run }: { run: Extract<Run, { phase: "running" }> }) {
   return (
     <div className="run" aria-busy="true" ref={box}>
       <div role="status">
-        <p className="quiet">{comparing(run.request.documents)}</p>
+        <p className="quiet">{comparing(documentNames(run.request.documents))}</p>
         {long && <p className="quiet">{LONG_DOCUMENT}</p>}
       </div>
       <div className="progress indeterminate"><span /></div>
@@ -170,7 +170,7 @@ function RecentComparisons({ onOpen }: { onOpen(id: ComparisonId): void }) {
             <li key={c.id}>
               <div>
                 <InAppLink to={{ kind: "comparison", comparison: c.id, pane: null, only: false }} onFollow={() => onOpen(c.id)}>
-                  {documentNames(c.documents)}
+                  {comparedNames(c.documents)}
                 </InAppLink>
                 <p className="recent-meta">{c.focus === null ? "" : `${focusLine(c.focus)}. `}{differCount(c.rows)}.</p>
               </div>
