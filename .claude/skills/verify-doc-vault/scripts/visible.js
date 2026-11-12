@@ -50,9 +50,6 @@
     if (reasons.length > 0) findings.push({ kind: "clipped", element: name(el), text: text(el), reasons });
   }
 
-  // Walks out from the control. A clipping ancestor that is not a scroll container hides whatever falls outside
-  // it for good. A scroll container can bring its content into view, so from there on the question is whether
-  // the container itself can be seen. Last comes the viewport, which scrolls only if the page does.
   const reachable = (el) => {
     let box = el.getBoundingClientRect();
     let fixed = style(el).position === "fixed";
@@ -91,7 +88,6 @@
   const pageWidth = Math.max(root.scrollWidth, document.body.scrollWidth);
   if (pageWidth > vw + TOLERANCE) findings.push({ kind: "page-scroll", element: "html", text: `${pageWidth}px wide in a ${vw}px viewport` });
 
-  // The page itself never scrolls here, so content too wide for its column lands in the column's scroller.
   for (const el of document.body.querySelectorAll("*")) {
     if (el.matches("input, textarea, select") || el.hasAttribute("data-scroll-x") || !rendered(el)) continue;
     if (scrolls(style(el).overflowX) && el.scrollWidth > el.clientWidth + TOLERANCE) {
