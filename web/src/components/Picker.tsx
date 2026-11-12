@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { Doc, DocumentId } from "@/api/domain";
+import type { ApiError, Doc, DocumentId } from "@/api/domain";
 import { FIND_AFTER, allChosen, chooseAll, findDocs } from "@/lib/find";
 import { laterVersion } from "@/lib/versions";
-import { docMeta, statusLine } from "@/copy";
+import { docMeta, retrying, statusLine } from "@/copy";
 import { FindField } from "./FindField";
 import { VersionMark } from "./VersionMark";
 
@@ -87,4 +87,10 @@ export function Picker({ docs, chosen, onChange, findLabel, limit, noneReady, bu
       </ul>
     </fieldset>
   );
+}
+
+export function ListPending({ failed }: { failed: ApiError | null }) {
+  return failed
+    ? <p className="notice" data-tone="failed">{retrying(failed)}</p>
+    : <div aria-busy="true">{[70, 55, 62].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}</div>;
 }

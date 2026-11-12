@@ -5,18 +5,18 @@ import { api } from "@/api/client";
 import type { ApiError, ComparisonId, Doc, DocumentId } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { useListedDoc } from "@/hooks/useListedDoc";
+import { useLongRun } from "@/hooks/useLongRun";
 import { compareRuns, useCompareRun } from "@/hooks/useCompareRun";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { COMPARE_MAX, FOCUS_MAX, columns, withDoc, type CompareRequest, type Run } from "@/lib/compare";
 import {
   COMPARE_FULL, LONG_DOCUMENT, NO_COMPARISONS, NOTHING_TO_COMPARE, compareBlocked, compareFailed, comparedNames, comparing,
-  differCount, documentNames, explain, focusLine, formatWhen, notReadyNames, retrying,
+  differCount, documentNames, explain, focusLine, formatWhen, notReadyNames,
 } from "@/copy";
 import { InAppLink } from "./InAppLink";
-import { Picker } from "./Picker";
+import { ListPending, Picker } from "./Picker";
 
 const RECENT = 10;
-const LONG_AFTER_MS = 5000;
 
 export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }: {
   docs: readonly Doc[] | null;
@@ -60,10 +60,8 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
             <RunStatus key={run.startedAt} run={run} />
           ) : run.phase === "failed" ? (
             <RunFailed run={run} docs={docs ?? []} onRetry={() => onCompare(run.request)} onChange={() => change(run.request)} />
-          ) : docs === null && failed ? (
-            <p className="notice" data-tone="failed">{retrying(failed)}</p>
           ) : docs === null ? (
-            <div aria-busy="true">{[70, 55, 62].map((w) => <span key={w} className="skeleton line" style={{ width: `${w}%` }} />)}</div>
+            <ListPending failed={failed} />
           ) : docs.length === 0 ? (
             <p className="quiet">{NOTHING_TO_COMPARE}</p>
           ) : (
@@ -94,11 +92,7 @@ export function CompareScreen({ docs: live, failed, initial, onCompare, onOpen }
 }
 
 function RunStatus({ run }: { run: Extract<Run, { phase: "running" }> }) {
-  const [long, setLong] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setLong(true), Math.max(0, run.startedAt + LONG_AFTER_MS - Date.now()));
-    return () => clearTimeout(timer);
-  }, [run.startedAt]);
+  const long = useLongRun(run.startedAt);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     box.current?.scrollIntoView({ block: "nearest" });

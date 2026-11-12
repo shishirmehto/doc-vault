@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type Ref } from "react";
+import { useId, useRef, type Ref } from "react";
 import type { Summary, SummaryCite, SummaryId, SummaryLength, SummaryTone } from "@/api/domain";
+import { useLongRun } from "@/hooks/useLongRun";
 import type { Rewrites } from "@/hooks/useRewrites";
 import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { FOCUS_MAX, LENGTHS, TONES, normaliseFocus, type Run } from "@/lib/summary";
@@ -9,8 +10,6 @@ import {
   LOADING_REWRITES, LONG_DOCUMENT, MORE_REWRITES, NO_REWRITES, REWRITE_LEAD, REWRITTEN, SAVED_EARLIER, clockTime,
   explain, rewriteOptions, rewriting, rewrittenBy, sourceLabel, sourcesNote, wordTarget,
 } from "@/copy";
-
-const LONG_AFTER_MS = 5000;
 
 export function SummaryRewrite({ rewrites, cite, onOpenSource, disclosure }: {
   rewrites: Rewrites;
@@ -95,11 +94,7 @@ function RewriteForm({ rewrites, submit }: { rewrites: Rewrites; submit: Ref<HTM
 }
 
 function Running({ run }: { run: Extract<Run, { kind: "running" }> }) {
-  const [long, setLong] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setLong(true), Math.max(0, run.startedAt + LONG_AFTER_MS - Date.now()));
-    return () => clearTimeout(timer);
-  }, [run.startedAt]);
+  const long = useLongRun(run.startedAt);
   return (
     <div className="run">
       <p className="quiet">{rewriting(run.options)}</p>

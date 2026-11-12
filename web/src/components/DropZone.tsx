@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useRef, type ReactNode, type Ref } from "react";
 
-export const ACCEPT = ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain";
+const ACCEPT = ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain";
 
 export function DropZone({ dragging, onFiles, large = false, children }: {
   dragging: boolean;
@@ -18,18 +18,24 @@ export function DropZone({ dragging, onFiles, large = false, children }: {
         Choose files
       </button>
       {children}
-      <input
-        ref={input}
-        type="file"
-        multiple
-        accept={ACCEPT}
-        hidden
-        onChange={(e) => {
-          const files = [...(e.currentTarget.files ?? [])];
-          e.currentTarget.value = "";
-          if (files.length > 0) onFiles(files);
-        }}
-      />
+      <FileInput ref={input} multiple onFiles={onFiles} />
     </div>
+  );
+}
+
+export function FileInput({ ref, multiple = false, onFiles }: { ref: Ref<HTMLInputElement>; multiple?: boolean; onFiles(files: File[]): void }) {
+  return (
+    <input
+      ref={ref}
+      type="file"
+      multiple={multiple}
+      accept={ACCEPT}
+      hidden
+      onChange={(e) => {
+        const files = [...(e.currentTarget.files ?? [])];
+        e.currentTarget.value = "";
+        if (files.length > 0) onFiles(files);
+      }}
+    />
   );
 }

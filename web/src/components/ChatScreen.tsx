@@ -15,7 +15,7 @@ import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { chatVersion } from "@/lib/versions";
 import { askStatus, chatAsks, documentNames, explain, listNames, NOT_FOUND, usageLine, withVersion } from "@/copy";
 import { Composer } from "./Composer";
-import { MissingChat } from "./Missing";
+import { LoadFailed, MissingChat } from "./Missing";
 import { SourcePane, type SourceView } from "./SourcePane";
 import { NewerVersionNote } from "./Versions";
 
@@ -169,12 +169,7 @@ function Turns({ thread, pane, onOpen, accepting, onReload, onSuggest }: {
     );
   }
   if (thread.history.kind === "failed") {
-    return (
-      <div className="load-failed">
-        <p className="notice" data-tone="failed" role="alert">{explain(thread.history.error)}</p>
-        <button type="button" className="button" onClick={onReload}>Try again</button>
-      </div>
-    );
+    return <LoadFailed error={thread.history.error} onRetry={onReload} />;
   }
   if (thread.history.turns.length === 0 && thread.ask.phase === "idle") {
     return accepting ? <p className="quiet">Ask a question to start. Follow-ups can refer back to earlier answers.</p> : null;

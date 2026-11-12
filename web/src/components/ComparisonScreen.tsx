@@ -3,17 +3,17 @@
 import { useState, type CSSProperties } from "react";
 import { api } from "@/api/client";
 import type {
-  ApiError, CellCite, ComparedDoc, Comparison, ComparisonId, ComparisonPane, Doc, Selection,
+  CellCite, ComparedDoc, Comparison, ComparisonId, ComparisonPane, Doc, Selection,
 } from "@/api/domain";
 import { useFetched } from "@/hooks/useFetched";
 import { useListedDoc } from "@/hooks/useListedDoc";
 import { cellAt, columnVersion, visibleRows } from "@/lib/compare";
 import { cellView } from "@/lib/comparisonPane";
 import {
-  NONE_DIFFER, comparedNames, comparing, deletedColumns, droppedCells, explain, fieldCount, focusLine, noFieldsNext, partlyRead,
+  NONE_DIFFER, comparedNames, comparing, deletedColumns, droppedCells, fieldCount, focusLine, noFieldsNext, partlyRead,
 } from "@/copy";
 import { InAppLink } from "./InAppLink";
-import { MissingComparison } from "./Missing";
+import { LoadFailed, MissingComparison } from "./Missing";
 import { SourcePane } from "./SourcePane";
 import { VersionMark } from "./VersionMark";
 
@@ -63,15 +63,6 @@ export function ComparisonScreen({ id, docs, pane, only, push, replace }: Props)
         />
       )}
     </>
-  );
-}
-
-function LoadFailed({ error, onRetry }: { error: ApiError; onRetry(): void }) {
-  return (
-    <div className="load-failed">
-      <p className="notice" data-tone="failed" role="alert">{explain(error)}</p>
-      <button type="button" className="button" onClick={onRetry}>Try again</button>
-    </div>
   );
 }
 

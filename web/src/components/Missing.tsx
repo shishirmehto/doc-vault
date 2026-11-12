@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import type { ApiError } from "@/api/domain";
+import { explain } from "@/copy";
 
 type Way = { href: string; label: string };
 
@@ -30,5 +32,14 @@ export function MissingComparison() {
     <Missing title="This comparison isn't in the vault" way={{ href: "/?view=compare", label: "Compare documents" }}>
       The link may be wrong or out of date.
     </Missing>
+  );
+}
+
+export function LoadFailed({ error, onRetry }: { error: ApiError; onRetry(): void }) {
+  return (
+    <div className="load-failed">
+      <p className="notice" data-tone="failed" role="alert">{explain(error)}</p>
+      <button type="button" className="button" onClick={onRetry}>Try again</button>
+    </div>
   );
 }

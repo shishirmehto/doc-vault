@@ -5,7 +5,7 @@ import type { Doc, DocumentId } from "@/api/domain";
 import type { Versions } from "@/hooks/useVersions";
 import type { Family } from "@/lib/versions";
 import { newerVersion, otherVersions, versionLine, versionMeta, VERSIONS_FAILED } from "@/copy";
-import { ACCEPT } from "./DropZone";
+import { FileInput } from "./DropZone";
 import { InAppLink } from "./InAppLink";
 
 type Open = (id: DocumentId) => void;
@@ -78,17 +78,7 @@ export function UploadVersion({ onFiles }: { onFiles(files: File[]): void }) {
   return (
     <>
       <button type="button" className="text-button quiet-action" onClick={() => input.current?.click()}>Upload a new version</button>
-      <input
-        ref={input}
-        type="file"
-        accept={ACCEPT}
-        hidden
-        onChange={(e) => {
-          const files = [...(e.currentTarget.files ?? [])];
-          e.currentTarget.value = "";
-          if (files.length > 0) onFiles(files);
-        }}
-      />
+      <FileInput ref={input} onFiles={onFiles} />
     </>
   );
 }
