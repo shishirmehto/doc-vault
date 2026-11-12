@@ -64,10 +64,6 @@ export const api = {
   processingMetrics: (window: MetricsWindow): Promise<Result<ProcessingMetrics>> =>
     call("GET", `/metrics/processing?window=${window}`, P.parseProcessingMetrics),
 
-  /** Records exactly one turn on success. A 503 or a 429 records none. */
-  ask: (chat: ChatId, question: string): Promise<Result<Turn>> =>
-    call("POST", `/chats/${chat}/messages`, P.parseTurn, { body: { question } satisfies W.AskIn }),
-
   askStream: async (chat: ChatId, question: string, onProgress: (p: AskProgress) => void): Promise<Result<Turn>> => {
     const id = newRequestId();
     let res: Response;
