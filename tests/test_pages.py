@@ -222,6 +222,17 @@ def test_a_word_split_at_a_line_end_joins_when_the_document_uses_it_whole_and_ne
     ]
 
 
+def test_a_word_with_a_stray_space_before_its_line_end_hyphen_joins_when_the_document_uses_it_whole(tmp_path):
+    path = text_pdf(
+        tmp_path / "spaced.pdf",
+        ["Pollution means the di s-", "charge of fuels, l u-", "bricants or a re-", "port, and a non-",
+         "profit body. Words used whole: discharge, lubricants, report."],
+    )
+    assert pages.extract(DocKind.PDF, path, max_pages=10).pages[0].text == (
+        "Pollution means the discharge of fuels, lubricants or a report, and a non-profit body. "
+        "Words used whole: discharge, lubricants, report.")
+
+
 def test_kind_comes_from_the_bytes_not_the_name(tmp_path):
     disguised = tmp_path / "notes.txt"
     disguised.write_bytes((SAMPLES / POLICY).read_bytes())

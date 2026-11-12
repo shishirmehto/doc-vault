@@ -140,17 +140,24 @@ def _printed_twice(token: str) -> bool:
 
 
 _WORD = re.compile(r"[^\W\d_]+")
-_LINE_END_HYPHEN = re.compile(r"([^\W_]+)-\n([^\W\d_]+)")
+# Justified forms can also leave a stray space inside the word, as in "di s-\ncharge", so a fragment of up to three
+# letters before the head is tried as the word's start when the head and tail alone are not a word.
+_LINE_END_HYPHEN = re.compile(r"(?:\b([^\W\d_]{1,3}) )?([^\W_]+)-\n([^\W\d_]+)")
 
 
 def _join_line_end_hyphens(page_texts: list[str]) -> list[str]:
     letter_words = {word.lower() for text in page_texts for word in _WORD.findall(text)}
 
     def unwrap(match: re.Match[str]) -> str:
-        head, tail = match.groups()
+        fragment, head, tail = match.groups()
+        before = f"{fragment} " if fragment else ""
         if not tail[0].islower():
             return match.group()
-        return head + tail if (head + tail).lower() in letter_words else f"{head}-{tail}"
+        if (head + tail).lower() in letter_words:
+            return before + head + tail
+        if fragment and (fragment + head + tail).lower() in letter_words:
+            return fragment + head + tail
+        return f"{before}{head}-{tail}"
 
     return [_LINE_END_HYPHEN.sub(unwrap, text) for text in page_texts]
 
