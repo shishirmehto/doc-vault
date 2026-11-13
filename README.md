@@ -172,7 +172,7 @@ uv run ruff check
 ## Known limits
 
 - Without `OPENAI_API_KEY`, answers come from the fake provider, which often quotes a neighbouring passage.
-- The tests use canned HTTP responses for the OpenAI backends. One live run on 2026-11-12 covered the eval set and 19 public insurance documents.
+- The tests use canned HTTP responses for the OpenAI backends. The live API was run once, on 2026-11-12.
 - Insights read the first 240,000 characters of a document, so a longer document is covered only in part.
 - A chat sends eight passages to the answer step. On a 246-page manual, the passage that answered one question was not among them.
 - An answer is kept when at least one of its quotes is found in its source. A sentence whose quote is not found stays in the answer, without a citation number.

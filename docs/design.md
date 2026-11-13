@@ -27,7 +27,7 @@ Uploaded files live on disk at a path derived from their SHA-256 (`context.BlobS
 
 **Index.** `documents.run_index` takes a per-document advisory lock (`pg_try_advisory_lock`), so a duplicate delivery returns at once. Parsing extracts pages, cuts chunks and writes pages, chunks and parse facts in one transaction. It then enqueues insights and embeds pending chunks in batches of 128, one transaction per batch. A crash resumes at the first chunk without an embedding, and no parse or batch is paid for twice. A retryable failure raises for Celery to retry (five retries, 2 to 32 seconds apart). The last failure writes `failed` while the worker still holds the lock. `reconcile` runs every 60 seconds and re-enqueues stalled documents, at most 50 per tick. It also re-embeds ready documents after the embedding model changes, and enqueues missing insights.
 
-A document's `status` moves like this. A crash or a single provider error does not change it: the job is redelivered, or `reconcile` queues it again, and the next worker resumes. An unexpected error marks a `queued`, `parsing` or `embedding` document `failed`. `docs/lifecycle.md` has the full chart, with the crash paths.
+A document's `status` moves like this. A crash or a single provider error does not change it: the job is redelivered, or `reconcile` queues it again, and the next worker resumes. An unexpected error marks the document `failed` at once. The transition table also allows `queued` to `failed`, for an error before parsing starts. `docs/lifecycle.md` has the full chart, with the crash paths.
 
 ```mermaid
 stateDiagram-v2
@@ -36,8 +36,8 @@ stateDiagram-v2
   queued --> parsing: a worker takes the job
   parsing --> embedding: pages and chunks saved
   embedding --> ready: last chunk embedded
-  parsing --> failed: no readable text, or retries used up
-  embedding --> failed: retries used up
+  parsing --> failed: the file cannot be parsed
+  embedding --> failed: the AI provider fails, with no retry left
   failed --> queued: retry
   queued --> embedding: pages already saved
   ready --> embedding: embedding model changed
