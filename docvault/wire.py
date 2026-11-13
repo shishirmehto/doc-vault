@@ -1,7 +1,7 @@
 """HTTP request and response models, and the domain -> wire mapping.
 
 Only api.py imports this module. Domain unions are flattened here into the
-JSON shapes in the README; discriminated unions keyed on `status` keep the
+JSON shapes in docs/api.md; discriminated unions keyed on `status` keep the
 OpenAPI schema honest about which fields exist in which state.
 """
 
