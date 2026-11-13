@@ -248,9 +248,9 @@ def upload(file: UploadFile, response: Response, ctx: Deps,
 @router.get("/documents", response_model=wire.DocumentPage,
             responses=errors(ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
 def list_documents(ctx: Deps, status: DocStatus | None = None,
-                         latest: Annotated[bool, Query(description="Only the latest version of each document")] = False,
-                         limit: Annotated[int, Query(ge=1, le=100)] = 20,
-                         cursor: str | None = None) -> wire.DocumentPage:
+                   latest: Annotated[bool, Query(description="Only the latest version of each document")] = False,
+                   limit: Annotated[int, Query(ge=1, le=100)] = 20,
+                   cursor: str | None = None) -> wire.DocumentPage:
     docs, next_cursor = documents.list_documents(ctx.db, status=status, latest=latest, limit=limit, cursor=cursor)
     return wire.DocumentPage(items=[wire.document_out(doc) for doc in docs], next_cursor=next_cursor)
 
