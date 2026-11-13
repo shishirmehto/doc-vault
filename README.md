@@ -151,7 +151,7 @@ Retrieval is one SQL statement, `chat.EXACT_SQL`, that ranks the chat's chunks b
 
 ## Test it
 
-The tests use the compose Postgres on host port 54329, in their own database (`vault_test`). They call no model provider.
+You need [uv](https://docs.astral.sh/uv/). The tests use the compose Postgres on host port 54329, in their own database (`vault_test`). They call no model provider.
 
 ```bash
 docker compose up -d db
@@ -160,6 +160,8 @@ uv run ruff check
 ```
 
 `TEST_DATABASE_URL` points the tests at another database. The eval test also creates `<that name>_evals`.
+
+`web/README.md` lists the web UI's own test commands.
 
 ## Known limits
 
