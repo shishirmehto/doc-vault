@@ -91,7 +91,9 @@ Read that margin as a warning, not a result. The fake embedder hashes words, so 
 
 ## Results
 
-**Live run (2026-11-12, the configured OpenAI models).** One run of the full case set with a key cost $1.18 on the ledger. The results block below is still the fake run, which `tests/test_evals.py` pins and which needs no key.
+### Live and fake side by side
+
+**Live run (2026-11-12, the configured OpenAI models).** One run of the full case set with a key cost $1.18 on the ledger.
 
 | Number | Live | Fake |
 |---|---|---|
@@ -107,6 +109,10 @@ Read that margin as a warning, not a result. The fake embedder hashes words, so 
 | p95 turn latency | 7.3 s | under 20 ms |
 
 The four citation misses are the two turns in `aggregate-then-medical`. The answers are right ("from $2,000,000 to $3,000,000", "from $5,000 to $10,000"), but they cite the quote's change list on page 3, as Known limits predicts. The one not-found miss is the flood question in `insured-then-fired-employee`. The answer says the documents do not establish flood cover, and it counts as answered because it cites the coverage grant.
+
+### The fake run in full
+
+The results block below is the fake run, which `tests/test_evals.py` pins and which needs no key.
 
 **Comparisons (2026-11-11, compare-v1).** The comparison adds one `compare` call to the spend and moves no other number. On the policy and the renewal quote the fake returns 12 rows, all 24 cells grounded. It finds 3 of the 4 planted changes, all on page 2, and keeps the each-occurrence limit equal. `tests/test_evals.py` pins these numbers.
 
