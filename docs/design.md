@@ -35,7 +35,7 @@ The migration in `schema.sql` adds `family_id` as nullable, sets it to the row's
 
 **Index.** `documents.run_index` takes a per-document advisory lock (`pg_try_advisory_lock`), so a duplicate delivery returns at once. Parsing extracts pages, cuts chunks and writes pages, chunks and parse facts in one transaction. It then enqueues insights and embeds pending chunks in batches of 128, one transaction per batch. A crash resumes at the first chunk without an embedding, and no parse or batch is paid for twice. A retryable failure raises for Celery to retry (five retries, 2 to 32 seconds apart). The last failure writes `failed` while the worker still holds the lock. `reconcile` runs every 60 seconds and re-enqueues stalled documents, at most 50 per tick. It also re-embeds ready documents after the embedding model changes, and enqueues missing insights.
 
-**Insights.** `insights.run_analyze` runs on the `llm` queue beside embedding, under its own lock, so a slow summary never delays `ready`. It sends the pages that fit in 240,000 characters, in order, and records how many it read (`coverage`). A key fact is kept only when `pages.find_on_page` finds its quote on the page it cites. The rest are dropped and counted. Over the spending cap the insights call raises `quota_exceeded` with `retryable: false`, so Celery does not retry it and the insights are stored as failed, for `POST /documents/{id}/retry` to run again after the cap resets.
+**Insights.** `insights.run_analyze` runs on the `llm` queue beside embedding, under its own lock, so a document becomes `ready` without waiting for its summary. In compose, one worker serves both queues, so a summary still takes one of its four slots. `run_analyze` sends the pages that fit in 240,000 characters, in order, and records how many it read (`coverage`). A key fact is kept only when `pages.find_on_page` finds its quote on the page it cites. The rest are dropped and counted. Over the spending cap the insights call raises `quota_exceeded` with `retryable: false`, so Celery does not retry it and the insights are stored as failed, for `POST /documents/{id}/retry` to run again after the cap resets.
 
 **Ask.** `chat.ask` runs these steps:
 
@@ -227,6 +227,8 @@ The README lists the main ones. This is the full list, by area.
 - During a re-embed after an embedding-model change, a chat over that document refuses with `no_evidence`, and the embedding progress count reads as complete.
 - After an embedding-model change, chats answer only from documents already re-embedded until reconcile finishes.
 - Retrieval sends eight passages to the answer step. On the 246-page manual, the passage that answered one question was not among them.
+- An answer is kept when at least one of its quotes is found. A sentence whose quote is not found stays in the answer text, without a marker.
+- A citation is checked only for its quote being in the source it names, not for the quote supporting the sentence.
 
 ### Insights
 
@@ -265,6 +267,8 @@ The README lists the main ones. This is the full list, by area.
 - A delete racing an upload of the same bytes can delete the blob that the new row needs.
 - An upload sent without Content-Length is read in full into a temporary file before its size is checked, so the limit bounds what is stored, not what a client can send.
 - Chats and comparisons cannot be deleted, and a summary is deleted only with its document.
+- `GET /chats/{id}/messages` returns at most the newest 200 turns of a chat.
+- A path or a method that no route serves returns FastAPI's default `{"detail": ...}` body, not the error shape.
 
 ### Rate limits and retries
 

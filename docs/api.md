@@ -1,6 +1,6 @@
 # API reference
 
-Every error has one shape, `{"error": {"code", "message", "retryable", "details"}}`, and OpenAPI declares it on every route. The examples use `API=http://localhost:8000`.
+Every error a route returns has one shape, `{"error": {"code", "message", "retryable", "details"}}`, and OpenAPI declares it on every route. The examples use `API=http://localhost:8000`.
 
 Every response carries an `X-Request-ID` header. A request may send its own id of up to 64 characters, each a letter, a digit, `.`, `_` or `-`. The API returns that id unchanged and replaces any other value with a fresh 32-character hex id. The web UI's API calls each send a fresh id when the browser can make one (`crypto.randomUUID`), and its `/api` proxy passes the header both ways. The live-status stream sends none, so the API makes its id.
 
@@ -112,7 +112,7 @@ curl -s "$API/chats?limit=10"
 curl -s $API/chats/$CHAT
 ```
 
-`POST /chats/{id}/messages` asks a question of at most 2,000 characters. The answer cites each claim (`[1]` matches `citations[0]`), `interpreted_as` shows how a follow-up was read, and `usage` lists the model calls, tokens and cost of the turn. A question the documents do not answer returns `status: not_found` with a `reason`. `suggestions` holds up to three follow-up questions that the documents can answer. When the relevance gate refuses a question, they come from the documents' key facts ("What is the Policy Number?").
+`POST /chats/{id}/messages` asks a question of at most 2,000 characters. The answer carries numbered citations (`[1]` matches `citations[0]`), `interpreted_as` shows how a follow-up was read, and `usage` lists the model calls, tokens and cost of the turn. A sentence whose quote was not found in its source stays in the answer without a number. A question the documents do not answer returns `status: not_found` with a `reason`. `suggestions` holds up to three follow-up questions that the documents can answer. When the relevance gate refuses a question, they come from the documents' key facts ("What is the Policy Number?").
 
 ```bash
 curl -s $API/chats/$CHAT/messages -H 'content-type: application/json' \
@@ -169,7 +169,7 @@ event: turn
 data: {"id": "...", "status": "answered", "answer": "Property Damage Deductible $2,500 per occurrence [1]", ..., "usage": {"calls": 0, ...}, "cached": true}
 ```
 
-`GET /chats/{id}/messages` returns the chat's turns, oldest first, with the same fields, `cached` included.
+`GET /chats/{id}/messages` returns the chat's turns, oldest first, with the same fields, `cached` included. `limit` (50 by default, at most 200) keeps the newest turns, and there is no paging past them.
 
 ```bash
 curl -s "$API/chats/$CHAT/messages?limit=50"
@@ -279,6 +279,8 @@ curl -s $API/health
 | 500 | `internal_error` (an exception no route expected; `retryable: true`, with `X-Request-ID`) |
 | 502 | `ai_bad_output` |
 | 503 | `ai_unavailable`, with `Retry-After: 5` when `retryable` is true |
+
+A path or a method that no route serves gets FastAPI's default body, not this shape: `{"detail": "Not Found"}` with 404, or `{"detail": "Method Not Allowed"}` with 405.
 
 `quota_exceeded` means today's AI spend has reached `DAILY_AI_BUDGET_USD`. Asks, streamed asks, comparisons and new summaries get it before any model call, with `retryable: true` and `Retry-After` set to the seconds until midnight UTC, when the cap resets. `details` names the cap, the spend, the reset time and the same wait:
 

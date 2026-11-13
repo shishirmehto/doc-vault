@@ -23,6 +23,8 @@ From the case study's bonus list:
 - **Technical excellence.** A web UI, live status updates, streamed answers, caching in Redis, pgvector, and tests for the backend and the UI.
 - **Production readiness.** Cost tracking with a daily spending cap, rate limits, document versions, batched embedding, request ids in the logs, and a health check.
 
+The required backend was built first, in this order: upload and crash-safe indexing, insights, chat with citations, then the metrics, the evals and the demo script. The web UI was built beside it on its own branch. The other bonus features came after the backend passed its tests and evals, one at a time.
+
 ## Run it
 
 You need Docker.
@@ -90,7 +92,7 @@ A second Redis holds the embedding cache and the answer cache, and the app runs 
 2. The question is embedded. One SQL statement then ranks the chunks of the chat's documents by vector distance and full-text rank.
 3. If no chunk passes the relevance gate, the chat answers "not found" and makes no answer call.
 4. Otherwise the model answers from eight sources and quotes each source it uses.
-5. The code looks for every quote in the source it names. It drops a quote it cannot find, and a kept citation names the page where its quote starts.
+5. The code looks for every quote in the source it names. It drops a quote it cannot find, and a kept citation names the page where its quote starts. When it finds none, the turn is `unverified` and the draft answer is not shown.
 
 **Scale.** Uploads return at once and the work runs in Celery workers, so more `worker` replicas raise ingest throughput, and a lock on each document keeps duplicate jobs harmless. A file uploaded twice is stored and indexed once. Retrieval cost depends on the documents in a chat, not on the size of the vault. `docs/design.md` has timings at 5,000 and 50,000 documents, and says what changes past that.
 
@@ -128,7 +130,7 @@ One live run also covered 19 public insurance documents. Of 25 answerable questi
 | `GET /metrics/documents`, `GET /metrics/processing` | Read the document statistics and the processing metrics. |
 | `GET /health` | Check Postgres, Redis, the AI mode, the spending cap and the cache. |
 
-Every error has one shape, `{"error": {"code", "message", "retryable", "details"}}`. `docs/api.md` is the full reference, with a `curl` example for every route.
+Every error a route returns has one shape, `{"error": {"code", "message", "retryable", "details"}}`. `docs/api.md` is the full reference, with a `curl` example for every route.
 
 ## Assumptions and design choices
 
@@ -165,6 +167,7 @@ uv run ruff check
 - The tests use canned HTTP responses for the OpenAI backends. One live run on 2026-11-12 covered the eval set and 19 public insurance documents.
 - Insights read the first 240,000 characters of a document, so a longer document is covered only in part.
 - A chat sends eight passages to the answer step. On a 246-page manual, the passage that answered one question was not among them.
+- An answer is kept when at least one of its quotes is found in its source. A sentence whose quote is not found stays in the answer, without a citation number.
 - "Differs" in a comparison compares the text of two values, not their meaning, so two wordings of the same term are marked as different.
 - A comparison and a summary each run inside the request, as one model call of at most 90 s.
 - The spending cap is checked before each call, not reserved, so the day's spend can pass the cap.
