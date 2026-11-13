@@ -1,24 +1,42 @@
 # Doc Vault
 
-Upload documents, keep each re-upload as a new version, get cited insights, chat with them, compare them side by side, and rewrite a summary at the length, focus and tone a reader needs. Every answer, every compared value and every summary source points at a page you can open and check.
+Doc Vault is a document vault you can talk to. Upload a document and it writes a summary, tags and key facts. Then ask questions about one document or several, in plain language. Every answer, every compared value and every summary source points at a page you can open and check.
 
-The service is a FastAPI app with Celery workers. Postgres 16 with pgvector is the only datastore. One Redis is the Celery broker, and a second one holds the embedding cache and the answer cache, which the app runs without. `docs/design.md` explains the data model, the request flows, retrieval, the prompts, the assumptions and how it scales. `docs/lifecycle.md` covers the indexing state machine, and `docs/evals.md` covers answer quality.
+It answers the "AI-Powered Vault Document System" case study. The backend is a FastAPI app with Celery workers, Postgres with pgvector, Redis and the OpenAI API. A small web UI sits on top.
 
-## How it was built and checked
+## What it covers
 
-- `AI_USAGE.md` explains how AI coding tools were used, what went wrong and what caught it.
-- `docs/design.md` covers the data model, the request flow, retrieval, the prompts and how the system scales. `docs/evals.md` has the eval results, and `docs/lifecycle.md` has the model-checked document lifecycle.
-- `.claude/skills/verify-doc-vault/` drives the running app end to end on an isolated stack, and `.claude/skills/verify-lifecycle-model/` rechecks the lifecycle model after a code change.
+Everything the case study requires:
+
+| Requirement | How it is met |
+|---|---|
+| Upload and asynchronous processing | `POST /documents` returns 202 at once. Celery workers parse, chunk and embed the file, then write its insights. |
+| Document retrieval | `GET /documents` lists documents, with paging and a status filter. `GET /documents/{id}` returns one, with its status. |
+| AI insights | `GET /documents/{id}/insights` returns a title, a type, a summary, tags and key facts. Each key fact has its page and a quote found on that page. |
+| Document chat | `POST /chats` starts a chat, `POST /chats/{id}/messages` asks a question, and `GET /chats/{id}/messages` returns the history. A follow-up is rewritten into a standalone question, and every answer cites its pages. |
+| Metrics | `GET /metrics/documents` returns document statistics. `GET /metrics/processing` returns processing metrics, tokens and cost. |
+| Data storage | One Postgres schema, `docvault/schema.sql`, holds documents, insights, chats, turns with their citations, processing steps and AI calls. |
+
+From the case study's bonus list:
+
+- **Advanced AI features.** Multi-document chat, follow-up suggestions, summary options (length, focus and tone), a document type and tags, key facts, and side-by-side comparison.
+- **Technical excellence.** A web UI, live status updates, streamed answers, caching in Redis, pgvector, and tests for the backend and the UI.
+- **Production readiness.** Cost tracking with a daily spending cap, rate limits, document versions, batched embedding, request ids in the logs, and a health check.
 
 ## Run it
 
+You need Docker.
+
 ```bash
-cp .env.example .env      # then set OPENAI_API_KEY in .env. With no key the stack runs on the fake provider.
+cp .env.example .env      # then set OPENAI_API_KEY in .env
 docker compose up --build -d
 curl localhost:8000/health
 ```
 
-`GET /health` returns 200 with `"ai_mode": "live"` when `OPENAI_API_KEY` is set, and `"ai_mode": "fake"` when it is not. Swagger is at `http://localhost:8000/docs`. The web UI is at `http://localhost:3000`: upload documents, read their insights, chat with citations that open the cited page, and see the metrics. `web/README.md` describes it.
+`GET /health` returns `"ai_mode": "live"` when `OPENAI_API_KEY` is set. With no key the stack still runs, on a deterministic fake provider, and `/health` returns `"ai_mode": "fake"`. The fake provider is for tests and offline runs, so judge answer quality with a key.
+
+- The web UI is at `http://localhost:3000`.
+- Swagger is at `http://localhost:8000/docs`.
 
 `API_PORT`, `DB_PORT` and `WEB_PORT` change the host ports, so a second stack can run beside the first:
 
@@ -26,23 +44,13 @@ curl localhost:8000/health
 API_PORT=18000 DB_PORT=54339 WEB_PORT=13000 docker compose -p docvault-demo up --build -d
 ```
 
-Three settings control spend, caching and log format. `docvault/config.py` lists every setting, and `.env.example` the common ones.
+`.env.example` lists the common settings, and `docvault/config.py` lists every setting. To cap AI spend, set `DAILY_AI_BUDGET_USD`, in US dollars per day.
 
-| Variable | In compose | Effect |
-|---|---|---|
-| `DAILY_AI_BUDGET_USD` | Taken from the shell or `.env` by `api` and `worker`. Unset by default. | A cap on AI spend per UTC day, in US dollars, above 0. Unset or empty means no cap. |
-| `CACHE_URL` | Set to `redis://cache:6379/0` on `api` and `worker`. | The Redis for the embedding cache and the answer cache. Unset or empty means no cache. |
-| `LOG_FORMAT` | Set to `json` on `api`, `worker` and `beat`. | `json` writes one JSON object per line. `text`, the default outside compose, writes `LEVEL logger message key=value ...`. |
+## Try it
 
-Compose sets `CACHE_URL` and `LOG_FORMAT` in each service's `environment`, which overrides `.env`. To start the stack with a cap of $5 a day:
+**In the web UI.** Upload documents, read their insights, chat with citations that open the cited page, compare two documents, and see the metrics. `web/README.md` describes the UI.
 
-```bash
-DAILY_AI_BUDGET_USD=5 docker compose up -d
-```
-
-## Run the demo
-
-`scripts/demo.sh` drives the API with `curl` and `jq`. It uploads the three samples, waits until they are ready and their insights exist, prints the insights, then chats with them and prints every answer with its citations. It ends with the metrics.
+**From the command line.** `scripts/demo.sh` drives the API with `curl` and `jq`. It uploads the three samples, waits until they are ready and their insights exist, prints the insights, then chats with them and prints every answer with its citations. It ends with the metrics.
 
 ```bash
 scripts/demo.sh                              # API on localhost:8000
@@ -51,17 +59,76 @@ API=http://localhost:18000 scripts/demo.sh   # another stack
 
 A rerun on the same stack finds the samples already uploaded (HTTP 200) and reuses them.
 
-## Test it
+`samples/` holds three fictitious documents for the same insured: a seven-page commercial general liability policy (PDF), a three-page renewal quote with changed figures (PDF), and a short endorsement (DOCX). `samples/facts.yaml` lists the facts planted in them, each with its document, page and exact text. The tests and evals read that file as their expected values. To regenerate the samples, run `uv run python scripts/make_samples.py`.
 
-The tests use the compose Postgres on host port 54329, in their own database (`vault_test`). They call no model provider.
+## How it works
 
-```bash
-docker compose up -d db
-uv run pytest
-uv run ruff check
+```mermaid
+flowchart LR
+  client([Client or web UI]) --> api[api: FastAPI]
+  api --> db[(Postgres with pgvector)]
+  api -- jobs --> broker[(Redis broker)]
+  broker --> worker[worker: Celery]
+  beat[beat: every 60 s] -- reconcile --> broker
+  worker --> db
+  api --> ai[OpenAI, or the fake provider]
+  worker --> ai
 ```
 
-`TEST_DATABASE_URL` points the tests at another database. The eval test also creates `<that name>_evals`.
+A second Redis holds the embedding cache and the answer cache, and the app runs without it. Uploaded files live on disk.
+
+**From upload to ready**
+
+1. `POST /documents` saves the file, returns 202 and queues it. The same bytes uploaded again return the existing document.
+2. A Celery worker parses the file into pages, cuts the pages into overlapping chunks, and embeds the chunks in batches. The document is then `ready`.
+3. A second task writes the insights. A key fact is kept only when its quote is on the page it cites.
+4. A step that fails is retried. If a worker dies, `reconcile` finds the document after two minutes without progress and queues it again. No finished work is paid for twice.
+
+**From question to answer**
+
+1. A follow-up is rewritten into a standalone question, from the last four turns.
+2. The question is embedded. One SQL statement then ranks the chunks of the chat's documents by vector distance and full-text rank.
+3. If no chunk passes the relevance gate, the chat answers "not found" and makes no answer call.
+4. Otherwise the model answers from eight sources and quotes each source it uses.
+5. The code looks for every quote in the source it names. It drops a quote it cannot find, and a kept citation names the page where its quote starts.
+
+**Scale.** Uploads return at once and the work runs in Celery workers, so more `worker` replicas raise ingest throughput, and a lock on each document keeps duplicate jobs harmless. A file uploaded twice is stored and indexed once. Retrieval cost depends on the documents in a chat, not on the size of the vault. `docs/design.md` has timings at 5,000 and 50,000 documents, and says what changes past that.
+
+**Prompts.** `docvault/prompts.py` holds every prompt. Each prompt is versioned and carries a note on why it is worded the way it is. `docs/design.md` gives that reasoning in short.
+
+## Answer quality
+
+`docs/evals.md` scores a fixed set of 44 questions on the sample documents. 28 of them can be answered, with 34 expected facts between them, and 16 cannot.
+
+| Measure | With the OpenAI models | On the fake provider |
+|---|---|---|
+| Retrieval finds the expected fact | 34 of 34 | 21 of 34 |
+| The answer cites the fact on the right page | 30 of 34 | 7 of 34 |
+| A question with no answer in the documents is refused | 15 of 16 | 15 of 16 |
+
+One live run also covered 19 public insurance documents. Of 25 answerable questions, 21 were answered right and 4 in part, and every citation was on the page it named. `AI_USAGE.md` has the details.
+
+## API
+
+| Route | What it does |
+|---|---|
+| `POST /documents` | Upload a file. |
+| `GET /documents`, `GET /documents/{id}` | List documents, or read one. |
+| `GET /documents/{id}/insights` | Read the summary, tags and key facts. |
+| `GET /documents/{id}/pages/{n}` | Read the page that a citation points at. |
+| `GET /documents/{id}/versions` | List every version of a document. |
+| `POST /documents/{id}/retry`, `DELETE /documents/{id}` | Rerun a failed step, or delete a document. |
+| `POST /chats`, `GET /chats`, `GET /chats/{id}` | Start a chat over one or more documents, list chats, or read one. |
+| `POST /chats/{id}/messages` | Ask a question. |
+| `POST /chats/{id}/messages/stream` | Ask a question and stream the answer. |
+| `GET /chats/{id}/messages` | Read the chat history. |
+| `POST /comparisons`, `GET /comparisons`, `GET /comparisons/{id}` | Compare 2 to 5 documents field by field, list comparisons, or read one. |
+| `POST /documents/{id}/summaries`, `GET /documents/{id}/summaries` | Write the summary again at a length, focus and tone, or list the stored ones. |
+| `GET /events/documents` | Stream live document status. |
+| `GET /metrics/documents`, `GET /metrics/processing` | Read the document statistics and the processing metrics. |
+| `GET /health` | Check Postgres, Redis, the AI mode, the spending cap and the cache. |
+
+Every error has one shape, `{"error": {"code", "message", "retryable", "details"}}`. `docs/api.md` is the full reference, with a `curl` example for every route.
 
 ## Assumptions and design choices
 
@@ -80,41 +147,37 @@ The app uses neither LangChain nor LlamaIndex. Every citation must point at the 
 
 Retrieval is one SQL statement, `chat.EXACT_SQL`, that ranks the chat's chunks by pgvector distance and Postgres full-text rank. A framework would put its own chunking and retrieval in place of these steps. Kept in the repo, each step is tested and can be explained line by line. `docs/design.md` covers the other choices.
 
-## API
+## Test it
 
-`docs/api.md` is the full reference, with a `curl` example for every route. Swagger is at `http://localhost:8000/docs`.
+The tests use the compose Postgres on host port 54329, in their own database (`vault_test`). They call no model provider.
 
-## Sample documents
+```bash
+docker compose up -d db
+uv run pytest
+uv run ruff check
+```
 
-`samples/` holds three fictitious documents for the same insured: a seven-page commercial general liability policy (PDF), a three-page renewal quote with changed figures (PDF), and a short endorsement (DOCX). `samples/facts.yaml` lists the facts planted in them, each with its document, page, and exact text. The tests and evals read that file as their expected values.
+`TEST_DATABASE_URL` points the tests at another database. The eval test also creates `<that name>_evals`.
 
-To regenerate the samples, run `uv run python scripts/make_samples.py`. The output is byte-identical on every run.
+## Known limits
 
-## Status
+- Without `OPENAI_API_KEY`, answers come from the fake provider, which often quotes a neighbouring passage.
+- The tests use canned HTTP responses for the OpenAI backends. One live run on 2026-11-12 covered the eval set and 19 public insurance documents.
+- Insights read the first 240,000 characters of a document, so a longer document is covered only in part.
+- A chat sends eight passages to the answer step. On a 246-page manual, the passage that answered one question was not among them.
+- "Differs" in a comparison compares the text of two values, not their meaning, so two wordings of the same term are marked as different.
+- A comparison and a summary each run inside the request, as one model call of at most 90 s.
+- The spending cap is checked before each call, not reserved, so the day's spend can pass the cap.
+- Rate limits are per API process and per client address.
+- A new version is linked by filename alone, so two unrelated files uploaded under one name become versions of one document.
 
-This section lists what works at the current commit.
+`docs/design.md` ends with the full list.
 
-Built:
+## More to read
 
-- Compose stack: `api` on port 8000, `worker`, `beat`, `db` (pgvector 0.8.0 on Postgres 16), `redis` (the broker) and `cache` (a second Redis for the caches, which may evict any key and keeps nothing on disk).
-- Upload with content-hash dedupe, format detection from the file's bytes, and a 413 from the headers when Content-Length is over the limit.
-- Indexing in Celery: parse, chunk and embed, crash-safe under a per-document lock. A rerun after a crash embeds only the chunks still pending. `documents.reconcile` runs every 60 seconds. It re-enqueues stalled documents (at most 50 a tick, oldest re-enqueue first), re-embeds ready documents after the embedding model changes, and enqueues missing insights.
-- The AI gateway (`docvault/ai.py`): OpenAI and a deterministic fake, retries with backoff for chat calls, strict JSON-schema output with one repair turn (none for a comparison or a summary), and one priced `llm_calls` row per provider attempt.
-- Insights: title, type, summary, tags and key facts. A key fact is kept only when its quote is on the page it cites, and `coverage` reports how much of a long document was read.
-- Chat: multi-document, follow-ups rewritten into standalone queries, hybrid retrieval (vector and full text fused by reciprocal rank, with a per-document quota), a relevance gate, and citations verified against the source text with their exact page.
-- Streamed answers over server-sent events (`POST /chats/{id}/messages/stream`), through the same `chat.ask` as the plain route. The web UI shows the answer as it is written.
-- Live document status over server-sent events (`GET /events/documents`). Postgres triggers send a NOTIFY on every commit that changes what `GET /documents/{id}` returns. One listener per API process reads each changed document once per 100 ms burst and sends it to every open stream. The web UI updates its document list from the stream and polls only while the stream is down.
-- Up to three follow-up suggestions per turn, which the UI offers as one-click questions. On the evals, 108 of 108 suggestions asked come back answered.
-- Side-by-side comparison (`POST /comparisons`): 2 to 5 ready documents aligned field by field in one model call. Each cell's quote is checked on the page it cites, and `differs` is computed in code. In the web UI, the Compare section, the new-chat screen and each document page start one, and every value opens its page with the quote marked. On the samples, the fake marks 3 of the 4 planted changes between the policy and its renewal quote.
-- Summary options (`POST /documents/{id}/summaries`): the document's summary written again at a length (about 60, 150 or 300 words), about a focus, and in a plain, formal or client tone, from the page prefix insights read. Up to 6 sources are each checked on the page they cite. A summary is stored by document, normalised options, model and prompt version, so asking again returns it with no model call. In the web UI, "Rewrite the summary" sits under each ready document's summary, with its earlier rewrites, and each source opens its page with the quote marked. On the fake, every source of the three samples grounds at every length (`docs/evals.md`).
-- Document versions: new bytes under a stored filename, or sent with `replaces=<id>`, become the next version of that document's family (`family_id`, `version`, `latest_version`). A unique index on the family and number makes two concurrent uploads into one family take the next two numbers; the one that loses retries with the next number. An upload that loses 10 races in a row is 409 `version_conflict` with `retryable: true`, and its bytes are not kept. `GET /documents?latest=true` lists each family once and `GET /documents/{id}/versions` lists a family. In the web UI, the rail lists the latest version of each document with a "v2" mark, and follows live events as versions arrive and go. A document page says "Version 2 of 2" with links to the others. An earlier version opens with a note that links the newest. "Compare with version N" compares the two, "Versions (n)" lists the family, and "Upload a new version" sends a file of any name as the next version.
-- Request ids and logs: every response carries `X-Request-ID`, the client's own when it is safe to echo, or a fresh one. The API logs one line per request when the response ends, streams included, with the method, route template, status, latency and client. Celery carries the id into the tasks a request queues, so the worker's step lines and every `llm_calls` row name the request that caused them. Compose writes the API, worker and beat logs as one JSON object per line. In the web UI, a server failure ends with "Reference <id>.", so a reader can quote it.
-- Daily AI spending cap (`DAILY_AI_BUDGET_USD`): once today's spend in the ledger reaches the cap, asks, comparisons and new summaries get 429 `quota_exceeded` with `Retry-After` until midnight UTC, and new insights fail with a reason that says why. The gateway never caps embedding calls, so uploads are indexed and reach `ready` over the cap. `/health` reports the cap and today's spend. In the web UI, Ask, Compare and Rewrite the summary say the cap and when it resets in the reader's time, with no Try again until then, and Metrics has a Spending cap section.
-- Caches in a second Redis (`CACHE_URL`): the embedding cache sends the provider only texts that no earlier call embedded with the same model, so a repeated text costs nothing. The answer cache returns a chat's first question, answered before on the same documents, as a new turn marked `cached` with no model call, over the spending cap too. When the cache is down, the app runs as before without the savings, and `/health` reports `cache: "unreachable"`. `/metrics/processing` counts each cache's hits and misses. In the web UI, a cached turn reads "Saved earlier, no new model call.", and Metrics has a Caches section with hits, misses and hit rate.
-- Metrics: `GET /metrics/documents` and `GET /metrics/processing`, each figure read at request time from the one table that records it, apart from the cache counts, which the cache Redis keeps.
-- Per-client rate limits on upload and ask.
-- Evals: `python -m docvault.evals` scores retrieval, citations, refusals, insights, comparisons and summary sources separately on a fixed broker case set, and calibrates the relevance gate. Results are in `docs/evals.md`.
-- A TLA+ model of the indexing lifecycle, checked by `formal/check.py` (`docs/lifecycle.md`).
-- `scripts/demo.sh` and `scripts/scale_probe.py`.
-
-Known limits are listed at the end of `docs/design.md`.
+- `AI_USAGE.md` explains how AI coding tools were used, where the AI was wrong, and what caught it.
+- `docs/design.md` covers the data model, the request flows, retrieval, the prompts, the caches, scale and every known limit.
+- `docs/api.md` is the API reference.
+- `docs/evals.md` has the answer-quality results and how they are measured.
+- `docs/lifecycle.md` shows how a document moves through indexing, as a state chart checked with the TLA+ model in `formal/`.
+- `.claude/skills/` holds the two verification kits that the AI agents ran: one drives the running app end to end, and one rechecks the lifecycle model.
