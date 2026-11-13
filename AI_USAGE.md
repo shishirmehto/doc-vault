@@ -57,7 +57,6 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 - **An app verification skill** (`.claude/skills/verify-doc-vault/`). It starts an isolated stack on its own ports and volumes, checks it, and drives each feature through the public API or the browser. It saves the evidence and removes only what it started. Its first run found two bugs in its own health-check script, and both were fixed before it was committed.
 - **UI runs** with Playwright, with screenshots and a log of every input event, so a stray click could not pass as a result.
 - **A visibility check on every screen** (`.claude/skills/verify-doc-vault/scripts/visible.js`). It lists clipped text, controls that no scroll can reach, and sideways page scroll. The final UI pass ran it on 53 screens at four window sizes, and it returned nothing on any of them.
-- **Behaviour pinned during the clean-up.** Before the quality pass changed any code, it saved the API schema, the rendered prompts, the eval results and each screen's element layout. After every commit, all were unchanged, apart from one animation frame.
 
 ## The live run
 
@@ -118,7 +117,7 @@ What the run left open:
 - Adding all the bonus features, and the rule that everything in the UI must be visible: nothing clipped, hidden, or reachable only by URL.
 - No paid model calls until a key was provided. Everything ran on the fake provider until then.
 - Testing on real insurance documents as well as the generated samples. That run found the three parsing bugs above.
-- Turning down changes that the lead agent proposed near the end and that the case study does not ask for, such as a setting for remote access.
+- Reverting a late change that bound the compose ports to localhost only, because the case study does not ask for it.
 
 ## Reproduce the checks
 
