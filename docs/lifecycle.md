@@ -77,6 +77,7 @@ stateDiagram-v2
 - **Embedding** commits after every batch of chunks. A crash keeps the batches already written, and the next attempt embeds only the chunks still missing.
 - **Ready for chat** means every chunk has an embedding. Insights (summary, key facts) run separately, so a slow or failed summary never blocks chat. They are not in this chart.
 - **Failed** stays failed until you call `POST /documents/{id}/retry`. A retry goes back to Queued. If the pages were already saved, the worker skips parsing and resumes embedding.
+- The two arrows out of Parsing that name the AI provider are paths the code cannot take, because the code calls the provider only while it embeds. The model allows them, and extra paths can only make a rule harder to hold.
 - "A worker holds the lease" means a worker holds the document's Postgres advisory lock (`db.pipeline_steps`). Postgres releases the lock when a worker dies. A duplicate job that cannot get the lock exits without doing anything.
 - "The worker marks it failed (lease held)" is the failure path. `run_index` writes FAILED on its lease connection and only then releases the lease.
 - "Waiting for a worker" is where a crashed or retried job sits until Celery redelivers it. It also covers a document that the minute check (`documents.reconcile`, every 60 seconds) re-queues after it has not moved for two minutes. Each tick re-queues at most 50 stale documents, the ones re-queued longest ago first, so a large backlog is worked through over several ticks rather than flooding the queue.
@@ -90,7 +91,7 @@ stateDiagram-v2
 | `ParsedOnce` | Pages and chunks are written once. A rerun never parses again. | Holds |
 | `OneWorkerAtATime` | Only one worker works on a document at a time, including while it records a failure. | Holds |
 | `NotFailedWhileWorking` | A document never shows Failed while a worker is still processing it. | Holds since `3437628` (was finding F1) |
-| `ReadyStaysReady` | A ready document never goes back to another status. | Holds |
+| `ReadyStaysReady` | A ready document never goes back to another status. The code has one exception, which the model leaves out: re-embedding after the embedding model changes. | Holds |
 | `FailedWaitsForYou` | A failed document changes only when you press retry. | Holds |
 | `AlwaysSettles` | Every document in flight ends Ready or Failed, whatever crashes or duplicate jobs happen. | Holds |
 
@@ -114,6 +115,7 @@ The same race happened when the AI provider used up its retries, and on unexpect
 ## What the model leaves out
 
 - Insights (`run_analyze`), document deletes, and re-embedding after an embedding-model change.
+- An unexpected error. `run_index` marks the document Failed from any status in flight, Queued included, so the chart has no arrow from Queued to Failed.
 - Time. The two-minute stale threshold is modelled as "may happen at any moment", which can only add orders of events, never remove them.
 - The 50-per-tick bound on reconcile. The model lets reconcile re-queue any in-flight document at any moment, which covers every choice the bounded rule can make.
 - Size. The gate runs with 2 workers, 2 chunks, 1 crash, 2 provider faults, 1 Celery retry, 1 user retry and at most 2 queued jobs. The chart above uses 1 worker and 1 chunk, so it stays readable. A pass covers these bounds, not every possible run.

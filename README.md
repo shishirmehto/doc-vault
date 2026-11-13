@@ -39,7 +39,7 @@ curl localhost:8000/health
 
 `GET /health` returns `"ai_mode": "live"` when `OPENAI_API_KEY` is set. With no key the stack still runs, on a deterministic fake provider, and `/health` returns `"ai_mode": "fake"`. The fake provider is for tests and offline runs, so judge answer quality with a key.
 
-`live` means that a key is set, not that the key works. To confirm it, ask one question and read `GET /metrics/processing`. Its `ai.cost_usd` is above zero only on the OpenAI models.
+`live` means that a key is set, not that the key works. To confirm it, ask one question and read `GET /metrics/processing`. On the default models, its `ai.cost_usd` is then above zero.
 
 - The web UI is at `http://localhost:3000`.
 - Swagger is at `http://localhost:8000/docs`.
@@ -180,7 +180,7 @@ uv run ruff check
 - A comparison and a summary each run inside the request, as one model call of at most 90 s.
 - The spending cap is checked before each call, not reserved, so the day's spend can pass the cap.
 - Rate limits are per API process and per client address.
-- A new version is linked by filename alone, so two unrelated files uploaded under one name become versions of one document.
+- Unless an upload passes `?replaces=<id>`, a new version is linked by filename, so two unrelated files uploaded under one name become versions of one document.
 
 `docs/limits.md` has the full list.
 
