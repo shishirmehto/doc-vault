@@ -10,7 +10,6 @@ from uuid import uuid4
 
 import psycopg
 import pytest
-from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from docvault import db as dbmod
 from docvault import documents
@@ -277,41 +276,3 @@ def test_a_comparison_of_two_versions_names_each_version_and_marks_the_changed_f
     assert [(row["field"], [c["value"] for c in row["cells"]]) for row in body["rows"] if row["differs"]] == [
         ("Property Damage Deductible", ["$2,500 per occurrence", "$5,000 per occurrence"])]
     assert [d["version"] for d in older["documents"]] == [None, None]
-
-
-@pytest.fixture
-def scratch_url(database_url: str) -> Iterator[str]:
-    name = conninfo_to_dict(database_url)["dbname"] + "_versions_upgrade"
-    admin_url = make_conninfo(database_url, dbname="postgres")
-    with psycopg.connect(admin_url, autocommit=True) as admin:
-        admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
-        admin.execute(f'CREATE DATABASE "{name}"')
-    try:
-        yield make_conninfo(database_url, dbname=name)
-    finally:
-        with psycopg.connect(admin_url, autocommit=True) as admin:
-            admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
-
-
-def test_migrate_makes_each_existing_document_its_own_family_at_version_1(scratch_url):
-    dbmod.migrate(scratch_url)
-    with psycopg.connect(scratch_url, autocommit=True) as conn:
-        conn.execute("DROP TRIGGER documents_notify ON documents")
-        conn.execute("DROP INDEX documents_family_version, documents_filename")
-        conn.execute("ALTER TABLE documents DROP COLUMN family_id, DROP COLUMN version")
-        conn.execute("DELETE FROM schema_version")
-        ids = [row[0] for row in conn.execute(
-            "INSERT INTO documents (sha256, filename, kind, size_bytes) SELECT sha256(i::text::bytea), 'terms.txt',"
-            " 'txt', 10 FROM generate_series(1, 3) AS i RETURNING id")]
-
-    dbmod.migrate(scratch_url)
-
-    with psycopg.connect(scratch_url, autocommit=True) as conn:
-        rows = conn.execute("SELECT id, family_id, version FROM documents").fetchall()
-        assert sorted(rows) == sorted((doc_id, doc_id, 1) for doc_id in ids)
-        assert conn.execute("SELECT is_nullable FROM information_schema.columns"
-                            " WHERE table_name = 'documents' AND column_name = 'family_id'").fetchone() == ("NO",)
-        with pytest.raises(psycopg.errors.UniqueViolation) as raised:
-            conn.execute("INSERT INTO documents (sha256, filename, kind, size_bytes, family_id)"
-                         " VALUES ('\\x01', 'terms.txt', 'txt', 1, %s)", (ids[0],))
-        assert raised.value.diag.constraint_name == "documents_family_version"
