@@ -21,15 +21,8 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
    - phase 2: the AI gateway, insights, chat;
    - phase 3: metrics, hardening, evals, the demo script, the docs;
    - the web UI, in three passes, then a design pass;
-   - the bonus features, one phase each, in this order:
-     - streamed answers and follow-up suggestions;
-     - a UI audit pass;
-     - live document status;
-     - side-by-side comparison;
-     - summary options;
-     - document versions;
-     - caching, a daily spending cap and request logs;
-     - a final UI pass that brought every feature into one layout;
+   - the bonus features, one phase each: streamed answers and follow-up suggestions, live document status, side-by-side comparison, summary options, document versions, then caching, a daily spending cap and request logs;
+   - two more UI passes: an audit, and a final pass that brought every feature into one layout;
    - a quality pass (`/simplify` and a comment review) over the bonus phases that had skipped it.
 
    The phases ran one at a time because they shared files, the dev stack and the test database.
@@ -42,21 +35,11 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
    - it rewrote a summary twice and counted the ledger rows;
    - it uploaded a second version under the same name;
    - it asked one first question in two chats and checked that the second made no model call.
-6. **Decision log.** Every decision went into a log with what was decided, why, the evidence and the result. The log holds more than 70 decisions and is kept outside the repo.
+6. **Decision log.** Every decision went into a log with what was decided, why, the evidence and the result. The log is kept outside the repo.
 
 ## Verification beyond unit tests
 
-- **A formal model of the document lifecycle** (`formal/`, `docs/lifecycle.md`). A TLA+ model covers one document moving through indexing while workers crash, the provider fails, jobs arrive twice and the user presses retry. The TLC model checker tries every order of those events within small bounds, against seven rules, such as "a document never shows Failed while a worker is still processing it". The model found a real race, F1, before any test did. It also rejected the first fix idea with a counterexample in which an unparseable file loops forever. Each rule is also shown to fail on a deliberately broken copy of the model (`python3 formal/check.py --mutants`). A project skill, `.claude/skills/verify-lifecycle-model/`, tells the next agent when a code change needs the model rechecked. Its first use was the phase 3 change to reconcile.
-- **Repro-first bug fixing.** The F1 fix started with a test against real Postgres advisory locks (`tests/test_lifecycle_race.py`), committed as an expected failure. It failed on the old code for all three ways a run can fail, then passed after the fix.
-- **An app verification skill** (`.claude/skills/verify-doc-vault/`). It starts an isolated stack on its own ports and volumes, checks it, and drives each feature through the public API or the browser. It saves the evidence and removes only what it started. Its first run found two bugs in its own health-check script, and both were fixed before it was committed.
 - **Evals** (`docs/evals.md`). Retrieval, citations, refusals and insights are scored separately, so a miss shows the step where it happened. The relevance threshold was fitted on a frozen case set, never on a single question.
-- **UI runs** with Playwright, with screenshots and a log of every input event, so a stray click could not pass as a result.
-- **A visibility check on every screen** (`.claude/skills/verify-doc-vault/scripts/visible.js`). It runs in the page and lists:
-  - any text clipped by overflow, ellipsis or line clamps;
-  - any control that sits off screen where no scroll container can reach it;
-  - any sideways page scroll.
-
-  The final UI pass ran it on 53 screens at four window sizes, on the dev stack and on a fresh one, and it returned nothing on any of them. Keyboard-only walks checked that every control in the top bar, the document actions and the comparison table takes focus with a visible ring.
 - **Real documents.** 19 public insurance documents ran through an isolated stack on the fake provider:
   - policy forms in two editions;
   - declarations pages;
@@ -70,6 +53,16 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
   - words broken at line ends read as "infor- mation".
 
   All three were fixed test-first and checked again on the same files.
+- **A formal model of the document lifecycle** (`formal/`, `docs/lifecycle.md`). A TLA+ model covers one document moving through indexing while workers crash, the provider fails, jobs arrive twice and the user presses retry. The TLC model checker tries every order of those events within small bounds, against seven rules, such as "a document never shows Failed while a worker is still processing it". The model found a real race, F1, before any test did. It also rejected the first fix idea with a counterexample in which an unparseable file loops forever. Each rule is also shown to fail on a deliberately broken copy of the model (`python3 formal/check.py --mutants`). A project skill, `.claude/skills/verify-lifecycle-model/`, tells the next agent when a code change needs the model rechecked. Its first use was the phase 3 change to reconcile.
+- **Repro-first bug fixing.** The F1 fix started with a test against real Postgres advisory locks (`tests/test_lifecycle_race.py`), committed as an expected failure. It failed on the old code for all three ways a run can fail, then passed after the fix.
+- **An app verification skill** (`.claude/skills/verify-doc-vault/`). It starts an isolated stack on its own ports and volumes, checks it, and drives each feature through the public API or the browser. It saves the evidence and removes only what it started. Its first run found two bugs in its own health-check script, and both were fixed before it was committed.
+- **UI runs** with Playwright, with screenshots and a log of every input event, so a stray click could not pass as a result.
+- **A visibility check on every screen** (`.claude/skills/verify-doc-vault/scripts/visible.js`). It runs in the page and lists:
+  - any text clipped by overflow, ellipsis or line clamps;
+  - any control that sits off screen where no scroll container can reach it;
+  - any sideways page scroll.
+
+  The final UI pass ran it on 53 screens at four window sizes, on the dev stack and on a fresh one, and it returned nothing on any of them. Keyboard-only walks checked that every control in the top bar, the document actions and the comparison table takes focus with a visible ring.
 - **Behaviour pinned during the clean-up.** Before the quality pass changed any code, it saved:
   - a byte-level dump of the API schema and the rendered prompts;
   - the eval results;
@@ -77,57 +70,9 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 
   After every commit, all three were unchanged, apart from one animation frame.
 
-## Where the AI was wrong, and what caught it
+## The live run
 
-| What went wrong | What caught it |
-|---|---|
-| Every agent role first ran on the most expensive model | I set a model per role: cheaper models for exploring, the strongest for judgement |
-| The UI design runners could read the judge's rubric | The runners' own reports. The rubric moved out of their folder, and the pick was checked against the judge's evidence, not the scores |
-| The first F1 fix would loop forever on a file that never parses | The model checker's counterexample |
-| The model check reported wrong state counts. It read a progress line, not the final count | Three runs on the same inputs gave three different numbers |
-| The fake provider refuses a comparison that uses a word no chunk holds ("differ"), and missed an elliptical follow-up ("And the premium?") | The UI agent ran the demo questions word for word and would not reword them to pass. Both are now eval cases |
-| An automated comment-removal pass deleted comments that explain non-obvious reasons | The owner agent reviewed the edits and reverted them |
-| A UI agent saw the page change while it was not touching it | An idle watcher with input logging showed that no code path did it. The cause was a click in the visible test browser |
-| The verification skill's health check printed FAIL after every OK, and one recipe expected progress on a finished document | Running the skill once, end to end, before committing it |
-| Below 1100 px wide, the chat's question box covered the source page it had just opened | The design pass, which checked each screen in a browser at 1024 px and on a phone |
-| The question box disappeared in my own browser on a chat with three turns, and the lead agent could not reproduce it | Anything placed above the app, such as a browser extension's bar or a margin on the page, pushed the box off screen. The UI audit pass reproduced this by injecting such elements and rebuilt the layout so the content scrolls above a fixed footer row |
-| Streamed answers arrived all at once at the end | Measuring the gap between pieces through the web server: its rewrite compressed the stream. The API now marks the stream as not to be transformed |
-| While changing comparisons, a fixer agent removed the repair turn for insights | The phase owner's review of the fixer's diff. A table test now pins every AI purpose's retries, repair and timeout |
-| An owner agent rewrote its own commit messages after the fact | The lead agent's history check. Later briefs forbid history rewrites |
-| An owner agent ran out of room and left a helper writing uncommitted code | The lead agent waited for the helper to finish, then started a fresh owner with one consolidated brief, so two agents never wrote the same files |
-| The spending-cap docs said search keeps working over the cap, but chat is the only search, and it is capped | The second owner of that phase. The docs now say uploads are still indexed |
-| After a delete, a capped document list shrank and stayed short | An independent review agent. The list now reads again after a delete |
-| The visibility check called every page link in a wide comparison table unreachable | A probe that reached every link. The check was fixed, and its negative probes still fail as they should |
-| The fix for doubled bold text would also have halved template placeholders, so "YYYY" read "YY" | The lead agent ran the new extraction on the real documents before accepting it. The flood manual has seven "YYYY" date fields |
-| The calibration's best-fit gate threshold (0.518) would have refused 12 of 28 answerable questions | The lead agent tabulated how many answerable and out-of-scope turns each threshold passes, and set 0.20, below the lowest answerable turn |
-| The first citation check on real documents flagged correct quotes as off the page | Reading the pages: the reference reader's layout mode had merged two columns. The check switched to reading order and word overlap |
-
-## AI inside the product
-
-- Every prompt lives in `docvault/prompts.py`. Each is versioned and carries a note on why it is worded the way it is.
-- **Grounding.** Every quote in an answer is located on its cited page, and the page's own text replaces the model's copy. Citations that cannot be found are dropped. Key facts in insights must quote their page, and those that don't are dropped and counted.
-- **Relevance gate.** It runs before the answer call, so an off-topic question costs no answer tokens.
-- **Follow-ups.** Each follow-up is rewritten into a standalone question, which is stored and returned as `interpreted_as`.
-- **Ledger.** Every provider call is written to an append-only ledger with its tokens and cost. The metrics endpoints read it, so cost and latency are measured, not estimated.
-- **Fake provider.** A deterministic fake makes the tests, the evals and a no-key run possible.
-- **Streaming.** Answers stream as they are written. The grounded answer replaces the draft once it has been checked.
-- **Comparisons.** Every comparison cell must quote its page, or it is dropped. Whether two values differ is computed in code, not by the model.
-- **Rewritten summaries** keep only the sources found on their pages.
-- **Caches** are keyed by content. Embeddings are keyed by the exact text, and answers by every input that shapes them, so a cached answer can never be stale.
-- **A daily spending cap** refuses new generation once the day's measured spend reaches it.
-- **Request ids.** Every request gets an id that follows it into background jobs and onto every ledger row it caused.
-
-## What I decided
-
-- The scope, and the decisions in the plan.
-- The model-per-role sheet for the agents.
-- Adding the web UI, the lifecycle chart as documentation, the verification skills, and the F1 fix.
-- Adding all the bonus features, and the rule that everything in the UI must be visible: nothing clipped, hidden, or reachable only by URL.
-- No paid model calls until a key was provided. Everything ran on the fake provider until then.
-
-## Limits
-
-One live run with the OpenAI key, on 2026-11-12, cost $3.17 on the ledger. It covered:
+One live run with the OpenAI key, on 2026-11-12, cost $3.17 on the ledger, $1.18 of it for the eval set. It covered:
 - **The eval set:** the numbers are in `docs/evals.md`, live and fake side by side.
 - **The 19 real documents.** Before any paid call, the lead agent wrote the expected answer and page for 31 broker questions from the documents' own text. Six of the questions have no answer in their document.
   - Of the 25 answerable questions, 21 were answered right.
@@ -149,6 +94,42 @@ What the run left open:
 - A word broken at a line end, with a stray space inside it, stays split ("se t-tlements") when the document never uses it whole. That happens in the oldest standard forms.
 - Insights read the first 240,000 characters, so they cover only part of the longest document.
 - The eval's case set was written for the sample documents. The 31 real-document questions are a hand-graded spot check, not a scored set.
+
+## Where the AI was wrong, and what caught it
+
+| What went wrong | What caught it |
+|---|---|
+| The first F1 fix would loop forever on a file that never parses | The model checker's counterexample |
+| While changing comparisons, a fixer agent removed the repair turn for insights | The phase owner's review of the fixer's diff. A table test now pins every AI purpose's retries, repair and timeout |
+| Streamed answers arrived all at once at the end | Measuring the gap between pieces through the web server: its rewrite compressed the stream. The API now marks the stream as not to be transformed |
+| The fix for doubled bold text would also have halved template placeholders, so "YYYY" read "YY" | The lead agent ran the new extraction on the real documents before accepting it. The flood manual has seven "YYYY" date fields |
+| The calibration's best-fit gate threshold (0.518) would have refused 12 of 28 answerable questions | The lead agent tabulated how many answerable and out-of-scope turns each threshold passes, and set 0.20, below the lowest answerable turn |
+| After a delete, a capped document list shrank and stayed short | An independent review agent. The list now reads again after a delete |
+| The fake provider refuses a comparison that uses a word no chunk holds ("differ"), and missed an elliptical follow-up ("And the premium?") | The UI agent ran the demo questions word for word and would not reword them to pass. Both are now eval cases |
+| The first citation check on real documents flagged correct quotes as off the page | Reading the pages: the reference reader's layout mode had merged two columns. The check switched to reading order and word overlap |
+| The question box disappeared in my own browser on a chat with three turns, and the lead agent could not reproduce it | Anything placed above the app, such as a browser extension's bar or a margin on the page, pushed the box off screen. The UI audit pass reproduced this by injecting such elements and rebuilt the layout so the content scrolls above a fixed footer row |
+| The spending-cap docs said search keeps working over the cap, but chat is the only search, and it is capped | The second owner of that phase. The docs now say uploads are still indexed |
+| Every agent role first ran on the most expensive model | I set a model per role: cheaper models for exploring, the strongest for judgement |
+| The UI design runners could read the judge's rubric | The runners' own reports. The rubric moved out of their folder, and the pick was checked against the judge's evidence, not the scores |
+| An automated comment-removal pass deleted comments that explain non-obvious reasons | The owner agent reviewed the edits and reverted them |
+
+## AI inside the product
+
+- Every prompt lives in `docvault/prompts.py`. Each is versioned and carries a note on why it is worded the way it is.
+- **Grounding.** Every quote in an answer is located on its cited page, and the page's own text replaces the model's copy. Citations that cannot be found are dropped. Key facts in insights must quote their page, and those that don't are dropped and counted.
+- **Relevance gate.** It runs before the answer call, so an off-topic question costs no answer tokens.
+- **Follow-ups.** Each follow-up is rewritten into a standalone question, which is stored and returned as `interpreted_as`.
+- **Ledger.** Every provider call is written to an append-only ledger with its tokens and cost. The metrics endpoints read it, so cost and latency are measured, not estimated.
+- **Fake provider.** A deterministic fake makes the tests, the evals and a no-key run possible.
+- **Comparisons.** Every comparison cell must quote its page, or it is dropped. Whether two values differ is computed in code, not by the model.
+
+## What I decided
+
+- The scope, and the decisions in the plan.
+- The model-per-role sheet for the agents.
+- Adding the web UI, the lifecycle chart as documentation, the verification skills, and the F1 fix.
+- Adding all the bonus features, and the rule that everything in the UI must be visible: nothing clipped, hidden, or reachable only by URL.
+- No paid model calls until a key was provided. Everything ran on the fake provider until then.
 
 ## Reproduce the checks
 
