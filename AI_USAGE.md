@@ -35,12 +35,11 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
    - it rewrote a summary twice and counted the ledger rows;
    - it uploaded a second version under the same name;
    - it asked one first question in two chats and checked that the second made no model call.
-6. **Decision log.** Every decision went into a log with what was decided, why, the evidence and the result. The log is kept outside the repo.
 
 ## Verification beyond unit tests
 
 - **Evals** (`docs/evals.md`). Retrieval, citations, refusals and insights are scored separately, so a miss shows the step where it happened. The relevance threshold was fitted on a frozen case set, never on a single question.
-- **Real documents.** 19 public insurance documents ran through an isolated stack on the fake provider:
+- **Real documents.** Before the live run below, 19 public insurance documents ran through an isolated stack on the fake provider:
   - policy forms in two editions;
   - declarations pages;
   - cyber and professional liability wordings;
@@ -57,18 +56,8 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 - **Repro-first bug fixing.** The F1 fix started with a test against real Postgres advisory locks (`tests/test_lifecycle_race.py`), committed as an expected failure. It failed on the old code for all three ways a run can fail, then passed after the fix.
 - **An app verification skill** (`.claude/skills/verify-doc-vault/`). It starts an isolated stack on its own ports and volumes, checks it, and drives each feature through the public API or the browser. It saves the evidence and removes only what it started. Its first run found two bugs in its own health-check script, and both were fixed before it was committed.
 - **UI runs** with Playwright, with screenshots and a log of every input event, so a stray click could not pass as a result.
-- **A visibility check on every screen** (`.claude/skills/verify-doc-vault/scripts/visible.js`). It runs in the page and lists:
-  - any text clipped by overflow, ellipsis or line clamps;
-  - any control that sits off screen where no scroll container can reach it;
-  - any sideways page scroll.
-
-  The final UI pass ran it on 53 screens at four window sizes, on the dev stack and on a fresh one, and it returned nothing on any of them. Keyboard-only walks checked that every control in the top bar, the document actions and the comparison table takes focus with a visible ring.
-- **Behaviour pinned during the clean-up.** Before the quality pass changed any code, it saved:
-  - a byte-level dump of the API schema and the rendered prompts;
-  - the eval results;
-  - each screen's element layout.
-
-  After every commit, all three were unchanged, apart from one animation frame.
+- **A visibility check on every screen** (`.claude/skills/verify-doc-vault/scripts/visible.js`). It lists clipped text, controls that no scroll can reach, and sideways page scroll. The final UI pass ran it on 53 screens at four window sizes, and it returned nothing on any of them.
+- **Behaviour pinned during the clean-up.** Before the quality pass changed any code, it saved the API schema, the rendered prompts, the eval results and each screen's element layout. After every commit, all were unchanged, apart from one animation frame.
 
 ## The live run
 
@@ -89,10 +78,8 @@ One live run with the OpenAI key, on 2026-11-12, cost $3.17 on the ledger, $1.18
   - streamed answers arrived in about 90 pieces, the first after 2.7 s.
 
 What the run left open:
-- "Differs" in a comparison compares the cells' text, not their meaning. Two editions of one wording, which say the same thing in different words, are marked as different.
-- Retrieval sends eight passages to the answer step. On the 246-page manual, the passage that answered one question was not among them.
+- Three limits that the README lists: "Differs" compares text and not meaning, a chat sends eight passages to the answer step, and insights read the first 240,000 characters.
 - A word broken at a line end, with a stray space inside it, stays split ("se t-tlements") when the document never uses it whole. That happens in the oldest standard forms.
-- Insights read the first 240,000 characters, so they cover only part of the longest document.
 - The eval's case set was written for the sample documents. The 31 real-document questions are a hand-graded spot check, not a scored set.
 
 ## Where the AI was wrong, and what caught it
@@ -130,6 +117,8 @@ What the run left open:
 - Adding the web UI, the lifecycle chart as documentation, the verification skills, and the F1 fix.
 - Adding all the bonus features, and the rule that everything in the UI must be visible: nothing clipped, hidden, or reachable only by URL.
 - No paid model calls until a key was provided. Everything ran on the fake provider until then.
+- Testing on real insurance documents as well as the generated samples. That run found the three parsing bugs above.
+- Turning down changes that the lead agent proposed near the end and that the case study does not ask for, such as a setting for remote access.
 
 ## Reproduce the checks
 
