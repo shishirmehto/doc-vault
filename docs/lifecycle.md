@@ -65,9 +65,9 @@ stateDiagram-v2
   class s10 blue
   class s12 orange
   class s14 teal
-  classDef blue fill:#e8f0fe,stroke:#3b6fb6
-  classDef teal fill:#e3f4f1,stroke:#2b8a7e
-  classDef orange fill:#fdecdf,stroke:#c7621a
+  classDef blue fill:#e8f0fe,stroke:#3b6fb6,color:#1f2328
+  classDef teal fill:#e3f4f1,stroke:#2b8a7e,color:#1f2328
+  classDef orange fill:#fdecdf,stroke:#c7621a,color:#1f2328
 ```
 
 ## How to read it
