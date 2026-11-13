@@ -254,7 +254,7 @@ Its `cache` block counts the embedding cache per text embedded and the answer ca
 "cache": {"embedding": {"hits": 1, "misses": 3}, "answer": {"hits": 2, "misses": 1}, "counted_since": "2026-11-12T02:00:55.418090Z"}
 ```
 
-`GET /health` reports Postgres, the broker Redis, the AI mode, the embedding model, `max_upload_bytes`, the spending cap and the cache. It returns 503 when Postgres or the broker Redis is unreachable. `ai_budget` holds `limit_usd` and `spent_today_usd`, the ledger's spend since midnight UTC. It is null when no cap is set, or while Postgres is unreachable. `cache` is `ok`, `unreachable` or `off` (no `CACHE_URL`). An unreachable cache never makes `/health` 503, because the app answers without it.
+`GET /health` reports Postgres, the broker Redis, the AI mode, the embedding model, `max_upload_bytes`, the spending cap and the cache. `ai_mode` is `live`, `fake`, or `mixed` when only one of `CHAT_PROVIDER` and `EMBED_PROVIDER` resolves to the fake provider. It returns 503 when Postgres or the broker Redis is unreachable. `ai_budget` holds `limit_usd` and `spent_today_usd`, the ledger's spend since midnight UTC. It is null when no cap is set, or while Postgres is unreachable. `cache` is `ok`, `unreachable` or `off` (no `CACHE_URL`). An unreachable cache never makes `/health` 503, because the app answers without it.
 
 ```json
 {"db": "ok", "redis": "ok", "ai_mode": "fake", "embed_model": "fake-hash-1536", "max_upload_bytes": 52428800,

@@ -4,6 +4,8 @@ Doc Vault is a document vault you can talk to. Upload a document and it writes a
 
 It answers the "AI-Powered Vault Document System" case study. The backend is a FastAPI app with Celery workers, Postgres with pgvector, Redis and the OpenAI API. A small web UI sits on top.
 
+It was built with Claude Code, an AI coding agent. `AI_USAGE.md` says how the agents were used, where they were wrong, and what caught each mistake.
+
 ## What it covers
 
 Everything the case study requires:
@@ -37,6 +39,8 @@ curl localhost:8000/health
 
 `GET /health` returns `"ai_mode": "live"` when `OPENAI_API_KEY` is set. With no key the stack still runs, on a deterministic fake provider, and `/health` returns `"ai_mode": "fake"`. The fake provider is for tests and offline runs, so judge answer quality with a key.
 
+`live` means that a key is set, not that the key works. To confirm it, ask one question and read `GET /metrics/processing`. Its `ai.cost_usd` is above zero only on the OpenAI models.
+
 - The web UI is at `http://localhost:3000`.
 - Swagger is at `http://localhost:8000/docs`.
 
@@ -46,7 +50,7 @@ curl localhost:8000/health
 API_PORT=18000 DB_PORT=54339 WEB_PORT=13000 docker compose -p docvault-demo up --build -d
 ```
 
-`.env.example` lists the common settings, and `docvault/config.py` lists every setting. To cap AI spend, set `DAILY_AI_BUDGET_USD`, in US dollars per day.
+`.env.example` lists the common settings, with the default models, and `docvault/config.py` lists every setting. If your key cannot use a default model, set another one in `.env`. To cap AI spend, set `DAILY_AI_BUDGET_USD`, in US dollars per day.
 
 ## Try it
 
@@ -75,9 +79,11 @@ flowchart LR
   worker --> db
   api --> ai["OpenAI, or the fake provider"]
   worker --> ai
+  api -.-> cache[("Redis cache")]
+  worker -.-> cache
 ```
 
-A second Redis holds the embedding cache and the answer cache, and the app runs without it. Uploaded files live on disk.
+The cache Redis holds the embedding cache and the answer cache, and the app runs without it. Uploaded files live on disk.
 
 **From upload to ready**
 
@@ -176,13 +182,13 @@ uv run ruff check
 - Rate limits are per API process and per client address.
 - A new version is linked by filename alone, so two unrelated files uploaded under one name become versions of one document.
 
-`docs/design.md` ends with the full list.
+`docs/limits.md` has the full list.
 
 ## More to read
 
 - `AI_USAGE.md` explains how AI coding tools were used, where the AI was wrong, and what caught it.
-- `docs/design.md` covers the data model, the request flows, retrieval, the prompts, the caches, scale and every known limit.
+- `docs/design.md` covers the data model, the request flows, retrieval, the prompts and scale.
 - `docs/api.md` is the API reference.
 - `docs/evals.md` has the answer-quality results and how they are measured.
-- `docs/lifecycle.md` shows how a document moves through indexing, as a state chart checked with the TLA+ model in `formal/`.
-- `.claude/skills/` holds the two verification kits that the AI agents ran: one drives the running app end to end, and one rechecks the lifecycle model.
+- `docs/bonus-features.md` covers how the bonus features work, and `docs/limits.md` lists every known limit.
+- Beyond the assignment: `docs/lifecycle.md` is a state chart of indexing, checked with the TLA+ model in `formal/`, and `.claude/skills/` holds the two verification kits that the AI agents ran.
