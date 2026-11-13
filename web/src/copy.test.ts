@@ -242,8 +242,6 @@ test("the version line, its links' label, an earlier version's note, the Version
   assert.equal(chatAsks(v1), "This chat asks version 1 of phase-e-fixture-terms.txt.");
 });
 
-// ------------------------------------------------------------------ phase F
-
 test("a cap of a millionth of a dollar is written with all six of its decimals", () => {
   assert.equal(dollars(1e-6), "$0.000001");
 });
