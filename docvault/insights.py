@@ -1,7 +1,6 @@
 """AI insights for one document. The only writer of document_insights.
 
-Insights run beside indexing, not inside it (per
-separate-before-serializing-shared-state): the index pipeline owns
+Insights run beside indexing, not inside it: the index pipeline owns
 documents.status, this module owns its own row. An insights failure never
 blocks chat, and a slow summary never delays READY.
 """

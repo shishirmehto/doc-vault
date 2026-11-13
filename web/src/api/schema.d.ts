@@ -188,7 +188,8 @@ export interface paths {
          *     - `reset`, data `{}`: discard the provisional text. Sent before a retry or repair that follows text already sent.
          *     - `turn`, data: the same body `POST /chats/{chat_id}/messages` returns. It is grounded and final, replaces all
          *       provisional text, and ends the stream.
-         *     - `error`, data: the error envelope (`ai_unavailable`, `ai_bad_output` or `internal_error`). It ends the stream.
+         *     - `error`, data: the error envelope (`ai_unavailable`, `ai_bad_output`, `internal_error`, or `quota_exceeded` when
+         *       the spending cap is reached after the stream started). It ends the stream.
          *
          *     If the client disconnects, the answer still finishes and is stored, so `GET /chats/{chat_id}/messages` shows it.
          */
