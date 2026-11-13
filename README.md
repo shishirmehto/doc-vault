@@ -65,13 +65,13 @@ A rerun on the same stack finds the samples already uploaded (HTTP 200) and reus
 
 ```mermaid
 flowchart LR
-  client([Client or web UI]) --> api[api: FastAPI]
-  api --> db[(Postgres with pgvector)]
-  api -- jobs --> broker[(Redis broker)]
-  broker --> worker[worker: Celery]
-  beat[beat: every 60 s] -- reconcile --> broker
+  client(["Client or web UI"]) --> api["api (FastAPI)"]
+  api --> db[("Postgres with pgvector")]
+  api -- jobs --> broker[("Redis broker")]
+  broker --> worker["worker (Celery)"]
+  beat["beat, every 60 s"] -- reconcile --> broker
   worker --> db
-  api --> ai[OpenAI, or the fake provider]
+  api --> ai["OpenAI, or the fake provider"]
   worker --> ai
 ```
 
