@@ -40,7 +40,7 @@ stateDiagram-v2
   embedding --> failed: retries used up
   failed --> queued: retry
   queued --> embedding: pages already saved
-  ready --> [*]
+  ready --> embedding: embedding model changed
 ```
 
 **Insights.** `insights.run_analyze` runs on the `llm` queue beside embedding, under its own lock, so a document becomes `ready` without waiting for its summary. In compose, one worker serves both queues, so a summary still takes one of its four slots. `run_analyze` sends the pages that fit in 240,000 characters, in order, and records how many it read (`coverage`). A key fact is kept only when `pages.find_on_page` finds its quote on the page it cites. The rest are dropped and counted. Over the spending cap the insights call raises `quota_exceeded` with `retryable: false`, so Celery does not retry it and the insights are stored as failed, for `POST /documents/{id}/retry` to run again after the cap resets.
