@@ -118,6 +118,7 @@ What the run left open:
 - No paid model calls until a key was provided. Everything ran on the fake provider until then.
 - Testing on real insurance documents as well as the generated samples. That run found the three parsing bugs above.
 - Reverting a late change that bound the compose ports to localhost only, because the case study does not ask for it.
+- Adding Up and Down recall of earlier questions, and answers that show in every open tab of a chat, after testing the UI in two tabs.
 
 ## Reproduce the checks
 

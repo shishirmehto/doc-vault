@@ -1,6 +1,6 @@
 # Doc Vault web UI
 
-A small Next.js app for the doc-vault API. You can upload documents and watch them process. Each document shows its summary, tags and key facts, and can be deleted from its page. You can also start a chat over one or more ready documents and ask questions. The answer appears as it is written, then the cited answer replaces it, with up to three follow-up questions to ask in one click. Click a key fact's page tab, or an answer's numbered citation, to open that page with the quoted passage marked.
+A small Next.js app for the doc-vault API. You can upload documents and watch them process. Each document shows its summary, tags and key facts, and can be deleted from its page. You can also start a chat over one or more ready documents and ask questions. The answer appears as it is written, then the cited answer replaces it, with up to three follow-up questions to ask in one click. In a chat's question box, Up and Down go through the chat's earlier questions. An answer shows in every tab of the browser that has the chat open. Click a key fact's page tab, or an answer's numbered citation, to open that page with the quoted passage marked.
 
 You can also compare 2 to 5 ready documents side by side. A ready document's summary can be written again at another length, about one topic, or for the reader's client. A file uploaded again under the same name with new content becomes the document's next version. Metrics shows how documents, steps, AI calls and chats are doing, with the daily AI spending cap and the caches.
 
@@ -67,7 +67,7 @@ The rewrite also compresses responses, and a compressed `text/event-stream` arri
 | `src/api/sse.ts` | Frames a `text/event-stream` body into messages, from text split anywhere |
 | `src/api/domain.ts` | Types the components read: branded ids, the lifecycle, insights and turn unions, `SourceRef` |
 | `src/lib/` | Logic with no React, tested on Node |
-| `src/hooks/` | The React hooks, such as `useDocuments` (the list, kept current by the live feed, with polling as the fallback) and `useThread`, which sends one question at a time per chat |
+| `src/hooks/` | The React hooks, such as `useDocuments` (the list, kept current by the live feed, with polling as the fallback) and `useThread`, which sends one question at a time per chat and shows a question that another tab asked |
 | `src/components/` | The top bar, the rail, the new-chat screen, the chat, the compare screen, the comparison, the document view, the source pane, the metrics screen, and the missing-page message |
 | `src/copy.ts` | Every sentence the UI writes about state |
 
@@ -83,6 +83,10 @@ The URL holds the selection:
 The document list follows `GET /events/documents` through one `EventSource` for the page. A document uploaded, retried or deleted from another tab or client shows up in the rail and moves through its stages with no reload. While the stream is down, polling takes over.
 
 Questions go to `POST /chats/{id}/messages/stream`. While the answer streams, the turn shows its provisional text, without citations, under a status line. The `turn` event replaces it with the grounded answer.
+
+The other tabs of the same browser that show the chat follow the answer. The asking tab posts its question's state on a `BroadcastChannel` after each step. The other tabs draw that state and cannot ask until the question is over. The asking tab also holds a Web Lock for as long as its question runs. If the browser frees that lock while another tab still shows the question, the asking tab was closed, and that tab reads the chat's history until the stored turn appears. None of this goes through the API.
+
+Up in an empty question box brings back the chat's newest question. Up and Down then move through the earlier ones, and Down past the newest empties the box. A typed draft is never replaced.
 
 ## Tests and fixtures
 
