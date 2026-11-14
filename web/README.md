@@ -84,7 +84,7 @@ The document list follows `GET /events/documents` through one `EventSource` for 
 
 Questions go to `POST /chats/{id}/messages/stream`. While the answer streams, the turn shows its provisional text, without citations, under a status line. The `turn` event replaces it with the grounded answer.
 
-The other tabs of the same browser that show the chat follow the answer. The asking tab posts its question's state on a `BroadcastChannel` after each step. The other tabs draw that state and cannot ask until the question is over. The asking tab also holds a Web Lock for as long as its question runs. If the browser frees that lock while another tab still shows the question, the asking tab was closed, and that tab reads the chat's history until the stored turn appears. None of this goes through the API.
+The other tabs of the same browser that show the chat follow the answer. The asking tab posts its question's state on a `BroadcastChannel` after each step. The other tabs draw that state and cannot ask until the question is over. The asking tab also holds a Web Lock while it sends the question and checks that the turn was stored. If the browser frees that lock while another tab still shows the question, the asking tab was closed or has stopped checking. The other tab then takes the question over and reads the chat's history until the stored turn appears. None of this goes through the API.
 
 Up in an empty question box brings back the chat's newest question. Up and Down then move through the earlier ones, and Down past the newest empties the box. A typed draft is never replaced.
 
