@@ -13,7 +13,7 @@ import { useWorthRetrying } from "@/hooks/useWorthRetrying";
 import { citedPageView } from "@/lib/citedPage";
 import type { LookedUp } from "@/lib/docList";
 import { stillFollowing } from "@/lib/follow";
-import { canAsk, offered, type Ask, type Thread } from "@/lib/thread";
+import { asked as questions, canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { chatVersion } from "@/lib/versions";
 import { askAbout, askStatus, chatAsks, documentNames, explain, listNames, NOT_FOUND, usageLine, withVersion } from "@/copy";
 import { Composer } from "./Composer";
@@ -47,7 +47,8 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
 
   const column = useRef<HTMLDivElement>(null);
   const turnCount = turns?.length ?? 0;
-  const phase = thread?.ask.phase;
+  const inFlight = thread && (thread.elsewhere?.ask ?? thread.ask);
+  const phase = inFlight?.phase;
   useEffect(() => {
     column.current?.scrollTo({ top: column.current.scrollHeight, behavior: "smooth" });
   }, [turnCount, phase]);
@@ -55,7 +56,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
   // until the reader scrolls up.
   const following = useRef(false);
   const lastTop = useRef(0);
-  const streamed = thread?.ask.phase === "streaming" ? thread.ask.text.length : 0;
+  const streamed = inFlight?.phase === "streaming" ? inFlight.text.length : 0;
   useEffect(() => {
     if (phase === "asking") following.current = true;
   }, [phase]);
@@ -108,14 +109,17 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
               <PendingTurn
                 ask={thread.ask}
                 scope={documents}
-                onRetry={(question) => void threads.ask(id, question)}
-                onEdit={(question) => {
-                  threads.dismiss(id);
-                  setDraft(question);
+                actions={{
+                  onRetry: (question) => void threads.ask(id, question),
+                  onEdit: (question) => {
+                    threads.dismiss(id);
+                    setDraft(question);
+                  },
+                  onRecheck: () => void threads.recheck(id),
                 }}
-                onRecheck={() => void threads.recheck(id)}
               />
             )}
+            {thread?.elsewhere && <PendingTurn ask={thread.elsewhere.ask} scope={documents} />}
           </section>
         </div>
         <div className="centre-footer">
@@ -123,6 +127,7 @@ export function ChatScreen({ id, docs, pane, push, replace }: Props) {
             value={draft}
             onChange={setDraft}
             onSend={send}
+            recall={thread ? questions(thread) : []}
             ready={thread !== undefined && canAsk(thread) && accepting}
             label="Ask"
             placeholder={
@@ -178,7 +183,7 @@ function Turns({ thread, pane, onOpen, accepting, onReload, onSuggest }: {
   if (thread.history.kind === "failed") {
     return <LoadFailed error={thread.history.error} onRetry={onReload} />;
   }
-  if (thread.history.turns.length === 0 && thread.ask.phase === "idle") {
+  if (thread.history.turns.length === 0 && thread.ask.phase === "idle" && thread.elsewhere === null) {
     return accepting ? <p className="quiet">Ask a question to start. Follow-ups can refer back to earlier answers.</p> : null;
   }
   const suggestions = accepting ? offered(thread) : [];
@@ -247,12 +252,11 @@ function TurnView({ turn, active, onOpen }: { turn: Turn; active: number | null;
   );
 }
 
-function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
+/** This tab's own question takes the three actions. Another tab's is drawn without them: it is only shown here. */
+function PendingTurn({ ask, scope, actions }: {
   ask: Ask;
   scope: NonEmpty<ChatDocument> | null;
-  onRetry(question: string): void;
-  onEdit(question: string): void;
-  onRecheck(): void;
+  actions?: { onRetry(question: string): void; onEdit(question: string): void; onRecheck(): void };
 }) {
   switch (ask.phase) {
     case "idle":
@@ -282,7 +286,7 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
         </article>
       );
     case "failed":
-      return <FailedAsk question={ask.question} error={ask.error} onRetry={onRetry} onEdit={onEdit} />;
+      return actions ? <FailedAsk question={ask.question} error={ask.error} onRetry={actions.onRetry} onEdit={actions.onEdit} /> : null;
     case "waiting":
       return (
         <article className="turn ask-failed">
@@ -291,9 +295,11 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
             The answer did not arrive, and the chat&apos;s history does not show it yet. The vault may still be answering,
             so it keeps checking, and the question is not sent again.
           </p>
-          <p className="actions">
-            <button type="button" className="button" onClick={onRecheck}>Check again</button>
-          </p>
+          {actions && (
+            <p className="actions">
+              <button type="button" className="button" onClick={actions.onRecheck}>Check again</button>
+            </p>
+          )}
         </article>
       );
     case "unconfirmed":
@@ -304,9 +310,11 @@ function PendingTurn({ ask, scope, onRetry, onEdit, onRecheck }: {
             {explain(ask.error)} The chat&apos;s history could not be read either, so it is not known whether the question
             was recorded.
           </p>
-          <p className="actions">
-            <button type="button" className="button" onClick={onRecheck}>Check again</button>
-          </p>
+          {actions && (
+            <p className="actions">
+              <button type="button" className="button" onClick={actions.onRecheck}>Check again</button>
+            </p>
+          )}
         </article>
       );
     default: {

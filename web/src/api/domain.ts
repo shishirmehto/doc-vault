@@ -2,7 +2,7 @@
 // state into nullable fields, and these types put each field back in the one state that has it.
 
 declare const brand: unique symbol;
-type Brand<T, B extends string> = T & { readonly [brand]: B };
+export type Brand<T, B extends string> = T & { readonly [brand]: B };
 
 export type DocumentId = Brand<string, "DocumentId">;
 export type FamilyId = Brand<string, "FamilyId">;
