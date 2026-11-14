@@ -37,7 +37,8 @@ export type Unsettled = Exclude<Ask, { phase: "idle" } | { phase: "failed" }>;
 
 /**
  * Another tab's question in flight, mirrored read-only. Kept apart from `ask`: this tab's own history reads,
- * timers and failures never move it. Only that tab's snapshots set or clear it, or `orphaned` when that tab is gone.
+ * timers and failures never move it. Only that tab's snapshots set or clear it, or `orphaned` once that tab is
+ * closed or has stopped checking.
  */
 export type Elsewhere = { from: AskId; ask: Unsettled };
 
@@ -192,9 +193,9 @@ function settled(ask: Ask): ask is Exclude<Ask, Unsettled> {
 }
 
 /**
- * The asking tab is gone without a verdict, and the server finishes an answer whatever happens to its client. So
- * this tab checks history for the question as if it had sent it. A question that tab had only sent may have
- * reached the server, so it may land too.
+ * The asking tab was closed, or stopped checking, without a verdict, and the server finishes an answer whatever
+ * happens to its client. So this tab checks history for the question as if it had sent it. A question that tab
+ * had only sent may have reached the server, so it may land too.
  */
 function takeOver(ask: Unsettled): Ask {
   switch (ask.phase) {

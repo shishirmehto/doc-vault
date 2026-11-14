@@ -23,8 +23,8 @@ const LANDING_WAITS_MS = [0, 1000, 2000, 4000, 8000, 15000];
  */
 const LATE_CHECKS_MS: readonly number[] = Array(18).fill(30_000);
 /**
- * The asking tab keeps its lock this long after its question is over, so its last snapshot reaches the other tabs
- * before the lock's release does, and none of them takes a finished question for one whose tab is gone.
+ * The asking tab keeps its lock this long after it stops working on its question, so its last snapshot reaches
+ * the other tabs before the lock's release does, and none of them takes over a question that has finished.
  */
 const GRACE_MS = 250;
 
