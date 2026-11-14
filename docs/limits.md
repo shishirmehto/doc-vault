@@ -79,7 +79,7 @@ The README lists the main ones. This is the full list, by area.
 
 - A streamed answer shows in the other tabs of the same browser only. Another browser or device sees the turn when it loads the chat.
 - Two tabs that ask in the same instant both send their question. Each tab then shows its own question and the other tab's.
-- A question that failed in one tab shows there with "Try again" and "Edit the question". When another tab asks a question in the same chat, the failed question is removed from the first tab.
+- A question that failed in one tab shows there with "Try again" and "Edit the question". When another tab asks a question in the same chat, the failed question is removed from the first tab, and Up no longer recalls it there.
 - Over plain HTTP from a host other than localhost, a browser has no Web Locks. The other tabs still follow an answer. When the asking tab is closed mid-answer, they keep showing its question and cannot ask until they are reloaded.
 - Live status runs one database listener per API process. Each process reads a changed document once, whatever the number of streams it serves. A deployment with several API processes holds one listener per process and fans out the same way. Each process takes at most 100 streams.
 - Postgres drops notifications while the listener is disconnected. After it reconnects, every stream gets `resync` and the web UI reads the list again.
