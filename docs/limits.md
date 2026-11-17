@@ -9,7 +9,7 @@ The README lists the main ones. This is the full list, by area.
 - The fake provider simulates a model's pacing when it streams: it sends its finished answer a word at a time, 25 ms apart in compose (`FAKE_STREAM_DELAY_MS`). The plain route has no delay.
 - During a re-embed after an embedding-model change, a chat over that document refuses with `no_evidence`, and the embedding progress count reads as complete.
 - After an embedding-model change, chats answer only from documents already re-embedded until reconcile finishes.
-- Retrieval sends 16 passages to the answer step. In a test of 79 questions on real documents of up to 922 pages, 7 were declined because the passage holding the answer ranked below those 16. Sending 16 instead of eight raised the answer step's input from about 4,300 to 7,700 tokens and its median time from 3.8 to 4.5 s.
+- Retrieval sends 16 passages to the answer step. In a test of 50 questions on real documents of up to 922 pages, 4 were declined in at least one chat scope because the passage holding the answer ranked below those 16. Sending 16 instead of eight raised the answer step's input from about 4,300 to 7,700 tokens and its median time from 3.8 to 4.5 s.
 - An answer is kept when at least one of its quotes is found. A sentence whose quote is not found stays in the answer text, without a marker.
 - A citation is checked only for its quote being in the source it names, not for the quote supporting the sentence.
 

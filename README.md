@@ -175,7 +175,7 @@ uv run ruff check
 
 - The tests use canned HTTP responses for the OpenAI backends. The live API was run once, on 2026-11-12.
 - Insights read the first 240,000 characters of a document, so a longer document is covered only in part.
-- A chat sends 16 passages to the answer step. In a test of 79 questions on real documents of up to 922 pages, 7 were declined because the passage holding the answer ranked below those 16.
+- A chat sends 16 passages to the answer step. In a test of 50 questions on real documents of up to 922 pages, 4 were declined in at least one chat scope because the passage holding the answer ranked below those 16.
 - An answer is kept when at least one of its quotes is found in its source. A sentence whose quote is not found stays in the answer, without a citation number.
 - "Differs" in a comparison compares the text of two values, not their meaning, so two wordings of the same term are marked as different.
 - A comparison and a summary each run inside the request, as one model call of at most 90 s.
