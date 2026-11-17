@@ -91,22 +91,23 @@ What the run left open:
 | The fix for doubled bold text would also have halved template placeholders, so "YYYY" read "YY" | The lead agent ran the new extraction on the real documents before accepting it. The flood manual has seven "YYYY" date fields |
 | The calibration's best-fit gate threshold (0.518) would have refused 12 of 28 answerable questions | The lead agent tabulated how many answerable and out-of-scope turns each threshold passes, and set 0.20, below the lowest answerable turn |
 | After a delete, a capped document list shrank and stayed short | An independent review agent. The list now reads again after a delete |
-| The fake provider refuses a comparison that uses a word no chunk holds ("differ"), and missed an elliptical follow-up ("And the premium?") | The UI agent ran the demo questions word for word and would not reword them to pass. Both are now eval cases |
 | The first citation check on real documents flagged correct quotes as off the page | Reading the pages: the reference reader's layout mode had merged two columns. The check switched to reading order and word overlap |
 | The question box disappeared in my own browser on a chat with three turns, and the lead agent could not reproduce it | Anything placed above the app, such as a browser extension's bar or a margin on the page, pushed the box off screen. The UI audit pass reproduced this by injecting such elements and rebuilt the layout so the content scrolls above a fixed footer row |
 | The spending-cap docs said search keeps working over the cap, but chat is the only search, and it is capped | The second owner of that phase. The docs now say uploads are still indexed |
 | Every agent role first ran on the most expensive model | I set a model per role: cheaper models for exploring, the strongest for judgement |
 | The UI design runners could read the judge's rubric | The runners' own reports. The rubric moved out of their folder, and the pick was checked against the judge's evidence, not the scores |
 | An automated comment-removal pass deleted comments that explain non-obvious reasons | The owner agent reviewed the edits and reverted them |
+| The evals page opened with the fake provider's full results, so its $0 cost rows read as the main result | My reading of the published page. The eval docs now report the OpenAI run only |
+| The docs said the OpenAI gate refuses off-topic questions, but on the eval set it let all 44 questions through, and the answer step declined the out-of-scope ones | An agent that re-read the live run's output while the evals page was rewritten |
 
 ## AI inside the product
 
 - Every prompt lives in `docvault/prompts.py`. Each is versioned and carries a note on why it is worded the way it is.
 - **Grounding.** Every quote in an answer is located on its cited page, and the page's own text replaces the model's copy. Citations that cannot be found are dropped. Key facts in insights must quote their page, and those that don't are dropped and counted.
-- **Relevance gate.** It runs before the answer call, so an off-topic question costs no answer tokens.
+- **Relevance gate.** It runs before the answer call. A question whose best match falls below the threshold gets "not found" with no answer call. On the eval set every question passed it, so the answer step declined the out-of-scope ones.
 - **Follow-ups.** Each follow-up is rewritten into a standalone question, which is stored and returned as `interpreted_as`.
 - **Ledger.** Every provider call is written to an append-only ledger with its tokens and cost. The metrics endpoints read it, so cost and latency are measured, not estimated.
-- **Fake provider.** A deterministic fake makes the tests, the evals and a no-key run possible.
+- **Fake provider.** A deterministic fake lets the tests and a run with no key work without a model. Answer quality is reported only for the OpenAI models.
 - **Comparisons.** Every comparison cell must quote its page, or it is dropped. Whether two values differ is computed in code, not by the model.
 
 ## What I decided
@@ -119,6 +120,7 @@ What the run left open:
 - Testing on real insurance documents as well as the generated samples. That run found the three parsing bugs above.
 - Reverting a late change that bound the compose ports to localhost only, because the case study does not ask for it.
 - Adding Up and Down recall of earlier questions, and answers that show in every open tab of a chat, after testing the UI in two tabs.
+- Reporting answer quality on the OpenAI models only. The fake provider's numbers say nothing about answers, so the docs leave them out.
 
 ## Reproduce the checks
 
