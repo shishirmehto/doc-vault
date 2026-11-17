@@ -81,7 +81,7 @@ Three extraction rules came from a run on real insurance PDFs:
 
 `chat.select_sources` sends 16 chunks. Each document is first guaranteed its best two by fused score, as long as the guarantees fill at most half the slots, and the rest go by fused score. In a chat of up to three documents, each document's opening passage follows the 16, so a question about the whole document sees its title page. A chat of up to four documents sees at least two passages from each, five to eight documents get one each, and more than eight get the plain top 16. A document's strong second passage is then never crowded out by many weak first ones. The live question sets cover chats of one to three documents and of 23; four to 22 are covered by unit tests only. The gate passes when the best similarity reaches the embedder's `min_similarity`, or when one chunk contains every query term. The second arm keeps exact identifiers such as a form number from being refused by a semantic threshold. The fake embedder's threshold (0.184) comes from the eval set. The OpenAI threshold (0.20) comes from a calibration run with a key. It sits below the lowest answerable turn, because answerable and out-of-scope similarities overlap (`docs/evals.md`).
 
-The scan is exact, not approximate, because a chat's scope is a few documents and a few thousand chunks at most. There is no vector index.
+The scan is exact, not approximate. Over 23 real documents, 5,539 chunks, it took 87 ms at the median (Scale, below). A chat may hold 50 documents of up to 2,000 pages, far more chunks than that, and that size is not measured. There is no vector index.
 
 ## Prompts
 
@@ -112,6 +112,14 @@ All five calls use strict JSON-schema output (`response_format`). The schemas ar
 | `chat.retrieve` over 3 documents (30 chunks) | 1.6 ms | 1.0 ms |
 
 The 50,000-document set has 135,000 `step_runs`, 150,000 `llm_calls` and 50,000 `chat_turns` rows, spread over seven days. Reruns differ by up to about 20%. The metrics reads grow with the rows inside the window. Retrieval cost depends on the chat's scope, not on the vault's size. On the fake provider, a sample document reaches `ready` in 62 to 118 ms on a warm worker and in about 900 ms on the first run after a fresh start (`scripts/demo.sh` output).
+
+### Real documents
+
+On 2026-11-17, 23 real insurance documents were indexed on a separate copy of the stack with the OpenAI models, and the questions below were asked at `f9f69eb`. The public ones are a 922-page crop-insurance handbook, a 906-page federal law, two editions of a loss-adjustment handbook (400 and 405 pages), and a flood insurance manual with its policy forms. The rest are not public and are not in this repository.
+
+- Indexing: 3,263 pages and 5,539 chunks with 0 failures. The 922-page handbook was ready to chat 29.2 s after upload.
+- Answers: 50 questions, asked 91 times in chats of 1, 3 and 23 documents. After review, 73 of the 80 answerable asks were answered with the expected value cited on an expected page, and all 11 with no answer in the documents were declined. The 7 misses were declines. No answer gave a wrong figure.
+- `chat.retrieve`: median 23 ms over one document's 1,218 chunks and 87 ms over all 5,539, five runs each inside the API container.
 
 ### What is reasoned
 
