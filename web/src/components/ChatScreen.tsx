@@ -228,17 +228,20 @@ function TurnView({ turn, active, onOpen }: { turn: Turn; active: number | null;
             )}
           </p>
           {turn.outcome.citations.length > 0 && (
-            <ol className="sources" aria-label="Sources">
-              {turn.outcome.citations.map((c) => (
-                <li key={c.ref}>
-                  <button type="button" className="source" aria-pressed={active === c.ref} onClick={() => cite(c)}>
-                    <span className="source-ref">{c.ref}</span>
-                    <span className="source-where">{c.filename}, {c.pageLabel}</span>
-                    <span className="source-quote">{c.source.quote}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
+            <details className="sources">
+              <summary>Sources ({turn.outcome.citations.length})</summary>
+              <ol aria-label="Sources">
+                {turn.outcome.citations.map((c) => (
+                  <li key={c.ref}>
+                    <button type="button" className="source" aria-pressed={active === c.ref} onClick={() => cite(c)}>
+                      <span className="source-ref">{c.ref}</span>
+                      <span className="source-where">{c.filename}, {c.pageLabel}</span>
+                      <span className="source-quote">{c.source.quote}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </details>
           )}
         </>
       ) : (

@@ -331,7 +331,13 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .cite:hover { background: var(--carbon); color: var(--sheet); }
 .cite[aria-pressed="true"], .source[aria-pressed="true"] .source-ref { background: var(--canary); color: var(--ink); }
 
-.sources { display: grid; gap: 2px; margin: var(--s1) calc(-1 * var(--s3)) 0; }
+/* Closed by default: the numbers in the answer open each page, and the quotes are one click away. */
+.sources > summary {
+  width: fit-content; font-size: var(--t-meta); font-weight: 600; color: var(--carbon); cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.sources > summary:hover { text-decoration: underline; text-underline-offset: 2px; }
+.sources > ol { display: grid; gap: 2px; margin: var(--s1) calc(-1 * var(--s3)) 0; }
 .source {
   display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--s3); width: 100%; text-align: left;
   border: 0; background: none; padding: var(--s2) var(--s3); border-radius: var(--r-control);
