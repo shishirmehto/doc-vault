@@ -323,6 +323,41 @@ def test_each_document_gets_its_quota_of_sources_even_when_another_dominates():
     assert [s.text for s in alone] == [f"policy {n}" for n in range(1, 9)]
 
 
+def documents(count: int) -> list[DocRef]:
+    return [DocRef(DocumentId(UUID(int=100 + n)), f"doc-{n}.pdf", PageBasis.PHYSICAL) for n in range(count)]
+
+
+def test_a_document_keeps_its_strong_passages_when_the_chat_holds_more_documents_than_slots():
+    lead, *rest = documents(10)
+    best = [candidate(lead, f"lead {n}", 0.05 - n / 1000) for n in range(1, 4)]
+    weak = [candidate(doc, f"other {n}", 0.03 - n / 1000) for n, doc in enumerate(rest, start=1)]
+
+    sources = chat.select_sources([*weak, *best], k=8, per_doc_min=2)
+
+    assert [s.text for s in sources] == ["lead 1", "lead 2", "lead 3", *(f"other {n}" for n in range(1, 6))]
+
+
+def test_a_document_keeps_its_strong_passages_when_the_chat_holds_as_many_documents_as_slots():
+    lead, *rest = documents(8)
+    best = [candidate(lead, f"lead {n}", 0.05 - n / 1000) for n in range(1, 4)]
+    weak = [candidate(doc, f"other {n}", 0.03 - n / 1000) for n, doc in enumerate(rest, start=1)]
+
+    sources = chat.select_sources([*weak, *best], k=8, per_doc_min=2)
+
+    assert [s.text for s in sources] == ["lead 1", "lead 2", "lead 3", *(f"other {n}" for n in range(1, 6))]
+
+
+def test_the_per_document_guarantee_takes_at_most_half_the_slots():
+    first, second, third = documents(3)
+    dominant = [candidate(first, f"first {n}", 0.05 - n / 1000) for n in range(1, 11)]
+    trailing = [candidate(second, f"second {n}", 0.02 - n / 1000) for n in range(1, 4)]
+    trailing += [candidate(third, f"third {n}", 0.0195 - n / 1000) for n in range(1, 4)]
+
+    sources = chat.select_sources([*trailing, *dominant], k=8, per_doc_min=2)
+
+    assert [s.text for s in sources] == [*(f"first {n}" for n in range(1, 7)), "second 1", "third 1"]
+
+
 def test_the_gate_passes_on_similarity_or_an_all_terms_match_and_refuses_nothing_found():
     near = dataclasses.replace(candidate(POLICY_DOC, "near", 0.03), similarity=0.2)
     far = dataclasses.replace(candidate(POLICY_DOC, "far", 0.03), similarity=0.19)
