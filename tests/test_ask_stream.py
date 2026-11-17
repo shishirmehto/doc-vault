@@ -6,9 +6,11 @@ import threading
 
 import pytest
 
+from docvault import insights
 from docvault.ai import FakeChat, ProviderError, RawCompletion, Tokens
 from docvault.api import AskInThread, app
 from docvault.domain import ChatId
+from docvault.prompts import AnswerDraft
 from docvault.ratelimit import RateLimiter
 
 from .conftest import FACTS, POLICY, scalar
@@ -79,6 +81,29 @@ def test_a_question_the_gate_refuses_streams_no_text_and_ends_with_the_refusal(c
     assert shape(refused) == ["stage:searching", "turn"]
     assert (refused[-1][1]["status"], refused[-1][1]["reason"]) == ("not_found", "no_evidence")
     assert ledger(ctx) == {refused[-1][1]["id"]: ["embed_query"]}
+
+
+def test_a_model_that_declines_over_the_opening_passage_streams_no_text_and_keeps_the_refusal(client, ctx):
+    class Declines(FakeChat):
+        declines_unanswerable = True
+        handlers = {**FakeChat.handlers, "answer": lambda prompt: AnswerDraft(
+            supported=False, answer="The documents do not say who won the World Cup.", evidence=[],
+            follow_ups=["Who won the World Cup?"])}
+
+    policy = ready(ctx, POLICY)
+    insights.run_analyze(ctx, policy)
+    chat_id = client.post("/chats", json={"document_ids": [str(policy)]}).json()["id"]
+    app.state.ctx = with_chat(ctx, Declines())
+
+    refused = stream(client, chat_id, "Who won the 2022 football world cup?")
+
+    turn = refused[-1][1]
+    assert shape(refused) == ["stage:searching", "stage:answering", "turn"]
+    assert (turn["status"], turn["reason"], turn["answer"], turn["suggestions"]) == (
+        "not_found", "no_evidence",
+        f"I could not find anything about this in {POLICY}, so I can't answer it from the selected documents.",
+        ["What is the Policy Number?", "What is the Named Insured?", "What is the Mailing Address?"])
+    assert ledger(ctx) == {turn["id"]: ["embed_query", "answer"]}
 
 
 def test_refusals_found_before_the_stream_starts_are_the_usual_status_and_envelope(client, ctx):

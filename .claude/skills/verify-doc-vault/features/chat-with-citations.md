@@ -9,7 +9,7 @@ A user starts a chat on one or more ready documents and asks questions. Each ans
 - `chat-cited-answer` answers with `status: answered`. Each citation has `filename`, `page` and a `quote` that is on that page.
 - `chat-follow-up` rewrites a follow-up with a reference word ("it", "that") into a standalone question, returned as `interpreted_as`.
 - `chat-multi-doc` cites every document in the scope that holds the answer.
-- `chat-not-found` returns `status: not_found` with `reason` `no_evidence` (gated before the answer call), `model_declined` or `unverified`.
+- `chat-not-found` returns `status: not_found` with `reason` `no_evidence` (nothing passed the gate; with a key, the model also saw the opening passages), `model_declined` or `unverified`.
 - `chat-history` returns every turn in order (`GET /chats/{id}/messages`).
 - `chat-stream` streams the same answer as server-sent events (`POST /chats/{id}/messages/stream`): `stage`, then `delta` text without `[S#]` markers, then one `turn` (or `error`). A client that leaves mid-answer still gets its turn stored.
 - `chat-suggestions` returns up to three `suggestions` per turn. Asking one comes back `answered`.
@@ -33,7 +33,7 @@ Preconditions:
 - **Cited answer.** Ask `What is the property damage deductible?`. Status `200`, `"status": "answered"`. One citation has `"filename": "sample-cgl-policy.pdf"`, `"page": 2` and the quote `Property Damage Deductible $2,500 per occurrence` (fact `policy-deductible`).
 - **Check the quote.** Run `$S/call.sh GET /documents/<P>/pages/2`. The text contains the quote (whitespace may differ).
 - **Follow-up.** Ask `Does it apply per occurrence or per claim?`. `interpreted_as` differs from the question and contains `deductible`.
-- **Not found.** Ask `Who won the 2022 football World Cup?`. `"status": "not_found"`, `"reason": "no_evidence"`, no citations. Then run `$S/sql.sh "SELECT purpose FROM llm_calls WHERE turn_id = '<turn id>'"`. It shows no `answer` row.
+- **Not found.** Ask `Who won the 2022 football World Cup?`. `"status": "not_found"`, `"reason": "no_evidence"`, no citations. Then run `$S/sql.sh "SELECT purpose FROM llm_calls WHERE turn_id = '<turn id>'"`. On the fake provider it shows no `answer` row. With a key it shows one, over the opening passages.
 - **Two documents.** Start a chat on P and Q and ask `What is the property damage deductible?`. Citations come from both files: P p. 2 `$2,500` and Q p. 2 `$5,000` (facts `policy-deductible` and `quote-deductible`).
 - **History.** Run `$S/call.sh GET /chats/<chat id>/messages`. `turns` holds every question in order, with its status.
 - **Refusals.** Run `POST /chats` with `{"document_ids": []}` and get `422`. With a failed document's id you get `409`, with `error.code == "documents_not_ready"` naming it.

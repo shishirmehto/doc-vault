@@ -524,7 +524,7 @@ def suggestions(follow_ups: Sequence[str], question: str) -> tuple[str, ...]:
 
 
 def fact_suggestions(labels: Sequence[Sequence[str]], question: str) -> tuple[str, ...]:
-    """Suggestions for a turn the gate refused, so no model wrote any. Pure and deterministic.
+    """Suggestions for a no_evidence turn, whose model suggestions, if any, go with its answer. Pure and deterministic.
 
     "What is the <label>?" from each document's verified key-fact labels, taken
     round by round (every document's first label, then every second one), so a

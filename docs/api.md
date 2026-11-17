@@ -112,7 +112,7 @@ curl -s "$API/chats?limit=10"
 curl -s $API/chats/$CHAT
 ```
 
-`POST /chats/{id}/messages` asks a question of at most 2,000 characters. The answer carries numbered citations (`[1]` matches `citations[0]`), `interpreted_as` shows how a follow-up was read, and `usage` lists the model calls, tokens and cost of the turn. A sentence whose quote was not found in its source stays in the answer without a number. A question the documents do not answer returns `status: not_found` with a `reason`. `suggestions` holds up to three follow-up questions that the documents can answer. When the relevance gate refuses a question, they come from the documents' key facts ("What is the Policy Number?").
+`POST /chats/{id}/messages` asks a question of at most 2,000 characters. The answer carries numbered citations (`[1]` matches `citations[0]`), `interpreted_as` shows how a follow-up was read, and `usage` lists the model calls, tokens and cost of the turn. A sentence whose quote was not found in its source stays in the answer without a number. A question the documents do not answer returns `status: not_found` with a `reason`. `suggestions` holds up to three follow-up questions that the documents can answer. When a question is refused with `no_evidence`, they come from the documents' key facts ("What is the Policy Number?").
 
 ```bash
 curl -s $API/chats/$CHAT/messages -H 'content-type: application/json' \
@@ -133,7 +133,7 @@ Over the daily AI spending cap, an ask is 429 `quota_exceeded` before any model 
 | `turn` | the `POST /chats/{id}/messages` body | The grounded answer. It replaces the provisional text and ends the stream. |
 | `error` | the error envelope | `ai_unavailable`, `ai_bad_output`, `internal_error`, or `quota_exceeded` when the spending cap is reached after the stream started. It ends the stream. |
 
-If the client disconnects, the answer still finishes and is stored, and `GET /chats/{id}/messages` shows it. A question the gate refuses sends no `delta`.
+If the client disconnects, the answer still finishes and is stored, and `GET /chats/{id}/messages` shows it. A `no_evidence` refusal sends no `delta`.
 
 ```bash
 curl -N $API/chats/$CHAT/messages/stream -H 'content-type: application/json' \
