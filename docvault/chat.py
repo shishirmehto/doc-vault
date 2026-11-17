@@ -68,7 +68,7 @@ MAX_SUGGESTIONS = 3
 MAX_SUGGESTION_CHARS = 160
 UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify an answer against their text, "
                    "so I am not giving one.")
-ANSWER_CACHE_FORMAT = 1     # part of every answer key: a change to the cached value's shape bumps it
+ANSWER_CACHE_FORMAT = 2     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
 
 
@@ -436,19 +436,22 @@ def gate(candidates: Sequence[Candidate], min_similarity: float) -> bool:
 def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int) -> list[Source]:
     """Choose the k sources the model sees, labelled S1..Sk in fused (rrf) order.
 
-    Each document first gets its best per_doc_min chunks by rrf, then the rest
-    fill to k by rrf. "Compare the deductibles in these three quotes" then sees
-    all three quotes even when one dominates the scores. With one document this
-    is the top k. An exact rrf tie goes to the higher similarity.
+    Each document is first guaranteed its best chunks by rrf, up to per_doc_min,
+    then the rest fill to k by rrf. "Compare the deductibles in these three
+    quotes" then sees all three quotes even when one dominates the scores. The
+    guarantees take at most half of the k slots, so each document gets fewer as
+    the chat holds more documents, and none once there are more than k / 2. A
+    document's strong second passage is then never crowded out by many weak
+    first ones. With one document this is the top k. An exact rrf tie goes to
+    the higher similarity.
     """
     ranked = sorted(candidates, key=lambda candidate: (candidate.rrf, candidate.similarity), reverse=True)
+    quota = min(per_doc_min, k // 2 // max(1, len({candidate.doc.id for candidate in candidates})))
     taken: Counter[DocumentId] = Counter()
     rounds: list[tuple[int, int]] = []
     for at, candidate in enumerate(ranked):
-        rounds.append((min(taken[candidate.doc.id], per_doc_min), at))
+        rounds.append((min(taken[candidate.doc.id], quota), at))
         taken[candidate.doc.id] += 1
-    # The quota goes round by round (every document's best, then every second best), so when more documents
-    # than k / per_doc_min are in scope, as many of them as fit still get a source.
     chosen = sorted(at for _, at in sorted(rounds)[:k])
     return [Source(f"S{n}", c.chunk_id, c.doc, c.text, c.page_map, c.similarity, c.rrf)
             for n, c in enumerate((ranked[at] for at in chosen), start=1)]

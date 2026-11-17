@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     chunk_max_chars: int = 1800          # about 450 tokens of English
     chunk_overlap_chars: int = 250
     embed_batch_size: int = 128
-    retrieval_k: int = 8
-    retrieval_per_doc_min: int = 2       # multi-document chats get at least this many sources per document
+    retrieval_k: int = 16
+    retrieval_per_doc_min: int = 2       # guaranteed sources per document in a multi-document chat, within half of retrieval_k
     history_turns: int = 4
     insights_max_chars: int = 240_000    # about 60k tokens of page-tagged text
     chat_timeout_s: float = 30.0
