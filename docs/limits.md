@@ -5,7 +5,7 @@ The README lists the main ones. This is the full list, by area.
 ## Answers and retrieval
 
 - The OpenAI gate threshold (0.20) sits below the lowest answerable turn of the calibration run. On the eval set it passed every question, and the answer step declined the out-of-scope ones (`docs/evals.md`).
-- The tests use canned HTTP responses for the OpenAI backends. One live run on 2026-11-12 covered the eval set and 19 public insurance documents, with streaming, suggestions, comparisons and summaries (`docs/evals.md`, `AI_USAGE.md`).
+- The tests use canned HTTP responses for the OpenAI backends. Live runs on 2026-11-12 and 2026-11-17 covered the eval set. The first also covered 19 public insurance documents, with streaming, suggestions, comparisons and summaries (`docs/evals.md`, `AI_USAGE.md`).
 - The fake provider simulates a model's pacing when it streams: it sends its finished answer a word at a time, 25 ms apart in compose (`FAKE_STREAM_DELAY_MS`). The plain route has no delay.
 - During a re-embed after an embedding-model change, a chat over that document refuses with `no_evidence`, and the embedding progress count reads as complete.
 - After an embedding-model change, chats answer only from documents already re-embedded until reconcile finishes.

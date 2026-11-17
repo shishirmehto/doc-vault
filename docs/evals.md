@@ -4,7 +4,7 @@
 
 ## Results
 
-One run of the full case set on 2026-11-12, on the configured OpenAI models, cost $1.18 on the ledger. The answer step then received eight sources. It has received 16 since 2026-11-17, and the set has not been run live again since.
+One run of the full case set on 2026-11-17 at `f9f69eb`, on the configured OpenAI models, cost $1.08 on the ledger. The answer step received 16 sources, and the opening passages in chats of up to three documents. One answer call hit a provider error, and the gateway's retry succeeded.
 
 | Number | Result |
 |---|---|
@@ -13,14 +13,14 @@ One run of the full case set on 2026-11-12, on the configured OpenAI models, cos
 | Not-found accuracy | 15/16 (94%) |
 | Key-fact grounding | 36/36 (100%) |
 | Key-fact recall | 19/28 (68%) |
-| Suggestions answered | 90/90 (100%) |
+| Suggestions answered | 83/83 (100%) |
 | Cell grounding | 45/45 (100%) |
 | Difference recall | 4/4 (100%) |
 | Equal fields kept equal | 1/1 (100%) |
 | Summary source grounding | 54/54 (100%), 18 at each length |
 | Gate at 0.20: answerable turns passed | 28/28 (100%) |
 | Gate at 0.20: out-of-scope turns refused | 0/16 (0%) |
-| p95 turn latency | 7.3 s |
+| p95 turn latency | 8.2 s |
 
 The four citation misses are the two turns in `aggregate-then-medical`. The answers are right ("from $2,000,000 to $3,000,000", "from $5,000 to $10,000"), but they cite the quote's change list on page 3, as the Known limits section predicts. The one not-found miss is the flood question in `insured-then-fired-employee`. The answer says the documents do not establish flood cover, and it counts as answered because it cites the coverage grant.
 

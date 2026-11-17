@@ -108,7 +108,7 @@ The cache Redis holds the embedding cache and the answer cache, and the app runs
 
 [`docs/evals.md`](docs/evals.md) scores a fixed set of 44 questions on the sample documents. 28 of them can be answered, with 34 expected facts between them, and 16 cannot.
 
-On the OpenAI models, in one run on 2026-11-12:
+On the OpenAI models, in the latest run, on 2026-11-17:
 
 | Measure | Result |
 |---|---|
@@ -173,7 +173,7 @@ uv run ruff check
 
 ## Known limits
 
-- The tests use canned HTTP responses for the OpenAI backends. The live API was run once, on 2026-11-12.
+- The tests use canned HTTP responses for the OpenAI backends. The live API was run on 2026-11-12 and on 2026-11-17.
 - Insights read the first 240,000 characters of a document, so a longer document is covered only in part.
 - A chat sends 16 passages to the answer step. In a test of 50 questions on real documents of up to 922 pages, 4 were declined in at least one chat scope because the passage holding the answer ranked below those 16.
 - An answer is kept when at least one of its quotes is found in its source. A sentence whose quote is not found stays in the answer, without a citation number.
