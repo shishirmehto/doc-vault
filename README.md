@@ -4,7 +4,7 @@ Doc Vault is a document vault you can talk to. Upload a document and it writes a
 
 It answers the "AI-Powered Vault Document System" case study. The backend is a FastAPI app with Celery workers, Postgres with pgvector, Redis and the OpenAI API. A small web UI sits on top.
 
-It was built with Claude Code, an AI coding agent. `AI_USAGE.md` says how the agents were used, where they were wrong, and what caught each mistake.
+It was built with Claude Code, an AI coding agent. [`AI_USAGE.md`](AI_USAGE.md) says how the agents were used, where they were wrong, and what caught each mistake.
 
 ## What it covers
 
@@ -17,7 +17,7 @@ Everything the case study requires:
 | AI insights | `GET /documents/{id}/insights` returns a title, a type, a summary, tags and key facts. Each key fact has its page and a quote found on that page. |
 | Document chat | `POST /chats` starts a chat, `POST /chats/{id}/messages` asks a question, and `GET /chats/{id}/messages` returns the history. A follow-up is rewritten into a standalone question, and every answer cites its pages. |
 | Metrics | `GET /metrics/documents` returns document statistics. `GET /metrics/processing` returns processing metrics, tokens and cost. |
-| Data storage | One Postgres schema, `docvault/schema.sql`, holds documents, insights, chats, turns with their citations, processing steps and AI calls. |
+| Data storage | One Postgres schema, [`docvault/schema.sql`](docvault/schema.sql), holds documents, insights, chats, turns with their citations, processing steps and AI calls. |
 
 From the case study's bonus list:
 
@@ -50,13 +50,13 @@ curl localhost:8000/health
 API_PORT=18000 DB_PORT=54339 WEB_PORT=13000 docker compose -p docvault-demo up --build -d
 ```
 
-`.env.example` lists the common settings, with the default models, and `docvault/config.py` lists every setting. If your key cannot use a default model, set another one in `.env`. To cap AI spend, set `DAILY_AI_BUDGET_USD`, in US dollars per day.
+[`.env.example`](.env.example) lists the common settings, with the default models, and [`docvault/config.py`](docvault/config.py) lists every setting. If your key cannot use a default model, set another one in `.env`. To cap AI spend, set `DAILY_AI_BUDGET_USD`, in US dollars per day.
 
 ## Try it
 
-**In the web UI.** Upload documents, read their insights, chat with citations that open the cited page, compare two documents, and see the metrics. `web/README.md` describes the UI.
+**In the web UI.** Upload documents, read their insights, chat with citations that open the cited page, compare documents side by side, and see the metrics. [`web/README.md`](web/README.md) describes the UI.
 
-**From the command line.** `scripts/demo.sh` drives the API with `curl` and `jq`. It uploads the three samples, waits until they are ready and their insights exist, prints the insights, then chats with them and prints every answer with its citations. It ends with the metrics.
+**From the command line.** [`scripts/demo.sh`](scripts/demo.sh) drives the API with `curl` and `jq`. It uploads the three samples, waits until they are ready and their insights exist, prints the insights, then chats with them and prints every answer with its citations. It ends with the metrics.
 
 ```bash
 scripts/demo.sh                              # API on localhost:8000
@@ -65,7 +65,7 @@ API=http://localhost:18000 scripts/demo.sh   # another stack
 
 A rerun on the same stack finds the samples already uploaded (HTTP 200) and reuses them.
 
-`samples/` holds three fictitious documents for the same insured: a seven-page commercial general liability policy (PDF), a three-page renewal quote with changed figures (PDF), and a short endorsement (DOCX). `samples/facts.yaml` lists the facts planted in them, each with its document, page and exact text. The tests and evals read that file as their expected values. To regenerate the samples, run `uv run python scripts/make_samples.py`.
+`samples/` holds three fictitious documents for the same insured: a seven-page commercial general liability policy (PDF), a three-page renewal quote with changed figures (PDF), and a short endorsement (DOCX). [`samples/facts.yaml`](samples/facts.yaml) lists the facts planted in them, each with its document, page and exact text. The tests and evals read that file as their expected values. To regenerate the samples, run `uv run python scripts/make_samples.py`.
 
 ## How it works
 
@@ -100,13 +100,13 @@ The cache Redis holds the embedding cache and the answer cache, and the app runs
 4. Otherwise the model answers from eight sources and quotes each source it uses.
 5. The code looks for every quote in the source it names. It drops a quote it cannot find, and a kept citation names the page where its quote starts. When it finds none, the turn is `unverified` and the draft answer is not shown.
 
-**Scale.** Uploads return at once and the work runs in Celery workers, so more `worker` replicas raise ingest throughput, and a lock on each document keeps duplicate jobs harmless. A file uploaded twice is stored and indexed once. Retrieval cost depends on the documents in a chat, not on the size of the vault. `docs/design.md` has timings at 5,000 and 50,000 documents, and says what changes past that.
+**Scale.** Uploads return at once and the work runs in Celery workers, so more `worker` replicas raise ingest throughput, and a lock on each document keeps duplicate jobs harmless. A file uploaded twice is stored and indexed once. Retrieval cost depends on the documents in a chat, not on the size of the vault. [`docs/design.md`](docs/design.md) has timings at 5,000 and 50,000 documents, and says what changes past that.
 
-**Prompts.** `docvault/prompts.py` holds every prompt. Each prompt is versioned and carries a note on why it is worded the way it is. `docs/design.md` gives that reasoning in short.
+**Prompts.** [`docvault/prompts.py`](docvault/prompts.py) holds every prompt. Each prompt is versioned and carries a note on why it is worded the way it is. `docs/design.md` gives that reasoning in short.
 
 ## Answer quality
 
-`docs/evals.md` scores a fixed set of 44 questions on the sample documents. 28 of them can be answered, with 34 expected facts between them, and 16 cannot.
+[`docs/evals.md`](docs/evals.md) scores a fixed set of 44 questions on the sample documents. 28 of them can be answered, with 34 expected facts between them, and 16 cannot.
 
 On the OpenAI models, in one run on 2026-11-12:
 
@@ -114,7 +114,7 @@ On the OpenAI models, in one run on 2026-11-12:
 |---|---|
 | Retrieval finds the expected fact | 34 of 34 |
 | The answer cites the fact on the right page | 30 of 34 |
-| A question with no answer in the documents is refused | 15 of 16 |
+| A question with no answer in the documents is declined | 15 of 16 |
 
 One live run also covered 19 public insurance documents. Of 25 answerable questions, 21 were answered right and 4 in part, and every citation was on the page it named. `AI_USAGE.md` has the details.
 
@@ -138,14 +138,14 @@ One live run also covered 19 public insurance documents. Of 25 answerable questi
 | `GET /metrics/documents`, `GET /metrics/processing` | Read the document statistics and the processing metrics. |
 | `GET /health` | Check Postgres, Redis, the AI mode, the spending cap and the cache. |
 
-Every error a route returns has one shape, `{"error": {"code", "message", "retryable", "details"}}`. `docs/api.md` is the full reference, with a `curl` example for every route.
+Every error a route returns has one shape, `{"error": {"code", "message", "retryable", "details"}}`. [`docs/api.md`](docs/api.md) is the full reference, with a `curl` example for every route.
 
 ## Assumptions and design choices
 
 The app assumes:
 
 - The users are insurance brokers and their clients, and the documents are policies, quotes and endorsements in English.
-- Files are PDF, DOCX or TXT, at most 50 MB and 2,000 pages. A scanned PDF fails with `no_extractable_text`, because OCR is out of scope. A PDF that needs a password to open fails with `encrypted_pdf`.
+- Files are PDF, DOCX or TXT, at most 50 MiB and 2,000 pages. A scanned PDF fails with `no_extractable_text`, because OCR is out of scope. A PDF that needs a password to open fails with `encrypted_pdf`.
 - DOCX and TXT have no reliable page numbers, so their citations name a section, not a page.
 - There is one vault and no login. Rate limits apply per client address.
 - A chat's documents are fixed when the chat starts. If one of them is deleted, the chat refuses new questions with 409 `documents_deleted`.
@@ -173,7 +173,6 @@ uv run ruff check
 
 ## Known limits
 
-- Without `OPENAI_API_KEY`, answers come from the fake provider, which often quotes a neighbouring passage.
 - The tests use canned HTTP responses for the OpenAI backends. The live API was run once, on 2026-11-12.
 - Insights read the first 240,000 characters of a document, so a longer document is covered only in part.
 - A chat sends eight passages to the answer step. On a 246-page manual, the passage that answered one question was not among them.
@@ -184,13 +183,13 @@ uv run ruff check
 - Rate limits are per API process and per client address.
 - Unless an upload passes `?replaces=<id>`, a new version is linked by filename, so two unrelated files uploaded under one name become versions of one document.
 
-`docs/limits.md` has the full list.
+[`docs/limits.md`](docs/limits.md) has the full list.
 
 ## More to read
 
-- `AI_USAGE.md` explains how AI coding tools were used, where the AI was wrong, and what caught it.
-- `docs/design.md` covers the data model, the request flows, retrieval, the prompts and scale.
-- `docs/api.md` is the API reference.
-- `docs/evals.md` has the answer-quality results and how they are measured.
-- `docs/bonus-features.md` covers how the bonus features work, and `docs/limits.md` lists every known limit.
-- Beyond the assignment: `docs/lifecycle.md` is a state chart of indexing, checked with the TLA+ model in `formal/`, and `.claude/skills/` holds the two verification kits that the AI agents ran.
+- [`AI_USAGE.md`](AI_USAGE.md) explains how AI coding tools were used, where the AI was wrong, and what caught it.
+- [`docs/design.md`](docs/design.md) covers the data model, the request flows, retrieval, the prompts and scale.
+- [`docs/api.md`](docs/api.md) is the API reference.
+- [`docs/evals.md`](docs/evals.md) has the answer-quality results and how they are measured.
+- [`docs/bonus-features.md`](docs/bonus-features.md) covers how the bonus features work, and [`docs/limits.md`](docs/limits.md) lists every known limit.
+- Beyond the assignment: [`docs/lifecycle.md`](docs/lifecycle.md) is a state chart of indexing, checked with the TLA+ model in [`formal/`](formal/), and [`.claude/skills/`](.claude/skills/) holds the two verification kits that the AI agents ran.
