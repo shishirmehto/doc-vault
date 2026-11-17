@@ -187,6 +187,9 @@ class TextSink(Protocol):
 class ChatBackend(Protocol):
     provider: str
     models: Mapping[Tier, str]     # the backend owns its model ids; the ledger records models[prompt.tier]
+    # The answer step says so when its sources do not answer the question, so chat.ask can show it the opening
+    # passages when nothing matched. The fake answerer cites any passage sharing two words with the question.
+    declines_unanswerable: bool
 
     def complete_json(self, prompt: Prompt, output: type[BaseModel], *, timeout_s: float,
                       on_text: Callable[[str], None] | None = None) -> tuple[RawCompletion, Tokens]:
@@ -496,6 +499,7 @@ class OpenAIChat:
     """Chat Completions with strict JSON-schema output. Maps a Prompt to a request and back, nothing more."""
 
     provider = "openai"
+    declines_unanswerable = True
 
     def __init__(self, client: OpenAI, models: Mapping[Tier, str], efforts: Mapping[Tier, ReasoningEffort]) -> None:
         self.models = models
@@ -856,6 +860,7 @@ class FakeChat:
 
     provider = "fake"
     models: Mapping[Tier, str] = {"main": "fake-chat", "small": "fake-chat"}
+    declines_unanswerable = False
     handlers: Mapping[str, Callable[[Prompt], BaseModel]] = {
         "insights": _fake_insights, "condense": _fake_condense, "answer": _fake_answer, "compare": _fake_compare,
         "summary": _fake_summary}

@@ -171,7 +171,7 @@ def load_cases(path: Path = CASES) -> CaseSet:
 class Miss(StrEnum):
     """Why an expected fact was not among the sources the answer step saw."""
 
-    GATE = "gate"       # the relevance gate refused, so there was no answer step
+    GATE = "gate"       # the relevance gate found nothing, so the answer step saw only the opening passages
     TEXT = "text"       # no source of the expected document holds the fact's text
     PAGE = "page"       # a source holds the text, but on another page
 
@@ -208,12 +208,10 @@ class TurnResult:
         return chat.gate(self.candidates, threshold)
 
 
-def retrieval_miss(fact: Fact, sources: Sequence[Source] | None) -> Miss | None:
-    if sources is None:
-        return Miss.GATE
-    pages = [source.page_map.page_at(span[0]) for source in sources
+def retrieval_miss(fact: Fact, sources: Sequence[Source] | None, *, matched: bool) -> Miss | None:
+    pages = [source.page_map.page_at(span[0]) for source in sources or ()
              if source.doc.filename == fact.document and (span := locate_quote(fact.text, source.text))]
-    return None if fact.page in pages else Miss.PAGE if pages else Miss.TEXT
+    return None if fact.page in pages else Miss.GATE if not matched else Miss.PAGE if pages else Miss.TEXT
 
 
 def is_cited(fact: Fact, citations: Sequence[Citation]) -> bool:
@@ -364,7 +362,7 @@ class _SourceTap:
 
     def __init__(self, inner: ChatBackend) -> None:
         self.inner = inner
-        self.provider, self.models = inner.provider, inner.models
+        self.provider, self.models, self.declines_unanswerable = inner.provider, inner.models, inner.declines_unanswerable
         self.sources: tuple[Source, ...] | None = None
 
     def complete_json(self, prompt: Prompt, output: type[BaseModel], *, timeout_s: float,
@@ -429,11 +427,17 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
                 with pool.connection() as conn:
                     candidates = chat.retrieve(conn, started.documents, q_vec, turn.standalone_query,
                                                ctx.ai.embed_model, per_doc=settings.retrieval_per_doc_min)
-                if chat.gate(candidates, ctx.ai.min_similarity) != (answers.sources is not None):
+                    first = chat.openings(conn, started.documents, q_vec, ctx.ai.embed_model)
+                matched = chat.gate(candidates, ctx.ai.min_similarity)
+                shown = None if answers.sources is None else [source.chunk_id for source in answers.sources]
+                only_openings = [opening.chunk_id for opening in first[:settings.retrieval_k]
+                                 if answers.declines_unanswerable]
+                if (matched and shown is None) or (not matched and (shown or []) != only_openings):
                     raise RuntimeError(f"{case.id}: the rerun retrieval disagrees with the gate in chat.ask")
                 turns.append(TurnResult(
                     case.id, question.ask, turn.standalone_query, turn.answer.outcome,
-                    tuple(Scored(fact, retrieval_miss(fact, answers.sources), is_cited(fact, turn.answer.citations))
+                    tuple(Scored(fact, retrieval_miss(fact, answers.sources, matched=matched),
+                                 is_cited(fact, turn.answer.citations))
                           for fact in question.expected),
                     tuple(candidates)))
             # Asked after the case's own turns, so they change no condense call the case is scored on.

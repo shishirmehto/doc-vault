@@ -99,12 +99,13 @@ What the run left open:
 | An automated comment-removal pass deleted comments that explain non-obvious reasons | The owner agent reviewed the edits and reverted them |
 | The evals page opened with the fake provider's full results, so its $0 cost rows read as the main result | My reading of the published page. The eval docs now report the OpenAI run only |
 | The docs said the OpenAI gate refuses off-topic questions, but on the eval set it let all 44 questions through, and the answer step declined the out-of-scope ones | An agent that re-read the live run's output while the evals page was rewritten |
+| The gate refused "What is this about?" on a 922-page handbook, because a question about a whole document scores as low as an off-topic one | My own test in the browser. When nothing matches, the answer step now gets each document's opening passage |
 
 ## AI inside the product
 
 - Every prompt lives in `docvault/prompts.py`. Each is versioned and carries a note on why it is worded the way it is.
 - **Grounding.** Every quote in an answer is located on its cited page, and the page's own text replaces the model's copy. Citations that cannot be found are dropped. Key facts in insights must quote their page, and those that don't are dropped and counted.
-- **Relevance gate.** It runs before the answer call. A question whose best match falls below the threshold gets "not found" with no answer call. On the eval set every question passed it, so the answer step declined the out-of-scope ones.
+- **Relevance gate.** It runs before the answer call. A question whose best match falls below the threshold goes to the answer step with only each document's opening passage, which answers "What is this about?" and refuses the rest. On the eval set every question passed it, so the answer step declined the out-of-scope ones.
 - **Follow-ups.** Each follow-up is rewritten into a standalone question, which is stored and returned as `interpreted_as`.
 - **Ledger.** Every provider call is written to an append-only ledger with its tokens and cost. The metrics endpoints read it, so cost and latency are measured, not estimated.
 - **Fake provider.** A deterministic fake lets the tests and a run with no key work without a model. Answer quality is reported only for the OpenAI models.

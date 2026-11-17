@@ -10,6 +10,8 @@ The README lists the main ones. This is the full list, by area.
 - During a re-embed after an embedding-model change, a chat over that document refuses with `no_evidence`, and the embedding progress count reads as complete.
 - After an embedding-model change, chats answer only from documents already re-embedded until reconcile finishes.
 - Retrieval sends 16 passages to the answer step. In a test of 50 questions on real documents of up to 922 pages, 4 were declined in at least one chat scope because the passage holding the answer ranked below those 16. Sending 16 instead of eight raised the answer step's input from about 4,300 to 7,700 tokens and its median time from 3.8 to 4.5 s.
+- In chat, "Summarize this document" answers from the opening passage and the 16 passages nearest the question. On a 922-page handbook that covers a few sections, and the answer says so. `POST /documents/{id}/summaries` reads the first 240,000 characters instead.
+- With a key, a question that matches nothing still costs one answer call over the opening passages, about 1,200 input tokens and 3 to 4 s.
 - An answer is kept when at least one of its quotes is found. A sentence whose quote is not found stays in the answer text, without a marker.
 - A citation is checked only for its quote being in the source it names, not for the quote supporting the sentence.
 

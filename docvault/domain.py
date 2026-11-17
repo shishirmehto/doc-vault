@@ -90,7 +90,7 @@ class InsightsStatus(StrEnum):
 
 class TurnOutcome(StrEnum):
     ANSWERED = "answered"
-    NO_EVIDENCE = "no_evidence"        # retrieval gate refused before any LLM call
+    NO_EVIDENCE = "no_evidence"        # nothing matched, and the opening passages, if shown, did not answer it
     MODEL_DECLINED = "model_declined"  # the model said the sources do not support an answer
     UNVERIFIED = "unverified"          # the model answered but no quote matched its source
 

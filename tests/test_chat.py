@@ -208,6 +208,26 @@ def test_a_question_the_model_declines_is_kept_as_not_found_with_its_reason(clie
     assert client.get(f"/chats/{chat_id}/messages").json()["turns"] == [declined]
 
 
+def test_a_question_about_the_whole_document_is_answered_from_its_opening_passage(client, ctx):
+    def says_what_it_is(prompt):
+        opening = " ".join(prompt.inputs["sources"][0].text.split()[:6])
+        return draft(f"{opening} [S1]", ("S1", opening))
+
+    class SaysWhatItIs(FakeChat):
+        declines_unanswerable = True
+        handlers = {**FakeChat.handlers, "answer": says_what_it_is}
+
+    policy = ready(ctx, POLICY)
+    chat_id = client.post("/chats", json={"document_ids": [str(policy)]}).json()["id"]
+    app.state.ctx = with_chat(ctx, SaysWhatItIs())
+
+    about = ask(client, chat_id, "What is this about?")
+
+    first = scalar(ctx.db, "SELECT id FROM chunks WHERE document_id = %s ORDER BY ord LIMIT 1", (policy,))
+    assert (about["status"], [(c["page"], c["chunk_id"]) for c in about["citations"]]) == ("answered", [(1, str(first))])
+    assert ledger(ctx) == {about["id"]: ["embed_query", "answer"]}
+
+
 def test_a_turn_with_an_unpriced_call_reports_no_cost(client, ctx):
     class UnpricedChat(FakeChat):
         models = {"main": "gpt-7-preview", "small": "gpt-7-preview"}
@@ -356,6 +376,19 @@ def test_the_per_document_guarantee_takes_at_most_half_the_slots():
     sources = chat.select_sources([*trailing, *dominant], k=8, per_doc_min=2)
 
     assert [s.text for s in sources] == [*(f"first {n}" for n in range(1, 7)), "second 1", "third 1"]
+
+
+def test_each_opening_passage_follows_the_k_sources_once_in_a_chat_of_up_to_three_documents():
+    first, second, third, fourth = documents(4)
+    ranked = [candidate(first, f"first {n}", 0.05 - n / 1000) for n in range(1, 4)]
+    openings = [ranked[0], candidate(second, "second opening", 0.0), candidate(third, "third opening", 0.0)]
+
+    three = chat.select_sources(ranked, k=2, per_doc_min=2, openings=openings)
+    four = chat.select_sources(ranked, k=2, per_doc_min=2, openings=[*openings, candidate(fourth, "fourth opening", 0.0)])
+
+    assert [(s.label, s.text) for s in three] == [
+        ("S1", "first 1"), ("S2", "first 2"), ("S3", "second opening"), ("S4", "third opening")]
+    assert [s.text for s in four] == ["first 1", "first 2"]
 
 
 def test_the_gate_passes_on_similarity_or_an_all_terms_match_and_refuses_nothing_found():

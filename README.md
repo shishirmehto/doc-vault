@@ -96,7 +96,7 @@ The cache Redis holds the embedding cache and the answer cache, and the app runs
 
 1. A follow-up is rewritten into a standalone question, from the last four turns.
 2. The question is embedded. One SQL statement then ranks the chunks of the chat's documents by vector distance and full-text rank.
-3. If no chunk passes the relevance gate, the chat answers "not found" and makes no answer call.
+3. If no chunk passes the relevance gate, the answer step sees only each document's opening passage. That answers "What is this about?" from the title page. Anything else comes back "not found".
 4. Otherwise the model answers from 16 sources and quotes each source it uses.
 5. The code looks for every quote in the source it names. It drops a quote it cannot find, and a kept citation names the page where its quote starts. When it finds none, the turn is `unverified` and the draft answer is not shown.
 

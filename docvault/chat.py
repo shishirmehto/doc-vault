@@ -68,7 +68,8 @@ MAX_SUGGESTIONS = 3
 MAX_SUGGESTION_CHARS = 160
 UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify an answer against their text, "
                    "so I am not giving one.")
-ANSWER_CACHE_FORMAT = 2     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
+OPENING_DOCS = 3            # a chat of up to this many documents sends each one's opening passage with its k sources
+ANSWER_CACHE_FORMAT = 3     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
 
 
@@ -142,7 +143,12 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
     version changes. A follow-up depends on the turns before it, so it is never looked up or stored.
 
     Over today's AI spending cap it raises VaultError(QUOTA_EXCEEDED) (HTTP 429) before
-    any model call, even one the gate would have saved. A cache hit still answers.
+    any model call. A cache hit still answers.
+
+    When the gate finds nothing, the answer step sees only each document's opening passage, if
+    the backend declines what its sources do not answer. That answers a question about the
+    document as a whole; anything else is refused with NO_EVIDENCE, and that call's text is not
+    streamed, so a decline never shows before the refusal replaces it.
 
     The optional sinks report progress. on_stage hears each step as it starts, after the
     chat, its scope, the cache and the spending cap are checked, so a missing chat, a deleted document
@@ -175,16 +181,22 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
     with ctx.db.connection() as conn:
         candidates = retrieve(conn, documents, q_vec, standalone, ctx.ai.embed_model,
                               per_doc=ctx.settings.retrieval_per_doc_min)
+        first = openings(conn, documents, q_vec, ctx.ai.embed_model)
+    matched = gate(candidates, ctx.ai.min_similarity)
+    fallback = first[:ctx.settings.retrieval_k] if ctx.ai.chat.declines_unanswerable else []
+    sources = select_sources(candidates, k=ctx.settings.retrieval_k, per_doc_min=ctx.settings.retrieval_per_doc_min,
+                             openings=first) if matched else _labelled(fallback)
 
-    answer: Answer
-    if gate(candidates, ctx.ai.min_similarity):
-        sources = select_sources(candidates, k=ctx.settings.retrieval_k, per_doc_min=ctx.settings.retrieval_per_doc_min)
+    answer: Answer | None = None
+    suggested: tuple[str, ...] = ()
+    if sources:
         stage("answering")
+        provisional = _ProvisionalAnswer(on_text, on_reset or _ignore) if matched and on_text is not None else None
         draft = ctx.ai.complete(prompts.answer(question, standalone, past, sources), AnswerDraft, owner=owner,
-                                stream=None if on_text is None else _ProvisionalAnswer(on_text, on_reset or _ignore))
+                                stream=provisional)
         answer = ground(draft, sources)
         suggested = suggestions(draft.follow_ups, question)
-    else:
+    if answer is None or not (matched or isinstance(answer, Answered)):
         answer = NotFound(TurnOutcome.NO_EVIDENCE, prompts.no_evidence_text(documents))
         with ctx.db.connection() as conn:
             facts = insights.ready_key_facts(conn, [doc.id for doc in documents])
@@ -426,15 +438,40 @@ def gate(candidates: Sequence[Candidate], min_similarity: float) -> bool:
     True when the best vector similarity reaches min_similarity, or when any
     chunk contains every query term (lexical_hit). The lexical arm keeps exact
     identifiers ("CG 20 10", a policy number) from being refused by a
-    semantic threshold. False means refuse with NO_EVIDENCE and spend no
-    answer call. min_similarity belongs to the embedding backend because
+    semantic threshold. False means nothing matched, and ask refuses with
+    NO_EVIDENCE unless the opening passages answer the question. min_similarity
+    belongs to the embedding backend because
     similarity scales differ per model.
     """
     return any(candidate.lexical_hit or candidate.similarity >= min_similarity for candidate in candidates)
 
 
-def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int) -> list[Source]:
-    """Choose the k sources the model sees, labelled S1..Sk in fused (rrf) order.
+OPENINGS_SQL = """
+SELECT DISTINCT ON (document_id) id, document_id, text, page_map, 1 - (embedding <=> %(q)s) AS similarity
+FROM chunks
+WHERE document_id = ANY(%(doc_ids)s) AND embedding_model = %(model)s
+ORDER BY document_id, ord
+"""
+
+
+def openings(conn: Connection, documents: Sequence[DocRef], q_vec: Vector, embed_model: str) -> list[Candidate]:
+    """Each document's opening passage, its first chunk, in scope order.
+
+    The opening holds the title, cover or declarations page, which say what the document is. A question about
+    the document as a whole ("What is this about?") scores as low against it as an off-topic question does,
+    so retrieval does not find it, and the answer step gets it from here instead.
+    """
+    rows = conn.execute(OPENINGS_SQL, {"q": PgVector(q_vec), "doc_ids": [doc.id for doc in documents],
+                                       "model": embed_model})
+    by_doc = {row["document_id"]: row for row in rows}
+    return [Candidate(ChunkId(row["id"]), doc, row["text"],
+                      PageMap(tuple((offset, page) for offset, page in row["page_map"])), row["similarity"], 0.0, False)
+            for doc in documents if (row := by_doc.get(doc.id)) is not None]
+
+
+def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int,
+                   openings: Sequence[Candidate] = ()) -> list[Source]:
+    """Choose the k sources the model sees, labelled S1..Sk in fused (rrf) order, then the opening passages.
 
     Each document is first guaranteed its best chunks by rrf, up to per_doc_min,
     then the rest fill to k by rrf. "Compare the deductibles in these three
@@ -444,6 +481,10 @@ def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int)
     document's strong second passage is then never crowded out by many weak
     first ones. With one document this is the top k. An exact rrf tie goes to
     the higher similarity.
+
+    In a chat of up to OPENING_DOCS documents, each opening passage not already
+    chosen follows the k, so a question about a document as a whole sees its
+    title page. A bigger chat sends none: one per document would outgrow the k.
     """
     ranked = sorted(candidates, key=lambda candidate: (candidate.rrf, candidate.similarity), reverse=True)
     quota = min(per_doc_min, k // 2 // max(1, len({candidate.doc.id for candidate in candidates})))
@@ -452,9 +493,16 @@ def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int)
     for at, candidate in enumerate(ranked):
         rounds.append((min(taken[candidate.doc.id], quota), at))
         taken[candidate.doc.id] += 1
-    chosen = sorted(at for _, at in sorted(rounds)[:k])
+    picked = [ranked[at] for at in sorted(at for _, at in sorted(rounds)[:k])]
+    if len(openings) <= OPENING_DOCS:
+        held = {candidate.chunk_id for candidate in picked}
+        picked += [opening for opening in openings if opening.chunk_id not in held]
+    return _labelled(picked)
+
+
+def _labelled(candidates: Sequence[Candidate]) -> list[Source]:
     return [Source(f"S{n}", c.chunk_id, c.doc, c.text, c.page_map, c.similarity, c.rrf)
-            for n, c in enumerate((ranked[at] for at in chosen), start=1)]
+            for n, c in enumerate(candidates, start=1)]
 
 
 def suggestions(follow_ups: Sequence[str], question: str) -> tuple[str, ...]:
