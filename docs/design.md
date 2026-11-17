@@ -53,7 +53,7 @@ stateDiagram-v2
 4. After the first question, the small model rewrites each question into a standalone query from the last four turns. The first question is used as asked.
 5. Embed the query, then run one SQL statement over the chat's documents (see Retrieval).
 6. Refuse with `no_evidence`, and spend no answer call, when no chunk passes the relevance gate.
-7. Send eight sources to the main model and get back an answer with `[S#]` markers and a verbatim quote per marker.
+7. Send 16 sources to the main model and get back an answer with `[S#]` markers and a verbatim quote per marker.
 8. Keep a citation only when `pages.locate_quote` finds its quote in the source it names. The citation's page is the page where the quote starts inside the chunk. With nothing verified, the turn is `unverified`.
 9. Keep up to three of the model's `follow_ups` as suggestions (`chat.suggestions`): questions that end in "?", are at most 160 characters and differ from the question just asked. A turn the gate refused had no model call, so `chat.fact_suggestions` asks "What is the <label>?" for the documents' verified key-fact labels of two words or more, taken round by round across the documents.
 10. Write one `chat_turns` row. Usage is read back from `llm_calls` by turn id.
@@ -79,7 +79,7 @@ Three extraction rules came from a run on real insurance PDFs:
 - `ts_rank_cd` against the query terms joined with OR. With AND, "Compare the general aggregate limit in the two documents." matched none of the two documents' eight chunks.
 - Reciprocal rank fusion of the two rankings (k = 60), over the top 50 of each, plus each document's best two chunks by distance.
 
-`chat.select_sources` gives each document its best two chunks first, then fills to eight by fused score, so a comparison sees every document. The gate passes when the best similarity reaches the embedder's `min_similarity`, or when one chunk contains every query term. The second arm keeps exact identifiers such as a form number from being refused by a semantic threshold. The fake embedder's threshold (0.184) comes from the eval set. The OpenAI threshold (0.20) comes from a calibration run with a key. It sits below the lowest answerable turn, because answerable and out-of-scope similarities overlap (`docs/evals.md`).
+`chat.select_sources` sends 16 chunks. Each document is first guaranteed its best two by fused score, as long as the guarantees fill at most half the slots, and the rest go by fused score. A chat of up to four documents sees at least two passages from each, five to eight documents get one each, and more than eight get the plain top 16. A document's strong second passage is then never crowded out by many weak first ones. The live question sets cover chats of one to three documents and of 23; four to 22 are covered by unit tests only. The gate passes when the best similarity reaches the embedder's `min_similarity`, or when one chunk contains every query term. The second arm keeps exact identifiers such as a form number from being refused by a semantic threshold. The fake embedder's threshold (0.184) comes from the eval set. The OpenAI threshold (0.20) comes from a calibration run with a key. It sits below the lowest answerable turn, because answerable and out-of-scope similarities overlap (`docs/evals.md`).
 
 The scan is exact, not approximate, because a chat's scope is a few documents and a few thousand chunks at most. There is no vector index.
 

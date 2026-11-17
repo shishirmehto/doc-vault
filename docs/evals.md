@@ -4,7 +4,7 @@
 
 ## Results
 
-One run of the full case set on 2026-11-12, on the configured OpenAI models, cost $1.18 on the ledger.
+One run of the full case set on 2026-11-12, on the configured OpenAI models, cost $1.18 on the ledger. The answer step then received eight sources. It has received 16 since 2026-11-17, and the set has not been run live again since.
 
 | Number | Result |
 |---|---|

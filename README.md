@@ -97,7 +97,7 @@ The cache Redis holds the embedding cache and the answer cache, and the app runs
 1. A follow-up is rewritten into a standalone question, from the last four turns.
 2. The question is embedded. One SQL statement then ranks the chunks of the chat's documents by vector distance and full-text rank.
 3. If no chunk passes the relevance gate, the chat answers "not found" and makes no answer call.
-4. Otherwise the model answers from eight sources and quotes each source it uses.
+4. Otherwise the model answers from 16 sources and quotes each source it uses.
 5. The code looks for every quote in the source it names. It drops a quote it cannot find, and a kept citation names the page where its quote starts. When it finds none, the turn is `unverified` and the draft answer is not shown.
 
 **Scale.** Uploads return at once and the work runs in Celery workers, so more `worker` replicas raise ingest throughput, and a lock on each document keeps duplicate jobs harmless. A file uploaded twice is stored and indexed once. Retrieval cost depends on the documents in a chat, not on the size of the vault. [`docs/design.md`](docs/design.md) has timings at 5,000 and 50,000 documents, and says what changes past that.
@@ -175,7 +175,7 @@ uv run ruff check
 
 - The tests use canned HTTP responses for the OpenAI backends. The live API was run once, on 2026-11-12.
 - Insights read the first 240,000 characters of a document, so a longer document is covered only in part.
-- A chat sends eight passages to the answer step. On a 246-page manual, the passage that answered one question was not among them.
+- A chat sends 16 passages to the answer step. In a test of 79 questions on real documents of up to 922 pages, 7 were declined because the passage holding the answer ranked below those 16.
 - An answer is kept when at least one of its quotes is found in its source. A sentence whose quote is not found stays in the answer, without a citation number.
 - "Differs" in a comparison compares the text of two values, not their meaning, so two wordings of the same term are marked as different.
 - A comparison and a summary each run inside the request, as one model call of at most 90 s.

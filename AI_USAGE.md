@@ -77,7 +77,7 @@ One live run with the OpenAI key, on 2026-11-12, cost $3.17 on the ledger, $1.18
   - streamed answers arrived in about 90 pieces, the first after 2.7 s.
 
 What the run left open:
-- Three limits that the README lists: "Differs" compares text and not meaning, a chat sends eight passages to the answer step, and insights read the first 240,000 characters.
+- Three limits that the README lists: "Differs" compares text and not meaning, a chat sent eight passages to the answer step (16 since 2026-11-17), and insights read the first 240,000 characters.
 - A word broken at a line end, with a stray space inside it, stays split ("se t-tlements") when the document never uses it whole. That happens in the oldest standard forms.
 - The eval's case set was written for the sample documents. The 31 real-document questions are a hand-graded spot check, not a scored set.
 
