@@ -108,11 +108,13 @@ The cache Redis holds the embedding cache and the answer cache, and the app runs
 
 `docs/evals.md` scores a fixed set of 44 questions on the sample documents. 28 of them can be answered, with 34 expected facts between them, and 16 cannot.
 
-| Measure | With the OpenAI models | On the fake provider |
-|---|---|---|
-| Retrieval finds the expected fact | 34 of 34 | 21 of 34 |
-| The answer cites the fact on the right page | 30 of 34 | 7 of 34 |
-| A question with no answer in the documents is refused | 15 of 16 | 15 of 16 |
+On the OpenAI models, in one run on 2026-11-12:
+
+| Measure | Result |
+|---|---|
+| Retrieval finds the expected fact | 34 of 34 |
+| The answer cites the fact on the right page | 30 of 34 |
+| A question with no answer in the documents is refused | 15 of 16 |
 
 One live run also covered 19 public insurance documents. Of 25 answerable questions, 21 were answered right and 4 in part, and every citation was on the page it named. `AI_USAGE.md` has the details.
 

@@ -61,7 +61,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 ## The live run
 
 One live run with the OpenAI key, on 2026-11-12, cost $3.17 on the ledger, $1.18 of it for the eval set. It covered:
-- **The eval set:** the numbers are in `docs/evals.md`, live and fake side by side.
+- **The eval set:** the numbers are in `docs/evals.md`.
 - **The 19 real documents.** Before any paid call, the lead agent wrote the expected answer and page for 31 broker questions from the documents' own text. Six of the questions have no answer in their document.
   - Of the 25 answerable questions, 21 were answered right.
   - 4 were partial:

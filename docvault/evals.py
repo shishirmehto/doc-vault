@@ -1,6 +1,6 @@
 """Retrieval, answer, insights, comparison and summary evals over the sample documents.
 
-  uv run python -m docvault.evals [--calibrate] [--out docs/evals.md]
+  uv run python -m docvault.evals [--calibrate] [--out FILE]
 
 Runs the fixed case set in evals/cases.yaml against the configured provider (the fake when no key is set)
 in its own database, <DATABASE_URL name>_evals, dropped and recreated each run. It uploads the samples through
@@ -24,8 +24,8 @@ miss happens:
   cost and latency     metrics.processing_stats over the run: llm_calls by purpose and model, chat_turns p95
 
 --calibrate prints each turn's best vector similarity and all-terms match instead, then the relevance-gate
-threshold that maximises answerable-passed plus out-of-scope-refused. Results go to docs/evals.md
-(between its results markers), never AI_USAGE.md.
+threshold that maximises answerable-passed plus out-of-scope-refused. Results print to stdout, and --out
+writes them between the results markers of a Markdown file.
 """
 
 from __future__ import annotations

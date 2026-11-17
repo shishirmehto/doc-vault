@@ -624,7 +624,7 @@ class FakeEmbedder:
 
     provider = "fake"
     model = "fake-hash"
-    # Calibrated by `python -m docvault.evals --calibrate` on evals/cases.yaml (docs/evals.md has the margins).
+    # Calibrated by `python -m docvault.evals --calibrate` on evals/cases.yaml.
     # tests/test_evals.py fails when the best value on the case set moves.
     min_similarity = 0.184
 

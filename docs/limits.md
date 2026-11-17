@@ -4,8 +4,7 @@ The README lists the main ones. This is the full list, by area.
 
 ## Answers and retrieval
 
-- On the fake provider, the answer step often quotes a neighbouring passage: citation accuracy is 7 of 34 facts while retrieval finds 21 of 34. Broker-worded questions that share few words with the text are refused by the gate (`docs/evals.md` lists each).
-- The fake gate threshold (0.184) has a margin of 0.003 on each side on the eval set. The OpenAI threshold (0.20) sits below the lowest answerable turn of the calibration run, so the gate refuses only off-topic questions and the answer step declines the rest (`docs/evals.md`).
+- The OpenAI gate threshold (0.20) sits below the lowest answerable turn of the calibration run. On the eval set it passed every question, and the answer step declined the out-of-scope ones (`docs/evals.md`).
 - The tests use canned HTTP responses for the OpenAI backends. One live run on 2026-11-12 covered the eval set and 19 public insurance documents, with streaming, suggestions, comparisons and summaries (`docs/evals.md`, `AI_USAGE.md`).
 - The fake provider simulates a model's pacing when it streams: it sends its finished answer a word at a time, 25 ms apart in compose (`FAKE_STREAM_DELAY_MS`). The plain route has no delay.
 - During a re-embed after an embedding-model change, a chat over that document refuses with `no_evidence`, and the embedding progress count reads as complete.
