@@ -2,6 +2,30 @@
 
 `docvault/evals.py` asks a fixed set of broker questions about the three sample documents and scores retrieval, answers, refusals and insights separately, so a miss shows the step where it happened. It also compares the policy with its renewal quote and scores the comparison, and summarises each sample at each length and scores the summaries' sources. The case set is `evals/cases.yaml`, and the expected values come from `samples/facts.yaml`.
 
+## Results on the OpenAI models
+
+One run of the full case set on 2026-11-12, on the configured OpenAI models, cost $1.18 on the ledger. The offline column is the same case set on the deterministic fake provider, which needs no key and which `tests/test_evals.py` pins. The offline run's full output, case by case, is at the end of this page.
+
+| Number | OpenAI models | Offline (fake provider) |
+|---|---|---|
+| Retrieval hit rate | 34/34 (100%) | 21/34 (62%) |
+| Citation accuracy | 30/34 (88%) | 7/34 (21%) |
+| Not-found accuracy | 15/16 (94%) | 15/16 (94%) |
+| Key-fact grounding | 36/36 (100%) | 31/31 (100%) |
+| Key-fact recall | 19/28 (68%) | 12/28 (43%) |
+| Suggestions answered | 90/90 (100%) | 108/108 (100%) |
+| Cell grounding | 45/45 (100%) | 24/24 (100%) |
+| Difference recall | 4/4 (100%) | 3/4 (75%) |
+| Equal fields kept equal | 1/1 (100%) | 1/1 (100%) |
+| Summary source grounding | 54/54 (100%) | 36/36 (100%) |
+| Gate: answerable turns passed | 28/28 (100%), at 0.20 | 18/28 (64%), at 0.184 |
+| Gate: out-of-scope turns refused | 0/16 (0%) | 15/16 (94%) |
+| p95 turn latency | 7.3 s | under 20 ms |
+
+The four citation misses are the two turns in `aggregate-then-medical`. The answers are right ("from $2,000,000 to $3,000,000", "from $5,000 to $10,000"), but they cite the quote's change list on page 3, as the Known limits section predicts. The one not-found miss is the flood question in `insured-then-fired-employee`. The answer says the documents do not establish flood cover, and it counts as answered because it cites the coverage grant.
+
+On the OpenAI models the gate passed every turn, so the answer step declined the 15 out-of-scope turns itself. On the fake provider the gate refused them before any answer call.
+
 ## Run the evals
 
 Start the compose Postgres (`docker compose up -d db`), then run the eval on the host:
@@ -27,7 +51,7 @@ OPENAI_API_KEY=sk-... DATABASE_URL=postgresql://vault:vault@localhost:54329/vaul
 
 The gate reads only the embedder, so `CHAT_PROVIDER=fake` in front of the command limits the spend to embeddings. The follow-up turns then use the fake condense, which rewrites them differently from the live model.
 
-The 2026-11-12 run did not use the best-fit value. Answerable turns scored 0.239 to 0.606 and out-of-scope turns 0.257 to 0.514, so the classes overlap and no threshold separates them. The best fit, 0.518, put 32 of 44 turns on the right side, but it refused 12 of the 28 answerable turns. A refused answerable question costs a broker more than one answer call, so the threshold sits below the lowest answerable turn, at 0.20. The gate then refuses only off-topic questions, and the answer step declines the rest: 15 of 16 out-of-scope turns came back `not_found` on the live run. Once `.env` holds a key, add `CHAT_PROVIDER=fake EMBED_PROVIDER=fake` in front of the eval command to keep a run free.
+The 2026-11-12 run did not use the best-fit value. Answerable turns scored 0.239 to 0.606 and out-of-scope turns 0.257 to 0.514, so the classes overlap and no threshold separates them. The best fit, 0.518, put 32 of 44 turns on the right side, but it refused 12 of the 28 answerable turns. A refused answerable question costs a broker more than one answer call, so the threshold sits below the lowest answerable turn, at 0.20. On the full live run, the gate at 0.20 passed all 44 turns, including the 16 out-of-scope turns. The answer step then declined 15 of those 16. Once `.env` holds a key, add `CHAT_PROVIDER=fake EMBED_PROVIDER=fake` in front of the eval command to keep a run free.
 
 ## What each number means
 
@@ -89,28 +113,7 @@ Read that margin as a warning, not a result. The fake embedder hashes words, so 
 - The fake also marks Estimated Annual Payroll and Rate per $1,000 of Payroll as different. Both are real differences, but `facts.yaml` does not plant them, so they count in no number. There is no precision score for differences beyond the one equal field.
 - Under the fake, suggestions are "What is the <label>?" for label-and-value passages, so they repeat across cases ("What is the Policy Number?" follows most policy questions) and 108 of 108 answered says that a label's words find its passage, not that the questions are good ones. A live run measures the model's own follow-ups.
 
-## Results
-
-### Live and fake side by side
-
-**Live run (2026-11-12, the configured OpenAI models).** One run of the full case set with a key cost $1.18 on the ledger.
-
-| Number | Live | Fake |
-|---|---|---|
-| Retrieval hit rate | 34/34 (100%) | 21/34 (62%) |
-| Citation accuracy | 30/34 (88%) | 7/34 (21%) |
-| Not-found accuracy | 15/16 (94%) | 15/16 (94%) |
-| Key-fact grounding | 36/36 (100%) | 31/31 (100%) |
-| Key-fact recall | 19/28 (68%) | 12/28 (43%) |
-| Suggestions answered | 90/90 (100%) | 108/108 (100%) |
-| Cell grounding | 45/45 (100%) | 24/24 (100%) |
-| Difference recall | 4/4 (100%) | 3/4 (75%) |
-| Summary source grounding | 54/54 (100%) | 36/36 (100%) |
-| p95 turn latency | 7.3 s | under 20 ms |
-
-The four citation misses are the two turns in `aggregate-then-medical`. The answers are right ("from $2,000,000 to $3,000,000", "from $5,000 to $10,000"), but they cite the quote's change list on page 3, as Known limits predicts. The one not-found miss is the flood question in `insured-then-fired-employee`. The answer says the documents do not establish flood cover, and it counts as answered because it cites the coverage grant.
-
-### The fake run in full
+## The offline run in full
 
 The results block below is the fake run, which `tests/test_evals.py` pins and which needs no key.
 
