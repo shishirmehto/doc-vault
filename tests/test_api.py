@@ -129,6 +129,20 @@ def test_every_error_response_in_the_openapi_schema_is_the_error_envelope(client
     assert schema["paths"]["/documents"]["post"]["responses"]["422"]["description"] == "empty_file, invalid_request"
 
 
+def test_swagger_groups_every_operation_under_one_section(client):
+    schema = client.get("/openapi.json").json()
+    tags = {(path, method): operation.get("tags") for path, methods in schema["paths"].items()
+            for method, operation in methods.items()}
+    assert [tag["name"] for tag in schema["tags"]] == ["Documents", "Chat", "Comparisons", "Summaries", "Metrics", "Health"]
+    assert {key: value for key, value in tags.items() if value is None or len(value) != 1} == {}
+    assert sorted({value[0] for value in tags.values()}) == sorted(tag["name"] for tag in schema["tags"])
+    assert [tags[key] for key in [("/documents", "post"), ("/events/documents", "get"),
+                                  ("/chats/{chat_id}/messages/{turn_id}/retrieval", "get"), ("/comparisons", "post"),
+                                  ("/documents/{doc_id}/summaries", "post"), ("/metrics/processing", "get"),
+                                  ("/health", "get")]] == [
+        ["Documents"], ["Documents"], ["Chat"], ["Comparisons"], ["Summaries"], ["Metrics"], ["Health"]]
+
+
 def test_malformed_input_gets_the_error_envelope_naming_the_field(client):
     response = client.get("/documents", params={"limit": 0})
     assert (response.status_code, response.json()) == (422, {"error": {

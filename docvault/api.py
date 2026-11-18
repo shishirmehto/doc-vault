@@ -227,7 +227,7 @@ def rate_limited(action: Action) -> Any:
 router = APIRouter()
 
 
-@router.post("/documents", status_code=202, response_model=wire.DocumentOut, dependencies=[rate_limited("upload")],
+@router.post("/documents", tags=["Documents"], status_code=202, response_model=wire.DocumentOut, dependencies=[rate_limited("upload")],
              responses={200: {"model": wire.DocumentOut, "description": "Same bytes uploaded before; existing document"},
                         **errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.FILE_TOO_LARGE, ErrorCode.UNSUPPORTED_TYPE,
                                  ErrorCode.EMPTY_FILE, ErrorCode.INVALID_REQUEST, ErrorCode.VERSION_CONFLICT,
@@ -248,7 +248,7 @@ def upload(file: UploadFile, response: Response, ctx: Deps,
             return wire.document_out(doc)
 
 
-@router.get("/documents", response_model=wire.DocumentPage,
+@router.get("/documents", tags=["Documents"], response_model=wire.DocumentPage,
             responses=errors(ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
 def list_documents(ctx: Deps, status: DocStatus | None = None,
                    latest: Annotated[bool, Query(description="Only the latest version of each document")] = False,
@@ -258,63 +258,63 @@ def list_documents(ctx: Deps, status: DocStatus | None = None,
     return wire.DocumentPage(items=[wire.document_out(doc) for doc in docs], next_cursor=next_cursor)
 
 
-@router.get("/documents/{doc_id}", response_model=wire.DocumentOut,
+@router.get("/documents/{doc_id}", tags=["Documents"], response_model=wire.DocumentOut,
             responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def get_document(doc_id: UUID, ctx: Deps) -> wire.DocumentOut:
     return wire.document_out(documents.get(ctx.db, DocumentId(doc_id)))
 
 
-@router.get("/documents/{doc_id}/versions", response_model=wire.VersionList,
+@router.get("/documents/{doc_id}/versions", tags=["Documents"], response_model=wire.VersionList,
             responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def get_versions(doc_id: UUID, ctx: Deps) -> wire.VersionList:
     """Every version of this document, oldest first. Deleting one leaves the others and their numbers."""
     return wire.VersionList(items=[wire.document_out(doc) for doc in documents.versions(ctx.db, DocumentId(doc_id))])
 
 
-@router.get("/documents/{doc_id}/insights", response_model=wire.InsightsOut,
+@router.get("/documents/{doc_id}/insights", tags=["Documents"], response_model=wire.InsightsOut,
             responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def get_insights(doc_id: UUID, ctx: Deps):
     return wire.insights_out(documents.get(ctx.db, DocumentId(doc_id)))
 
 
-@router.get("/documents/{doc_id}/pages/{number}", response_model=wire.PageOut,
+@router.get("/documents/{doc_id}/pages/{number}", tags=["Documents"], response_model=wire.PageOut,
             responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.PAGE_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def get_page(doc_id: UUID, number: int, ctx: Deps) -> wire.PageOut:
     basis, page = documents.page(ctx.db, DocumentId(doc_id), number)
     return wire.page_out(doc_id, basis, page)
 
 
-@router.post("/documents/{doc_id}/retry", status_code=202, response_model=wire.DocumentOut,
+@router.post("/documents/{doc_id}/retry", tags=["Documents"], status_code=202, response_model=wire.DocumentOut,
              responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.NOTHING_TO_RETRY, ErrorCode.INVALID_REQUEST))
 def retry(doc_id: UUID, ctx: Deps) -> wire.DocumentOut:
     return wire.document_out(documents.retry(ctx, DocumentId(doc_id)))
 
 
-@router.delete("/documents/{doc_id}", status_code=204,
+@router.delete("/documents/{doc_id}", tags=["Documents"], status_code=204,
                responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def delete_document(doc_id: UUID, ctx: Deps) -> None:
     documents.delete(ctx, DocumentId(doc_id))
 
 
-@router.post("/chats", status_code=201, response_model=wire.ChatOut,
+@router.post("/chats", tags=["Chat"], status_code=201, response_model=wire.ChatOut,
              responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.DOCUMENTS_NOT_READY, ErrorCode.INVALID_REQUEST))
 def start_chat(body: wire.StartChatIn, ctx: Deps) -> wire.ChatOut:
     return wire.chat_out(chat.start(ctx.db, [DocumentId(doc_id) for doc_id in body.document_ids], title=body.title))
 
 
-@router.get("/chats", response_model=wire.ChatPage, responses=errors(ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
+@router.get("/chats", tags=["Chat"], response_model=wire.ChatPage, responses=errors(ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
 def list_chats(ctx: Deps, limit: Annotated[int, Query(ge=1, le=100)] = 20, cursor: str | None = None) -> wire.ChatPage:
     chats, next_cursor = chat.list_chats(ctx.db, limit=limit, cursor=cursor)
     return wire.ChatPage(items=[wire.chat_out(c) for c in chats], next_cursor=next_cursor)
 
 
-@router.get("/chats/{chat_id}", response_model=wire.ChatOut,
+@router.get("/chats/{chat_id}", tags=["Chat"], response_model=wire.ChatOut,
             responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def get_chat(chat_id: UUID, ctx: Deps) -> wire.ChatOut:
     return wire.chat_out(chat.get(ctx.db, ChatId(chat_id)))
 
 
-@router.post("/chats/{chat_id}/messages", response_model=wire.TurnOut, dependencies=[rate_limited("ask")],
+@router.post("/chats/{chat_id}/messages", tags=["Chat"], response_model=wire.TurnOut, dependencies=[rate_limited("ask")],
              responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED, ErrorCode.AI_UNAVAILABLE,
                               ErrorCode.AI_BAD_OUTPUT, ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED,
                               ErrorCode.QUOTA_EXCEEDED))
@@ -395,7 +395,7 @@ After a 200, the events are:
 If the client disconnects, the answer still finishes and is stored, so `GET /chats/{chat_id}/messages` shows it."""
 
 
-@router.post("/chats/{chat_id}/messages/stream", response_class=EventStreamResponse, dependencies=[rate_limited("ask")],
+@router.post("/chats/{chat_id}/messages/stream", tags=["Chat"], response_class=EventStreamResponse, dependencies=[rate_limited("ask")],
              description=STREAM_EVENTS,
              responses={200: {"description": "stage, delta, reset, then one turn or error event",
                               "content": {"text/event-stream": {"schema": {"type": "string"}}}},
@@ -454,7 +454,7 @@ Past 100 open streams per API process the request is refused with 503 `too_many_
 `Retry-After`, before the stream starts."""
 
 
-@router.get("/events/documents", response_class=EventStreamResponse, description=DOCUMENT_EVENTS,
+@router.get("/events/documents", tags=["Documents"], response_class=EventStreamResponse, description=DOCUMENT_EVENTS,
             responses={200: {"description": "document, deleted and resync events, and keepalive comments",
                              "content": {"text/event-stream": {"schema": {"type": "string"}}}},
                        **json_errors(ErrorCode.TOO_MANY_STREAMS)})
@@ -462,21 +462,21 @@ async def document_events(request: Request) -> FeedResponse:
     return FeedResponse(request.app.state.events.subscribe())
 
 
-@router.get("/chats/{chat_id}/messages", response_model=wire.HistoryOut,
+@router.get("/chats/{chat_id}/messages", tags=["Chat"], response_model=wire.HistoryOut,
             responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def history(chat_id: UUID, ctx: Deps, limit: Annotated[int, Query(ge=1, le=200)] = 50) -> wire.HistoryOut:
     return wire.HistoryOut(chat_id=chat_id,
                            turns=[wire.turn_out(turn) for turn in chat.history(ctx.db, ChatId(chat_id), limit=limit)])
 
 
-@router.get("/chats/{chat_id}/messages/{turn_id}/retrieval", response_model=wire.RetrievalOut,
+@router.get("/chats/{chat_id}/messages/{turn_id}/retrieval", tags=["Chat"], response_model=wire.RetrievalOut,
             responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.TURN_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def turn_retrieval(chat_id: UUID, turn_id: UUID, ctx: Deps) -> wire.RetrievalOut:
     """What the turn's search found, with scores, and which passages its answer step was sent."""
     return wire.retrieval_out(chat.turn_retrieval(ctx.db, ChatId(chat_id), TurnId(turn_id)))
 
 
-@router.post("/comparisons", status_code=201, response_model=wire.ComparisonOut, dependencies=[rate_limited("ask")],
+@router.post("/comparisons", tags=["Comparisons"], status_code=201, response_model=wire.ComparisonOut, dependencies=[rate_limited("ask")],
              responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.DOCUMENTS_NOT_READY, ErrorCode.INVALID_REQUEST,
                               ErrorCode.RATE_LIMITED, ErrorCode.QUOTA_EXCEEDED, ErrorCode.AI_UNAVAILABLE,
                               ErrorCode.AI_BAD_OUTPUT))
@@ -485,7 +485,7 @@ def create_comparison(body: wire.CompareIn, ctx: Deps) -> wire.ComparisonOut:
     return wire.comparison_out(compare.create(ctx, [DocumentId(doc_id) for doc_id in body.document_ids], body.focus))
 
 
-@router.get("/comparisons", response_model=wire.ComparisonPage,
+@router.get("/comparisons", tags=["Comparisons"], response_model=wire.ComparisonPage,
             responses=errors(ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
 def list_comparisons(ctx: Deps, limit: Annotated[int, Query(ge=1, le=100)] = 20,
                      cursor: str | None = None) -> wire.ComparisonPage:
@@ -494,14 +494,14 @@ def list_comparisons(ctx: Deps, limit: Annotated[int, Query(ge=1, le=100)] = 20,
     return wire.ComparisonPage(items=[wire.comparison_out(c) for c in comparisons], next_cursor=next_cursor)
 
 
-@router.get("/comparisons/{comparison_id}", response_model=wire.ComparisonOut,
+@router.get("/comparisons/{comparison_id}", tags=["Comparisons"], response_model=wire.ComparisonOut,
             responses=errors(ErrorCode.COMPARISON_NOT_FOUND, ErrorCode.INVALID_REQUEST))
 def get_comparison(comparison_id: UUID, ctx: Deps) -> wire.ComparisonOut:
     """One stored comparison. A document deleted since keeps its column, its cells and their page labels."""
     return wire.comparison_out(compare.get(ctx.db, ComparisonId(comparison_id)))
 
 
-@router.post("/documents/{doc_id}/summaries", status_code=201, response_model=wire.SummaryOut,
+@router.post("/documents/{doc_id}/summaries", tags=["Summaries"], status_code=201, response_model=wire.SummaryOut,
              dependencies=[rate_limited("ask")],
              responses={200: {"model": wire.SummaryOut,
                               "description": "Summarised before with the same options; the stored summary, cached"},
@@ -516,7 +516,7 @@ def create_summary(doc_id: UUID, body: wire.SummaryIn, response: Response, ctx: 
     return wire.summary_out(summary)
 
 
-@router.get("/documents/{doc_id}/summaries", response_model=wire.SummaryPage,
+@router.get("/documents/{doc_id}/summaries", tags=["Summaries"], response_model=wire.SummaryPage,
             responses=errors(ErrorCode.DOCUMENT_NOT_FOUND, ErrorCode.INVALID_CURSOR, ErrorCode.INVALID_REQUEST))
 def list_summaries(doc_id: UUID, ctx: Deps, limit: Annotated[int, Query(ge=1, le=100)] = 20,
                    cursor: str | None = None) -> wire.SummaryPage:
@@ -525,7 +525,7 @@ def list_summaries(doc_id: UUID, ctx: Deps, limit: Annotated[int, Query(ge=1, le
     return wire.SummaryPage(items=[wire.summary_out(summary) for summary in items], next_cursor=next_cursor)
 
 
-@router.get("/metrics/documents", response_model=wire.DocumentMetricsOut)
+@router.get("/metrics/documents", tags=["Metrics"], response_model=wire.DocumentMetricsOut)
 def document_metrics(ctx: Deps) -> wire.DocumentMetricsOut:
     return wire.document_metrics_out(metrics.document_stats(ctx.db))
 
@@ -535,13 +535,13 @@ Window = Annotated[str, Query(pattern=r"^[1-9]\d{0,3}[hd]$", description="Hours 
 WINDOW_UNITS = {"h": "hours", "d": "days"}
 
 
-@router.get("/metrics/processing", response_model=wire.ProcessingMetricsOut, responses=errors(ErrorCode.INVALID_REQUEST))
+@router.get("/metrics/processing", tags=["Metrics"], response_model=wire.ProcessingMetricsOut, responses=errors(ErrorCode.INVALID_REQUEST))
 def processing_metrics(ctx: Deps, window: Window = "24h") -> wire.ProcessingMetricsOut:
     span = timedelta(**{WINDOW_UNITS[window[-1]]: int(window[:-1])})
     return wire.processing_metrics_out(window, metrics.processing_stats(ctx.db, span), ctx.cache.stats())
 
 
-@router.get("/health", response_model=wire.HealthOut,
+@router.get("/health", tags=["Health"], response_model=wire.HealthOut,
             responses={503: {"model": wire.HealthOut, "description": "Postgres or Redis is unreachable"}})
 def health(ctx: Deps, response: Response) -> wire.HealthOut:
     """503 when Postgres or Redis is unreachable, so compose and load balancers can gate on it. The cache never
@@ -558,7 +558,17 @@ def health(ctx: Deps, response: Response) -> wire.HealthOut:
                                                                                  spent_today_usd=float(budget[1])))
 
 
-app = FastAPI(title="Doc Vault", version="1.0", lifespan=lifespan)
+OPENAPI_TAGS = [
+    {"name": "Documents", "description": "Upload files, follow their processing, and read pages, AI insights and versions."},
+    {"name": "Chat", "description": "Chat over ready documents: cited answers, streamed or not, the history, and each "
+                                    "turn's retrieval log."},
+    {"name": "Comparisons", "description": "Compare two to five documents field by field."},
+    {"name": "Summaries", "description": "Summarise a document at a chosen length, focus and tone."},
+    {"name": "Metrics", "description": "Document statistics and processing metrics."},
+    {"name": "Health", "description": "Database, queue, cache and AI provider status."},
+]
+
+app = FastAPI(title="Doc Vault", version="1.0", lifespan=lifespan, openapi_tags=OPENAPI_TAGS)
 app.add_exception_handler(VaultError, vault_error_handler)  # type: ignore[arg-type]
 app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]
 app.add_exception_handler(Exception, internal_error_handler)

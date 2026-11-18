@@ -1,5 +1,7 @@
 # API reference
 
+Swagger at `/docs` groups the routes into the sections this page follows: Documents, Chat, Comparisons, Summaries, Metrics and Health.
+
 Every error a route returns has one shape, `{"error": {"code", "message", "retryable", "details"}}`, except the 503 from `GET /health`, which carries the health report. OpenAPI declares that shape for the error codes each route names. `GET /metrics/documents` names none, `GET /health` declares its 503 as the health report, and no route declares the 500 `internal_error`. The examples use `API=http://localhost:8000`.
 
 Every response carries an `X-Request-ID` header. A request may send its own id of up to 64 characters, each a letter, a digit, `.`, `_` or `-`. The API returns that id unchanged and replaces any other value with a fresh 32-character hex id. The web UI's API calls each send a fresh id when the browser can make one (`crypto.randomUUID`), and its `/api` proxy passes the header both ways. The live-status stream sends none, so the API makes its id.
