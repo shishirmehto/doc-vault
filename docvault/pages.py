@@ -8,6 +8,7 @@ insights step and chat all ask this module; none of them does offset math.
 
 from __future__ import annotations
 
+import codecs
 import re
 import zipfile
 from bisect import bisect_left, bisect_right
@@ -31,6 +32,7 @@ _KNOWN_UNSUPPORTED = {
     b"\x89PNG": "a PNG image",
     b"\xff\xd8\xff": "a JPEG image",
     b"GIF8": "a GIF image",
+    b"{\\rtf": "an RTF document",
 }
 _TEXT_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0e-\x1f]")
 
@@ -38,13 +40,14 @@ _TEXT_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0e-\x1f]")
 def sniff_kind(path: Path) -> DocKind:
     """Decide the format from the stored bytes, not the extension or Content-Type.
 
-    b"%PDF-" -> PDF. A zip that contains word/document.xml -> DOCX. Text that
-    decodes as UTF-8 or cp1252 with no control characters -> TXT. Anything
-    else raises VaultError(UNSUPPORTED_TYPE) naming what was detected.
+    b"%PDF-" in the first 1,024 bytes, where PDF readers look for it -> PDF. A
+    zip that contains word/document.xml -> DOCX. Text that decodes (see
+    _decode) with no control characters -> TXT. Anything else raises
+    VaultError(UNSUPPORTED_TYPE) naming what was detected.
     """
     with path.open("rb") as f:
         head = f.read(SNIFF_BYTES)
-    if head.startswith(b"%PDF-"):
+    if b"%PDF-" in head[:1024]:
         return DocKind.PDF
     if head.startswith(b"PK\x03\x04"):
         if _is_docx(path):
@@ -71,10 +74,19 @@ def _unsupported(detected: str) -> VaultError:
                       f"This looks like {detected}. Upload a PDF, a Word .docx file or a plain text file.")
 
 
+_UTF8_MULTIBYTE = re.compile(rb"[\xc2-\xf4][\x80-\xbf]")
+
+
 def _decode(raw: bytes) -> str:
+    """UTF-16 when it starts with its byte-order mark, then UTF-8. Bytes that are not valid UTF-8 are read
+    as cp1252, unless they hold UTF-8 sequences: then a stray byte becomes U+FFFD and the rest stays UTF-8."""
+    if raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return raw.decode("utf-16", errors="replace")
     try:
         return raw.decode("utf-8-sig")
     except UnicodeDecodeError:
+        if _UTF8_MULTIBYTE.search(raw):
+            return raw.decode("utf-8-sig", errors="replace")
         return raw.decode("cp1252", errors="replace")
 
 
@@ -190,7 +202,7 @@ def _extract_docx(path: Path, max_pages: int) -> ExtractedText:
 
 
 def _extract_txt(path: Path, max_pages: int) -> ExtractedText:
-    """UTF-8 (with or without BOM) or cp1252 text, cut into SYNTHETIC sections."""
+    """UTF-8 (with or without BOM), UTF-16 with a BOM, or cp1252 text, cut into SYNTHETIC sections."""
     text = _decode(path.read_bytes()).replace("\r\n", "\n").replace("\r", "\n")
     return _sections([_tidy(p) for p in re.split(r"\n[ \t]*\n", text)], joiner="\n\n")
 

@@ -258,6 +258,29 @@ def test_kind_comes_from_the_bytes_not_the_name(tmp_path):
                         "sheet.docx": "This looks like a zip archive that is not a Word document"}
 
 
+def test_a_pdf_header_after_leading_bytes_utf16_text_and_rtf_are_told_apart(tmp_path):
+    late = tmp_path / "late-header.pdf"
+    late.write_bytes(b"\r\n" + (SAMPLES / POLICY).read_bytes())
+    wide = tmp_path / "notepad-unicode.txt"
+    wide.write_bytes("Premium: €1,200 for the café.".encode("utf-16"))
+    rtf = tmp_path / "letter.txt"
+    rtf.write_bytes(rb"{\rtf1\ansi Dear client,\par}")
+
+    assert [pages.sniff_kind(p) for p in (late, wide)] == [DocKind.PDF, DocKind.TXT]
+    assert pages.extract(DocKind.PDF, late, max_pages=10).pages[0].text.startswith("SAMPLE")
+    assert pages.extract(DocKind.TXT, wide, max_pages=10).pages[0].text == "Premium: €1,200 for the café."
+    with pytest.raises(VaultError) as raised:
+        pages.sniff_kind(rtf)
+    assert raised.value.failure.message.split(".")[0] == "This looks like an RTF document"
+
+
+def test_utf8_text_with_one_stray_byte_keeps_its_utf8_characters(tmp_path):
+    path = tmp_path / "notes.txt"
+    path.write_bytes("Prämie: 1.000 € ".encode() + b"\xff" + " Selbstbehalt: 250 €".encode())
+    assert pages.extract(pages.sniff_kind(path), path, max_pages=10).pages[0].text == (
+        "Prämie: 1.000 € � Selbstbehalt: 250 €")
+
+
 def test_text_file_becomes_sections_of_at_most_3000_characters(tmp_path):
     paragraphs = [f"Paragraph {n}. " + "word " * 180 for n in range(1, 8)]
     path = tmp_path / "notes.txt"
