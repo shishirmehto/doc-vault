@@ -83,7 +83,7 @@ class Candidate:
     page_map: PageMap
     similarity: float
     rrf: float
-    lexical_hit: bool       # chunk.tsv matched websearch_to_tsquery(question) (all terms present)
+    lexical_hit: bool       # chunk.tsv matched websearch_to_tsquery(question), which ANDs the terms; "or" and "-word" become OR and NOT
 
 
 # ------------------------------------------------------------------ commands
@@ -184,11 +184,11 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
     with ctx.db.connection() as conn:
         candidates = retrieve(conn, documents, q_vec, standalone, ctx.ai.embed_model,
                               per_doc=ctx.settings.retrieval_per_doc_min)
-        first = openings(conn, documents, q_vec, ctx.ai.embed_model)
+        opening_passages = openings(conn, documents, q_vec, ctx.ai.embed_model)
     matched = gate(candidates, ctx.ai.min_similarity)
-    fallback = first[:ctx.settings.retrieval_k] if ctx.ai.chat.declines_unanswerable else []
+    fallback = opening_passages[:ctx.settings.retrieval_k] if ctx.ai.chat.declines_unanswerable else []
     sources = select_sources(candidates, k=ctx.settings.retrieval_k, per_doc_min=ctx.settings.retrieval_per_doc_min,
-                             openings=first) if matched else _labelled(fallback)
+                             openings=opening_passages) if matched else _labelled(fallback)
 
     answer: Answer | None = None
     suggested: tuple[str, ...] = ()
@@ -199,7 +199,8 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
                                 stream=provisional)
         answer = ground(draft, sources)
         suggested = suggestions(draft.follow_ups, question)
-    if answer is None or not (matched or isinstance(answer, Answered)):
+    # Past a failed gate the model saw only opening passages, and only an answer drawn from them stands.
+    if answer is None or (not matched and not isinstance(answer, Answered)):
         answer = NotFound(TurnOutcome.NO_EVIDENCE, prompts.no_evidence_text(documents))
         with ctx.db.connection() as conn:
             facts = insights.ready_key_facts(conn, [doc.id for doc in documents])

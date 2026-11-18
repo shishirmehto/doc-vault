@@ -52,7 +52,7 @@ stateDiagram-v2
 3. Check the spending cap with `AI.check_budget` (Spending cap, in `docs/bonus-features.md`). Over the cap, raise 429 `quota_exceeded` before any model call.
 4. After the first question, the small model rewrites each question into a standalone query from the last four turns. The first question is used as asked.
 5. Embed the query, then run one SQL statement over the chat's documents (see Retrieval).
-6. When no chunk passes the relevance gate, send the answer step only each document's opening passage (`chat.openings`), and refuse with `no_evidence` unless it answers from them. The fake answerer cannot decline, so with no key the refusal makes no answer call.
+6. When no chunk passes the relevance gate, send the answer step only each document's opening passage (`chat.openings`), for at most 16 documents in filename order, and refuse with `no_evidence` unless it answers from them. The fake answerer cannot decline, so with no key the refusal makes no answer call.
 7. Send 16 sources to the main model and get back an answer with `[S#]` markers and a verbatim quote per marker.
 8. Keep a citation only when `pages.locate_quote` finds its quote in the source it names. The citation's page is the page where the quote starts inside the chunk. With nothing verified, the turn is `unverified`.
 9. Keep up to three of the model's `follow_ups` as suggestions (`chat.suggestions`): questions that end in "?", are at most 160 characters and differ from the question just asked. A `no_evidence` turn gets `chat.fact_suggestions` instead, which asks "What is the <label>?" for the documents' verified key-fact labels of two words or more, taken round by round across the documents.
