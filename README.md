@@ -114,7 +114,7 @@ The cache Redis holds the embedding cache and the answer cache, and the app runs
 - Answer the part the sources cover and name the part they do not, so a missing deductible does not hide the limit.
 - Decline rather than guess. A refusal costs the user a follow-up question, and a guess can cost a claim.
 
-The answer prompt changed once, to add follow-up questions (`6ff08d4`). The tuning after the live runs was in what it receives. Sending 16 passages instead of eight, with each document's guaranteed share capped at half of them, fixed 7 of the real-document questions and broke none, and raised the answer step's input from about 4,300 to 7,700 tokens. Each document's opening passage was added so that "What is this about?" is answered (`f9f69eb`).
+The answer prompt changed once, to add follow-up questions (`6ff08d4`). The tuning after the live runs was in what it receives. Sending 16 passages instead of eight, with each document's guaranteed share capped at half of them, fixed 7 of the real-document questions and broke none, and raised the answer step's input from about 4,300 to 7,700 tokens. Each document's opening passage was added so that "What is this about?" is answered (`f9f69eb`). [`docs/design.md`](docs/design.md#prompts) gives the reasons behind the other prompts: the follow-up rewrite, insights, summaries, comparison and the JSON repair turn.
 
 ## Answer quality
 
