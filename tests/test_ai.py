@@ -293,6 +293,19 @@ def test_openai_chat_sends_a_strict_schema_and_the_ledger_prices_its_cached_toke
         ("openai", "gpt-6.1-sol", 2000, 300, Decimal("0.005100"), True)]
 
 
+def test_an_empty_reasoning_effort_leaves_the_parameter_out_for_models_that_reject_it(clean_env, monkeypatch, db):
+    monkeypatch.setenv("OPENAI_CHAT_REASONING_EFFORT", "")   # gpt-4.1 answers 400 to any reasoning_effort
+    monkeypatch.setenv("OPENAI_SMALL_REASONING_EFFORT", "")
+    settings = load_settings()
+    assert (settings.openai_chat_reasoning_effort, settings.openai_small_reasoning_effort) == (None, None)
+
+    sent: list[tuple[str, dict]] = []
+    client = openai_client(httpx2.Response(200, json=CHAT_COMPLETION), sent=sent)
+    chat = OpenAIChat(client, {"main": "gpt-4.1", "small": "gpt-4.1-mini"}, {"main": None, "small": None})
+    assert gateway(db, chat).complete(PROMPT, Limit, owner=OWNER) == LIMIT
+    assert [(body["model"], "reasoning_effort" in body) for _path, body in sent] == [("gpt-4.1", False)]
+
+
 def test_openai_rate_limit_waits_for_retry_after_then_succeeds(db):
     sleeps: list[float] = []
     client = openai_client(
@@ -316,6 +329,16 @@ def test_openai_insufficient_quota_is_not_retried(db):
         unavailable("insufficient_quota", False))
     assert rows(db, "ok, error_code") == [(False, "insufficient_quota")]
     assert sleeps == []
+
+
+def test_a_failed_model_call_logs_the_providers_own_message(db, caplog):
+    client = openai_client(httpx2.Response(400, json={"error": {
+        "message": "Unrecognized request argument supplied: reasoning_effort", "type": "invalid_request_error",
+        "param": None, "code": None}}))
+
+    assert failure_of(lambda: gateway(db, openai_chat(client)).complete(PROMPT, Limit, owner=OWNER)) == (
+        unavailable("http_400", False))
+    assert "Unrecognized request argument supplied: reasoning_effort" in caplog.text
 
 
 @pytest.mark.parametrize(("failure", "code", "retryable"), [

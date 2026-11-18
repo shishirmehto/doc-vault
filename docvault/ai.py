@@ -15,6 +15,7 @@ import functools
 import hashlib
 import itertools
 import json
+import logging
 import math
 import re
 import struct
@@ -80,6 +81,8 @@ from .prompts import (
 )
 
 type Vector = list[float]
+
+log = logging.getLogger(__name__)
 
 # A caller waits at most this long for one retry. A longer Retry-After fails at once as retryable,
 # because a retry inside the provider's rate-limit window fails again.
@@ -407,6 +410,8 @@ class AI:
                 self._record(billing, Tokens(0, 0, 0), _elapsed_ms(started), exc.code)
                 wait = max(self.settings.ai_backoff_s * 2 ** (attempt - 1), exc.retry_after_s or 0.0)
                 if not exc.retryable or attempt >= attempts or wait > MAX_RETRY_WAIT_S:
+                    log.warning("The %s call failed after %d attempt(s), %s: %s", purpose, attempt, exc.code,
+                                exc.__cause__ or "no provider message")
                     raise VaultError(ErrorCode.AI_UNAVAILABLE,
                                      f"The AI provider could not complete the request ({exc.code}).",
                                      retryable=exc.retryable) from exc
@@ -501,7 +506,8 @@ class OpenAIChat:
     provider = "openai"
     declines_unanswerable = True
 
-    def __init__(self, client: OpenAI, models: Mapping[Tier, str], efforts: Mapping[Tier, ReasoningEffort]) -> None:
+    def __init__(self, client: OpenAI, models: Mapping[Tier, str],
+                 efforts: Mapping[Tier, ReasoningEffort | None]) -> None:
         self.models = models
         self._client, self._efforts = client, efforts
 
@@ -513,9 +519,10 @@ class OpenAIChat:
             "messages": [{"role": "developer", "content": prompt.system},
                          *({"role": m.role, "content": m.content} for m in prompt.messages)],
             "response_format": type_to_response_format_param(output),
-            "reasoning_effort": self._efforts[prompt.tier],
             "timeout": timeout_s,
         }
+        if (effort := self._efforts[prompt.tier]) is not None:
+            request["reasoning_effort"] = effort
         if on_text is not None:
             return self._streamed(request, on_text)
         try:

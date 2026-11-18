@@ -30,8 +30,9 @@ class Settings(BaseSettings):
     # Model ids from https://developers.openai.com/api/docs/models, fetched 2026-11-11.
     openai_chat_model: str = "gpt-6.1-sol"                    # main tier: answers and insights
     openai_small_model: str = "gpt-6-luna"                    # small tier: condense
-    openai_chat_reasoning_effort: ReasoningEffort = "low"     # sol accepts low..max
-    openai_small_reasoning_effort: ReasoningEffort = "none"   # luna accepts none..max
+    # Unset leaves reasoning_effort out of the request, for a model that rejects it (gpt-4.1, gpt-4o).
+    openai_chat_reasoning_effort: ReasoningEffort | None = "low"     # sol accepts low..max
+    openai_small_reasoning_effort: ReasoningEffort | None = "none"   # luna accepts none..max
     openai_embed_model: str = "text-embedding-3-small"
     embed_dimensions: int = 1536
     ai_max_attempts: int = 3             # provider attempts per interactive call, the first one included
@@ -58,11 +59,12 @@ class Settings(BaseSettings):
     daily_ai_budget_usd: Annotated[Decimal, Field(gt=0)] | None = None
     cache_url: str | None = None   # a Redis for the embedding and answer caches (cache.py); unset: no cache
 
-    @field_validator("daily_ai_budget_usd", "cache_url", mode="before")
+    @field_validator("daily_ai_budget_usd", "cache_url", "openai_chat_reasoning_effort",
+                     "openai_small_reasoning_effort", mode="before")
     @classmethod
     def _empty_is_unset(cls, value: object) -> object:
         """Compose passes DAILY_AI_BUDGET_USD through from the shell, as an empty string when it is not set there,
-        and .env.example ships CACHE_URL empty."""
+        .env.example ships CACHE_URL empty, and an empty reasoning effort means "do not send one"."""
         return None if value == "" else value
 
 
