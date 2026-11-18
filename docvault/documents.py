@@ -377,7 +377,7 @@ SELECT d.id, d.filename, d.kind, d.size_bytes, d.status, d.page_basis, d.page_co
        CASE WHEN d.status = 'embedding' THEN
          (SELECT count(*) FROM chunks c WHERE c.document_id = d.id AND c.embedding IS NOT NULL) END AS embedded_chunks,
        CASE WHEN d.status = 'ready' THEN
-         (SELECT round(extract(epoch FROM max(s.finished_at) - d.created_at) * 1000)::bigint FROM step_runs s
+         (SELECT round(extract(epoch FROM min(s.finished_at) - d.created_at) * 1000)::bigint FROM step_runs s
            WHERE s.document_id = d.id AND s.step = 'embed' AND s.outcome = 'ok') END AS processing_ms
 FROM documents d LEFT JOIN document_insights i ON i.document_id = d.id
 """

@@ -259,7 +259,7 @@ class Document:
     lifecycle: Lifecycle
     insights: InsightsState     # merged at read time from document_insights; documents.py never writes it
     created_at: datetime
-    processing_ms: int | None   # derived from step_runs: last ok embed finish - created_at
+    processing_ms: int | None   # derived from step_runs: first ok embed finish - created_at, as in metrics
     version: Version
 
 

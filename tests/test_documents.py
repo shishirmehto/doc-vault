@@ -230,6 +230,24 @@ def test_reconcile_re_embeds_a_ready_document_after_the_embedding_model_changes(
     assert steps(ctx, doc_id) == [("parse", "ok", None), ("embed", "ok", None), ("embed", "ok", None)]
 
 
+def test_processing_time_is_the_first_indexing_and_a_later_re_embed_leaves_it(ctx):
+    doc_id = upload(ctx, QUOTE).document.id
+    documents.run_index(ctx, doc_id)
+    first = documents.get(ctx.db, doc_id).processing_ms
+    with ctx.db.connection() as conn:   # the provider key arrives an hour later
+        conn.execute("UPDATE documents SET created_at = created_at - interval '1 hour' WHERE id = %s", (doc_id,))
+        conn.execute("UPDATE step_runs SET started_at = started_at - interval '1 hour',"
+                     " finished_at = finished_at - interval '1 hour' WHERE document_id = %s", (doc_id,))
+
+    class NewModel(FakeEmbedder):
+        model = "fake-hash-v2"
+
+    switched = with_embedder(ctx, NewModel())
+    documents.reconcile(switched)
+    documents.run_index(switched, doc_id)
+    assert documents.get(ctx.db, doc_id).processing_ms == first
+
+
 def test_delete_removes_the_document_and_its_blob_but_keeps_the_history(ctx):
     doc_id = upload(ctx, QUOTE).document.id
     documents.run_index(ctx, doc_id)
