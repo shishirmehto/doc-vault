@@ -84,12 +84,14 @@ The document list follows `GET /events/documents` through one `EventSource` for 
 
 Questions go to `POST /chats/{id}/messages/stream`. While the answer streams, the turn shows its provisional text, without citations, under a status line. The `turn` event replaces it with the grounded answer.
 
+Answers are rendered with `react-markdown`, limited to paragraphs, lists and emphasis. Anything else shows as its text, and raw HTML stays escaped. A remark plugin, `src/lib/citations.ts`, turns each `[n]` into the citation chip that opens the cited page.
+
 The other tabs of the same browser that show the chat follow the answer. The asking tab posts its question's state on a `BroadcastChannel` after each step. The other tabs draw that state and cannot ask until the question is over. The asking tab also holds a Web Lock while it sends the question and checks that the turn was stored. If the browser frees that lock while another tab still shows the question, the asking tab was closed or has stopped checking. The other tab then takes the question over and reads the chat's history until the stored turn appears. None of this goes through the API.
 
 Up in an empty question box brings back the chat's newest question. Up and Down then move through the earlier ones, and Down past the newest empties the box. A typed draft is never replaced.
 
 ## Tests and fixtures
 
-`src/api/fixtures/` holds responses captured from the running API, with their HTTP status. The chat fixtures come from the fake provider. `fixtures/constructed/` holds responses built by hand, not captured: failed insights, a 503 with `Retry-After`, a 500 `internal_error`, a stream that ends in `quota_exceeded`, an `unverified` turn, an answered turn with no citations, health with the cache off or unreachable, and processing metrics with the cache off. Its README says how each was made.
+`src/api/fixtures/` holds responses captured from the running API, with their HTTP status. The chat fixtures come from the fake provider. `fixtures/constructed/` holds responses built by hand, not captured: failed insights, a 503 with `Retry-After`, a 500 `internal_error`, a stream that ends in `quota_exceeded`, an `unverified` turn, an answered turn with no citations, an answered turn written as a Markdown list, health with the cache off or unreachable, and processing metrics with the cache off. Its README says how each was made.
 
 The stream tests read a captured stream body split at every byte. The `locateQuote` cases come from the backend's `tests/test_pages.py`. They were checked against the Python `locate_quote` on the same inputs.

@@ -16,6 +16,7 @@ import { stillFollowing } from "@/lib/follow";
 import { asked as questions, canAsk, offered, type Ask, type Thread } from "@/lib/thread";
 import { chatVersion } from "@/lib/versions";
 import { askAbout, askStatus, chatAsks, documentNames, explain, listNames, NOT_FOUND, usageLine, withVersion } from "@/copy";
+import { AnswerText } from "./AnswerText";
 import { Composer } from "./Composer";
 import { LoadFailed, MissingChat } from "./Missing";
 import { SourcePane, type SourceView } from "./SourcePane";
@@ -214,19 +215,9 @@ function TurnView({ turn, active, onOpen }: { turn: Turn; active: number | null;
       {turn.readAs && <p className="read-as">Read as: {turn.readAs}</p>}
       {turn.outcome.kind === "answered" ? (
         <>
-          <p className="answer">
-            {turn.outcome.parts.map((part, i) =>
-              part.kind === "text" ? (
-                <span key={i}>{part.text}</span>
-              ) : (
-                <button key={i} type="button" className="cite" aria-pressed={active === part.citation.ref}
-                  aria-label={`Source ${part.citation.ref}: ${part.citation.filename}, ${part.citation.pageLabel}`}
-                  title={`${part.citation.filename}, ${part.citation.pageLabel}`} onClick={() => cite(part.citation)}>
-                  {part.citation.ref}
-                </button>
-              ),
-            )}
-          </p>
+          <div className="answer">
+            <AnswerText text={turn.outcome.text} cite={{ citations: turn.outcome.citations, active, onCite: cite }} />
+          </div>
           {turn.outcome.citations.length > 0 && (
             <details className="sources">
               <summary>Sources ({turn.outcome.citations.length})</summary>
@@ -276,7 +267,7 @@ function PendingTurn({ ask, scope, actions }: {
       return (
         <article className="turn" aria-busy="true">
           <h2 className="question">{ask.question}</h2>
-          {ask.text !== "" && <p className="answer provisional">{ask.text}</p>}
+          {ask.text !== "" && <div className="answer provisional"><AnswerText text={ask.text} /></div>}
           <p className="quiet" role="status">{askStatus(ask, scope?.length ?? null)}</p>
           <div className="progress indeterminate"><span /></div>
         </article>

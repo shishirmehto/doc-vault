@@ -82,6 +82,7 @@ The README lists the main ones. This is the full list, by area.
 ## Live status and the web UI
 
 - A streamed answer shows in the other tabs of the same browser only. Another browser or device sees the turn when it loads the chat.
+- While an answer streams, an unclosed `**` shows as asterisks until its closing `**` arrives.
 - Two tabs that ask in the same instant both send their question. Each tab then shows its own question and the other tab's.
 - A question that failed in one tab shows there with "Try again" and "Edit the question". When another tab asks a question in the same chat, the failed question is removed from the first tab, and Up no longer recalls it there.
 - Over plain HTTP from a host other than localhost, a browser has no Web Locks. The other tabs still follow an answer. When the asking tab is closed mid-answer, they keep showing its question and cannot ask until they are reloaded.

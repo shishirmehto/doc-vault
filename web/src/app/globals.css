@@ -320,7 +320,14 @@ a.row-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .turn { display: grid; gap: var(--s3); }
 .question { font-size: var(--t-h2); font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .read-as { font-size: var(--t-meta); color: var(--graphite); overflow-wrap: anywhere; margin-top: calc(-1 * var(--s2)); }
-.answer { font-size: var(--t-body); line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
+.answer { font-size: var(--t-body); line-height: 1.6; overflow-wrap: anywhere; }
+/* The reset above strips list markers and indents; an answer's Markdown lists need them back. */
+.answer :is(p, ul, ol) + :is(p, ul, ol) { margin-top: var(--s3); }
+.answer :is(ul, ol) { padding-left: var(--s6); }
+.answer ul { list-style: disc; }
+.answer ol { list-style: decimal; }
+.answer li + li { margin-top: var(--s1); }
+.answer strong { font-weight: 600; }
 
 /* A citation number, raised like a footnote. Canary once it has opened its page. */
 .cite {

@@ -476,7 +476,7 @@ test("a 409 names the documents that are not ready", () => {
   });
 });
 
-test("a cited answer becomes text and a citation pointing at its page and quote", () => {
+test("a cited answer keeps its text and markers, with a citation pointing at its page and quote", () => {
   assert.deepEqual(replay("turn-answered-one-citation", parseTurn), {
     ok: true,
     value: {
@@ -485,18 +485,7 @@ test("a cited answer becomes text and a citation pointing at its page and quote"
       readAs: null,
       outcome: {
         kind: "answered",
-        parts: [
-          { kind: "text", text: "Property Damage Deductible $2,500 per occurrence" },
-          {
-            kind: "cite",
-            citation: {
-              ref: 1,
-              filename: "sample-cgl-policy.pdf",
-              pageLabel: "p. 2",
-              source: { documentId: POLICY, page: 2, quote: "Property Damage Deductible $2,500 per occurrence" },
-            },
-          },
-        ],
+        text: "Property Damage Deductible $2,500 per occurrence [1]",
         citations: [
           {
             ref: 1,
@@ -556,12 +545,29 @@ test("an answer from two documents cites each one with its own page", () => {
   const r = replay("turn-answered-two-documents", parseTurn);
   assert.ok(r.ok && r.value.outcome.kind === "answered");
   assert.deepEqual(
-    r.value.outcome.parts.map((p) => (p.kind === "text" ? p.text : `[${p.citation.ref}: ${p.citation.filename} ${p.citation.pageLabel}]`)),
+    [r.value.outcome.text, r.value.outcome.citations.map((c) => `[${c.ref}: ${c.filename} ${c.pageLabel}]`)],
     [
-      "General Aggregate Limit $3,000,000",
-      "[1: sample-renewal-quote.pdf p. 2]",
-      " General Aggregate Limit $2,000,000",
-      "[2: sample-cgl-policy.pdf p. 2]",
+      "General Aggregate Limit $3,000,000 [1] General Aggregate Limit $2,000,000 [2]",
+      ["[1: sample-renewal-quote.pdf p. 2]", "[2: sample-cgl-policy.pdf p. 2]"],
+    ],
+  );
+});
+
+test("a Markdown answer keeps its list, bold figures and markers for the UI to render", () => {
+  const r = replay("constructed/turn-answered-markdown", parseTurn);
+  assert.ok(r.ok && r.value.outcome.kind === "answered");
+  assert.deepEqual(
+    [r.value.outcome.text, r.value.outcome.citations.map((c) => `[${c.ref}: ${c.pageLabel} ${c.source.quote}]`)],
+    [
+      "The renewal quote changes three terms:\n\n"
+        + "- The general aggregate limit is **$3,000,000** [1]\n"
+        + "- The property damage deductible is **$5,000** per occurrence [2]\n"
+        + "- Form SM 30 11, a silica exclusion, is added [3]",
+      [
+        "[1: p. 2 General Aggregate Limit $3,000,000]",
+        "[2: p. 2 Property Damage Deductible $5,000 per occurrence]",
+        "[3: p. 3 Form SM 30 11, Silica or Silica-Related Dust Exclusion, is added]",
+      ],
     ],
   );
 });
@@ -589,12 +595,12 @@ test("each not-found reason keeps the backend's sentence and cites nothing", () 
   });
 });
 
-test("an answer with no citations is all text, its marker included", () => {
+test("an answer with no citations still parses, its marker kept in the text", () => {
   const r = replay("constructed/turn-answered-zero-citations", parseTurn);
   assert.ok(r.ok);
   assert.deepEqual(r.value.outcome, {
     kind: "answered",
-    parts: [{ kind: "text", text: "Property Damage Deductible $2,500 per occurrence [1]" }],
+    text: "Property Damage Deductible $2,500 per occurrence [1]",
     citations: [],
   });
 });

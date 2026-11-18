@@ -3,7 +3,7 @@
 
 import type * as W from "./wire.ts";
 import type {
-  AnswerPart, ApiError, AskProgress, AskStage, CacheFigures, CellCite, Chat, ChatId, Citation, CodeCount, CompareCell,
+  ApiError, AskProgress, AskStage, CacheFigures, CellCite, Chat, ChatId, Citation, CodeCount, CompareCell,
   ComparedDoc, Comparison, ComparisonId, Doc, DocEvent, DocumentId, DocumentMetrics, DocVersion, FactCite, Failure,
   FamilyId, Health, Insights, Lifecycle, Outcome, Page, PaneRequest, ProcessingMetrics, Quota, RefusedDocument,
   Selection, Spread, Step, Summary, SummaryCite,
@@ -231,7 +231,7 @@ export function parseHistory(w: W.HistoryOut): Turn[] {
 function outcome(w: W.TurnOut, citations: readonly Citation[]): Outcome {
   switch (w.status) {
     case "answered":
-      return { kind: "answered", parts: answerParts(w.answer, citations), citations };
+      return { kind: "answered", text: w.answer, citations };
     case "not_found":
       return { kind: "not_found", reason: required(w.reason, "a not-found reason"), message: w.answer };
     default: {
@@ -239,26 +239,6 @@ function outcome(w: W.TurnOut, citations: readonly Citation[]): Outcome {
       throw new TypeError(`unknown turn status: ${String(unknown)}`);
     }
   }
-}
-
-/**
- * Cuts the answer at its [n] markers. The spaces before a marker go, so the chip sits on the word it
- * follows. A marker with no citation of that number stays text, so a turn with no citations is all text.
- */
-function answerParts(answer: string, citations: readonly Citation[]): AnswerPart[] {
-  const byRef = new Map(citations.map((c) => [c.ref, c]));
-  const parts: AnswerPart[] = [];
-  let at = 0;
-  for (const marker of answer.matchAll(/\[(\d+)\]/g)) {
-    const citation = byRef.get(Number(marker[1]));
-    if (citation === undefined) continue;
-    const text = answer.slice(at, marker.index).trimEnd();
-    if (text !== "") parts.push({ kind: "text", text });
-    parts.push({ kind: "cite", citation });
-    at = marker.index + marker[0].length;
-  }
-  if (at < answer.length) parts.push({ kind: "text", text: answer.slice(at) });
-  return parts;
 }
 
 function usage(w: W.TurnOut["usage"]): Usage {

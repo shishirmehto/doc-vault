@@ -101,13 +101,11 @@ export type Chat = { id: ChatId; title: string | null; documents: NonEmpty<ChatD
 /** `ref` is the number the answer's [n] markers use. pageLabel is the backend's ("p. 2" or "section 2"). */
 export type Citation = { ref: number; source: SourceRef; filename: string; pageLabel: string };
 
-/** The answer text cut at its [n] markers. A marker with no citation stays text. */
-export type AnswerPart = { kind: "text"; text: string } | { kind: "cite"; citation: Citation };
-
 export type NotFoundReason = "no_evidence" | "model_declined" | "unverified";
 
 export type Outcome =
-  | { kind: "answered"; parts: readonly AnswerPart[]; citations: readonly Citation[] }
+  /** `text` is Markdown (paragraphs, lists, emphasis) with [n] markers that name `citations` by ref. */
+  | { kind: "answered"; text: string; citations: readonly Citation[] }
   /** A deliberate refusal, not an error. `message` is the backend's own sentence. */
   | { kind: "not_found"; reason: NotFoundReason; message: string };
 
