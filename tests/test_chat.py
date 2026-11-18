@@ -364,6 +364,27 @@ def test_ground_gives_a_sentence_every_number_of_its_source_when_no_quote_matche
     assert answer.text == "Both apply to this policy [1][2]. Neither is waived [1][2]."
 
 
+
+def test_ground_cites_every_quote_of_a_source_when_two_sentences_would_take_the_same_one():
+    cover = source("S1", POLICY_DOC, "Water damage from a burst pipe is covered under the policy.\n"
+                                     "Mold remediation is excluded.", PageMap(((0, 4),)), chunk=35)
+    limits_page = source("S1", POLICY_DOC, "General Aggregate Limit $2,000,000\nEach Occurrence Limit $1,000,000",
+                         PageMap(((0, 2),)), chunk=36)
+
+    mold = chat.ground(draft("Water damage from a burst pipe is covered [S1]. "
+                             "Under the policy, mold remediation is not covered [S1].",
+                             ("S1", "Water damage from a burst pipe is covered under the policy."),
+                             ("S1", "Mold remediation is excluded.")), [cover])
+    limits = chat.ground(draft("The aggregate is $2 million, twice the $1,000,000 occurrence limit [S1]. "
+                               "Each occurrence is capped at $1,000,000 [S1].",
+                               ("S1", "General Aggregate Limit $2,000,000"), ("S1", "Each Occurrence Limit $1,000,000")),
+                         [limits_page])
+
+    assert mold.text == ("Water damage from a burst pipe is covered [1][2]. "
+                         "Under the policy, mold remediation is not covered [1][2].")
+    assert limits.text == ("The aggregate is $2 million, twice the $1,000,000 occurrence limit [1][2]. "
+                           "Each occurrence is capped at $1,000,000 [1][2].")
+
 def test_ground_refuses_a_declined_draft_and_a_draft_with_nothing_verified():
     declined = chat.ground(draft("The documents do not mention flood cover [S1].", supported=False), limits())
     unverified = chat.ground(draft("The limit is one million [S1].", ("S1", "a limit of one million dollars")),

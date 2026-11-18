@@ -69,7 +69,7 @@ MAX_SUGGESTION_CHARS = 160
 UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify an answer against their text, "
                    "so I am not giving one.")
 OPENING_DOCS = 3            # a chat of up to this many documents sends each one's opening passage with its k sources
-ANSWER_CACHE_FORMAT = 6     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
+ANSWER_CACHE_FORMAT = 7     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
 
 
@@ -591,38 +591,51 @@ _TERM = re.compile(r"[a-z]{3,}")
 
 
 def _rewrite_markers(text: str, quotes: Mapping[str, Sequence[tuple[int | None, str]]]) -> str:
-    """Replace each marker run with citation numbers, such as "[1][2]".
+    """Replace each marker run with citation numbers, such as "[1][2]", as _pair_markers decides per label.
 
-    The model lists evidence in any order, so a marker is matched to a quote by
-    content. When a label has as many markers as evidence items, a marker takes
-    the number of the one quote that shares the most figures, then words, with
-    the text since the previous marker run, and none when that quote was not
-    found. Otherwise, or when no single quote shares the most, the marker gets
-    all of the label's found numbers. A run left with no number is removed with
-    the spaces before it, so "limit [S9]." reads "limit." rather than "limit .".
+    A run left with no number is removed with the spaces before it, so "limit [S9]." reads "limit." rather
+    than "limit .".
     """
-    markers = Counter(_LABEL.findall("".join(match["run"] for match in _MARKERS.finditer(text))))
-    start = 0
-
-    def refs(label: str, sentence: str) -> list[int]:
-        items = quotes.get(label, ())
-        found = [number for number, _ in items if number is not None]
-        if markers[label] != len(items):
-            return found
-        scored = [(_shared(sentence, quote), number) for number, quote in items]
-        best = max(score for score, _ in scored)
-        winners = {number for score, number in scored if score == best}
-        if best == (0, 0) or len(winners) > 1:
-            return found
-        return [number] if (number := winners.pop()) is not None else []
+    runs = list(_MARKERS.finditer(text))
+    sentences: dict[str, list[str]] = {}
+    for start, run in zip([0, *(run.end() for run in runs)], runs, strict=False):
+        for label in _LABEL.findall(run["run"]):
+            sentences.setdefault(label, []).append(text[start:run.start()])
+    refs = {label: iter(_pair_markers(said, quotes.get(label, ()))) for label, said in sentences.items()}
 
     def replace(match: re.Match[str]) -> str:
-        nonlocal start
-        sentence, start = text[start:match.start()], match.end()
-        cited = dict.fromkeys(ref for label in _LABEL.findall(match["run"]) for ref in refs(label, sentence))
+        cited = dict.fromkeys(ref for label in _LABEL.findall(match["run"]) for ref in next(refs[label]))
         return match["pad"] + "".join(f"[{ref}]" for ref in cited) if cited else ""
 
     return _MARKERS.sub(replace, text).strip()
+
+
+def _pair_markers(sentences: Sequence[str], items: Sequence[tuple[int | None, str]]) -> list[list[int]]:
+    """The citation numbers for each marker of one label, given the text before each marker.
+
+    The model lists evidence in any order, so a marker is matched to a quote by content, and only when the
+    match is unambiguous: as many markers as evidence items, each marker has one quote that shares the most
+    figures, then words, with its text, and those picks use every quote exactly once. Then each marker gets
+    its pick's number, or none when that quote was not found. Otherwise every marker gets all of the label's
+    found numbers, because citing a sentence too widely is safer than citing the wrong quote.
+    """
+    found = [number for number, _ in items if number is not None]
+    if len(sentences) == len(items):
+        picks = [_best_quote(sentence, items) for sentence in sentences]
+        if Counter(picks) == Counter(number for number, _ in items):
+            return [[] if pick is None else [pick] for pick in picks]
+    return [found] * len(sentences)
+
+
+_NO_PICK = -1
+
+
+def _best_quote(sentence: str, items: Sequence[tuple[int | None, str]]) -> int | None:
+    """The number of the one quote that shares the most with the sentence (None: not found), or _NO_PICK."""
+    scored = [(_shared(sentence, quote), number) for number, quote in items]
+    best = max(score for score, _ in scored)
+    winners = {number for score, number in scored if score == best}
+    return winners.pop() if best > (0, 0) and len(winners) == 1 else _NO_PICK
 
 
 def _shared(sentence: str, quote: str) -> tuple[int, int]:
