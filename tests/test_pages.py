@@ -159,6 +159,30 @@ def test_a_pdf_outline_gives_each_bookmark_its_title_depth_and_page_and_skips_on
         OutlineEntry("Exhibits", 0, 3))
 
 
+def test_a_pdf_outline_keeps_only_its_first_entries_up_to_the_bound(tmp_path, monkeypatch):
+    path = bookmarked_pdf(tmp_path, [["Contents"], ["Part 9"]], [
+        ("Ghost", None, None), ("Contents", 0, None), ("Part 9", 1, None), ("903", 1, 2), ("Exhibits", 1, None)])
+    monkeypatch.setattr(pages, "MAX_OUTLINE_ENTRIES", 2, raising=False)
+
+    assert pages.extract(DocKind.PDF, path, max_pages=10).outline == (
+        OutlineEntry("Contents", 0, 1), OutlineEntry("Part 9", 0, 2))
+
+
+def test_word_headings_past_the_bound_are_left_out_of_the_outline(tmp_path, monkeypatch):
+    from docx import Document
+
+    word = Document()
+    for title in ("Coverage", "Exclusions", "Conditions"):
+        word.add_heading(title, 1)
+        word.add_paragraph(f"{title} text.")
+    path = tmp_path / "policy.docx"
+    word.save(str(path))
+    monkeypatch.setattr(pages, "MAX_OUTLINE_ENTRIES", 2, raising=False)
+
+    assert pages.extract(DocKind.DOCX, path, max_pages=10).outline == (
+        OutlineEntry("Coverage", 0, 1), OutlineEntry("Exclusions", 0, 1))
+
+
 def test_a_pdf_whose_outline_cannot_be_read_keeps_its_text_and_has_no_outline(tmp_path, monkeypatch):
     path = bookmarked_pdf(tmp_path, [["Contents"], ["Part 9"]], [("Part 9", 1, None)])
     monkeypatch.setattr(PdfReader, "outline", property(lambda reader: 1 / 0))

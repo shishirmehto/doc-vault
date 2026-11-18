@@ -13,7 +13,8 @@ import os
 import re
 import zipfile
 from bisect import bisect_left, bisect_right
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from itertools import islice
 from pathlib import Path
 
 from docx import Document as open_docx
@@ -28,6 +29,7 @@ SYNTHETIC_PAGE_CHARS = 3000
 CHUNKER_VERSION = 1    # bump when chunk() cuts the same text differently; stored documents are then cut again
 SNIFF_BYTES = 8192
 MAX_DOCX_INFLATED_BYTES = 200_000_000   # every part inflated, as python-docx reads them all; a zip bomb goes far past
+MAX_OUTLINE_ENTRIES = 5000   # chat scans the outline on every question; the 922-page crop handbook has 1,556
 
 _KNOWN_UNSUPPORTED = {
     b"\xd0\xcf\x11\xe0": "a legacy Office file (.doc, .xls or .ppt)",
@@ -164,22 +166,19 @@ def _extract_pdf(path: Path, max_pages: int) -> ExtractedText:
 def _pdf_outline(reader: PdfReader) -> tuple[OutlineEntry, ...]:
     """The bookmarks in document order, each at the 1-based page it opens, its depth as its level. A bookmark with no
     title or no page of this file is left out, and an outline that cannot be read is empty: the text is already read,
-    and a broken bookmark tree is no reason to refuse it."""
-    entries: list[OutlineEntry] = []
-
-    def walk(items: list, level: int) -> None:
+    and a broken bookmark tree is no reason to refuse it. Entries past MAX_OUTLINE_ENTRIES are left out unread."""
+    def walk(items: list, level: int) -> Iterator[OutlineEntry]:
         for item in items:
             if isinstance(item, list):
-                walk(item, level + 1)
+                yield from walk(item, level + 1)
             elif (title := collapse_whitespace(str(item.title or ""))) and (
                     index := reader.get_destination_page_number(item)) is not None:
-                entries.append(OutlineEntry(title, level, index + 1))
+                yield OutlineEntry(title, level, index + 1)
 
     try:
-        walk(reader.outline, 0)
+        return tuple(islice(walk(reader.outline, 0), MAX_OUTLINE_ENTRIES))
     except Exception:
         return ()
-    return tuple(entries)
 
 
 _TOKEN = re.compile(r"\S{4,}")
@@ -323,8 +322,8 @@ def _sections(paragraphs: Sequence[str], *, joiner: str, headings: Sequence[tupl
         section_of.setdefault(at, len(sections))
     return ExtractedText(
         PageBasis.SYNTHETIC, tuple(Page(number, joiner.join(parts)) for number, parts in enumerate(sections, start=1)),
-        tuple(OutlineEntry(collapse_whitespace(paragraphs[at]), level, section_of[at])
-              for at, level in headings if at in section_of))
+        tuple(islice((OutlineEntry(collapse_whitespace(paragraphs[at]), level, section_of[at])
+                      for at, level in headings if at in section_of), MAX_OUTLINE_ENTRIES)))
 
 
 def _split_long(text: str, limit: int) -> list[str]:
