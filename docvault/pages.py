@@ -27,7 +27,7 @@ TABLE_CELL = " | "     # joins the cells of a DOCX table row on one line
 SYNTHETIC_PAGE_CHARS = 3000
 CHUNKER_VERSION = 1    # bump when chunk() cuts the same text differently; stored documents are then cut again
 SNIFF_BYTES = 8192
-MAX_DOCX_XML_BYTES = 200_000_000   # word/document.xml inflated; a zip bomb compresses far past this
+MAX_DOCX_INFLATED_BYTES = 200_000_000   # every part inflated, as python-docx reads them all; a zip bomb goes far past
 
 _KNOWN_UNSUPPORTED = {
     b"\xd0\xcf\x11\xe0": "a legacy Office file (.doc, .xls or .ppt)",
@@ -203,8 +203,9 @@ def _printed_twice(token: str) -> bool:
 
 _WORD = re.compile(r"[^\W\d_]+")
 # Justified forms can also leave a stray space inside the word, as in "di s-\ncharge", so a fragment of up to three
-# letters before the head is tried as the word's start when the head and tail alone are not a word.
-_LINE_END_HYPHEN = re.compile(r"(?:\b([^\W\d_]{1,3}) )?([^\W_]+)-\n([^\W\d_]+)")
+# letters before the head is tried as the word's start when the head and tail alone are not a word. The head starts
+# only where no letter or digit precedes it, so a long unbroken run is scanned once, not once per character.
+_LINE_END_HYPHEN = re.compile(r"(?:\b([^\W\d_]{1,3}) )?(?<![^\W_])([^\W_]+)-\n([^\W\d_]+)")
 
 
 def _join_line_end_hyphens(page_texts: list[str]) -> list[str]:
@@ -237,10 +238,10 @@ def _extract_docx(path: Path, max_pages: int) -> ExtractedText:
     Tables become one line per row, cells joined by " | " (_table_lines).
     """
     with zipfile.ZipFile(path) as archive:
-        inflated = archive.getinfo("word/document.xml").file_size   # zipfile reads no more than this
-    if inflated > MAX_DOCX_XML_BYTES:
+        inflated = sum(item.file_size for item in archive.infolist())   # zipfile reads no more than these
+    if inflated > MAX_DOCX_INFLATED_BYTES:
         raise VaultError(ErrorCode.UNREADABLE_FILE,
-                         f"The Word file's text would expand to more than {MAX_DOCX_XML_BYTES // 1_000_000} MB. "
+                         f"The Word file would expand to more than {MAX_DOCX_INFLATED_BYTES // 1_000_000} MB. "
                          "Split the document and upload the parts.")
     paragraphs: list[str] = []
     headings: list[tuple[int, int]] = []

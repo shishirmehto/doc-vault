@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 import zipfile
 
 import pytest
@@ -320,6 +321,15 @@ def test_a_word_with_a_stray_space_before_its_line_end_hyphen_joins_when_the_doc
         "Words used whole: discharge, lubricants, report.")
 
 
+def test_a_page_of_one_long_unbroken_word_is_read_in_linear_time(tmp_path):
+    word = "a" * 40_000
+    path = text_pdf(tmp_path / "long.pdf", [f"{word} end", "a re-", "port, one report"])
+    started = time.perf_counter()
+    doc = pages.extract(DocKind.PDF, path, max_pages=10)
+    assert time.perf_counter() - started < 2
+    assert doc.pages[0].text == f"{word} end\na report, one report"
+
+
 def test_kind_comes_from_the_bytes_not_the_name(tmp_path):
     disguised = tmp_path / "notes.txt"
     disguised.write_bytes((SAMPLES / POLICY).read_bytes())
@@ -401,19 +411,20 @@ def test_text_with_no_breaks_at_all_is_still_cut_to_size():
         (0, 1800), (1800, 3600), (3600, 4000)]
 
 
-def test_a_docx_whose_text_would_inflate_past_the_bound_is_refused_before_it_is_parsed(tmp_path, monkeypatch):
+@pytest.mark.parametrize("inflated_part", ["word/document.xml", "word/styles.xml"])
+def test_a_docx_that_would_inflate_past_the_bound_is_refused_before_it_is_parsed(tmp_path, monkeypatch, inflated_part):
     path = tmp_path / "bomb.docx"
     with zipfile.ZipFile(SAMPLES / ENDORSEMENT) as sample, zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as bomb:
         for item in sample.infolist():
             data = sample.read(item)
-            bomb.writestr(item, data + b" " * 2_000_000 if item.filename == "word/document.xml" else data)
-    monkeypatch.setattr(pages, "MAX_DOCX_XML_BYTES", 1_000_000, raising=False)
+            bomb.writestr(item, data + b" " * 2_000_000 if item.filename == inflated_part else data)
+    monkeypatch.setattr(pages, "MAX_DOCX_INFLATED_BYTES", 1_000_000, raising=False)
 
     with pytest.raises(VaultError) as raised:
         pages.extract(DocKind.DOCX, path, max_pages=100)
 
     assert raised.value.failure == Failure(ErrorCode.UNREADABLE_FILE,
-                                           "The Word file's text would expand to more than 1 MB. Split the document "
+                                           "The Word file would expand to more than 1 MB. Split the document "
                                            "and upload the parts.", retryable=False)
 
 

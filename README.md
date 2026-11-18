@@ -173,7 +173,7 @@ Every error a route returns has one shape, `{"error": {"code", "message", "retry
 The app assumes:
 
 - The users are insurance brokers and their clients, and the documents are policies, quotes and endorsements in English.
-- Files are PDF, DOCX or TXT, at most 50 MiB. A PDF may have up to 2,000 pages, and a Word or text file about 6,000,000 characters. A scanned PDF fails with `no_extractable_text`, because OCR is out of scope. A PDF that needs a password to open fails with `encrypted_pdf`.
+- Files are PDF, DOCX or TXT, at most 50 MiB. A PDF may have up to 2,000 pages, and a Word or text file about 6,000,000 characters. A scanned PDF fails with `no_extractable_text`, because OCR is out of scope. A PDF that needs a password to open fails with `encrypted_pdf`. A Word file that would unpack to more than 200 MB fails with `unreadable_file` before it is opened.
 - DOCX and TXT have no reliable page numbers, so their citations name a section, not a page.
 - There is one vault and no login. Rate limits apply per client address.
 - A file uploaded under the name of a stored document is its next version, so a broker who uploads a renewed policy needs no extra step. `?replaces=<id>` links a file with a different name.
