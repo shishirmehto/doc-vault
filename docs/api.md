@@ -258,7 +258,7 @@ Its `cache` block counts the embedding cache per text embedded and the answer ca
 
 ```json
 {"db": "ok", "redis": "ok", "ai_mode": "fake", "embed_model": "fake-hash-1536", "max_upload_bytes": 52428800,
- "ai_budget": {"limit_usd": 1e-06, "spent_today_usd": 0.01}, "cache": "ok"}
+ "ai_budget": {"limit_usd": 5.0, "spent_today_usd": 0.01}, "cache": "ok"}
 ```
 
 ```bash
@@ -285,7 +285,7 @@ A path or a method that no route serves gets FastAPI's default body, not this sh
 `quota_exceeded` means today's AI spend has reached `DAILY_AI_BUDGET_USD`. Asks, streamed asks, comparisons and new summaries get it before any model call, with `retryable: true` and `Retry-After` set to the seconds until midnight UTC, when the cap resets. `details` names the cap, the spend, the reset time and the same wait:
 
 ```json
-{"error": {"code": "quota_exceeded", "message": "Today's AI spending cap of $0.000001 is used up. It resets at midnight UTC.",
-  "retryable": true, "details": {"limit_usd": 1e-06, "spent_today_usd": 0.01,
+{"error": {"code": "quota_exceeded", "message": "Today's AI spending cap of $5.00 is used up. It resets at midnight UTC.",
+  "retryable": true, "details": {"limit_usd": 5.0, "spent_today_usd": 5.02,
   "resets_at": "2026-11-13T00:00:00+00:00", "retry_after_s": 79118}}}
 ```

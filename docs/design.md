@@ -109,16 +109,16 @@ All five calls use strict JSON-schema output (`response_format`). The schemas ar
 | `GET /metrics/processing?window=7d` | 21.6 ms | 217.6 ms |
 | `GET /documents` (first page of 20) | 0.7 ms | 1.2 ms |
 | `reconcile` rule 1 pick (500 and 5,000 stale documents) | 0.2 ms | 1.5 ms |
-| `chat.retrieve` over 3 documents (30 chunks) | 1.6 ms | 1.0 ms |
+| `chat.retrieve` over 3 documents (30 chunks), in a vault of 3,000 embedded chunks | 1.6 ms | 1.0 ms |
 
-The 50,000-document set has 135,000 `step_runs`, 150,000 `llm_calls` and 50,000 `chat_turns` rows, spread over seven days. Reruns differ by up to about 20%. The metrics reads grow with the rows inside the window. Retrieval cost depends on the chat's scope, not on the vault's size. On the fake provider, a sample document reaches `ready` in 62 to 118 ms on a warm worker and in about 900 ms on the first run after a fresh start ([`scripts/demo.sh`](../scripts/demo.sh) output).
+The 50,000-document set has 135,000 `step_runs`, 150,000 `llm_calls` and 50,000 `chat_turns` rows, spread over seven days. Reruns differ by up to about 20%. The metrics reads grow with the rows inside the window. Both sets embed chunks for 300 documents only, so the `chat.retrieve` row shows that a chat's scope sets the cost, not a search over 50,000 documents. Retrieval cost depends on the chat's scope, not on the vault's size. On the fake provider, a sample document reaches `ready` in 62 to 118 ms on a warm worker and in about 900 ms on the first run after a fresh start ([`scripts/demo.sh`](../scripts/demo.sh) output).
 
 ### Real documents
 
 On 2026-11-17, 23 real insurance documents were indexed on a separate copy of the stack with the OpenAI models, and the questions below were asked at `f9f69eb`. The public ones are a 922-page crop-insurance handbook, a 906-page federal law, two editions of a loss-adjustment handbook (400 and 405 pages), and a flood insurance manual with its policy forms. The rest are not public and are not in this repository.
 
 - Indexing: 3,263 pages and 5,539 chunks with 0 failures. The 922-page handbook was ready to chat 29.2 s after upload.
-- Answers: 50 questions, asked 91 times in chats of 1, 3 and 23 documents. After review, 73 of the 80 answerable asks were answered with the expected value cited on an expected page, and all 11 with no answer in the documents were declined. The 7 missed asks were declines. No answer gave a wrong figure.
+- Answers: 50 questions, asked 91 times in chats of 1, 3 and 23 documents. A script passed 71 of the 80 answerable asks, with the expected value cited on an expected page. A review of each miss passed 2 more, which wrote "115 percent" as "multiplied by 1.15". The 7 missed asks were declines, and no answer gave a wrong figure. Of the 11 asks with no answer in the documents, 8 came back `not_found` and 3 declined in their first sentence. The questions, scores and review notes are kept with the documents, outside this repository.
 - `chat.retrieve`: median 23 ms over one document's 1,218 chunks and 87 ms over all 5,539, five runs each inside the API container.
 
 ### What is reasoned

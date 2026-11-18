@@ -246,7 +246,7 @@ def _source(source: Source) -> str:
 
 
 def no_evidence_text(documents: Sequence[DocRef]) -> str:
-    """Refusal used by the retrieval gate, so no LLM call is spent. Names the searched documents."""
+    """Refusal when no chunk passes the retrieval gate and the opening passages do not answer. Names the searched documents."""
     names = [doc.filename for doc in documents]
     searched = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
     return f"I could not find anything about this in {searched}, so I can't answer it from the selected documents."

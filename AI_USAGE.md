@@ -38,7 +38,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 
 ## Verification beyond unit tests
 
-- **Evals** ([`docs/evals.md`](docs/evals.md)). Retrieval, citations, refusals and insights are scored separately, so a miss shows the step where it happened. The relevance threshold was fitted on a frozen case set, never on a single question.
+- **Evals** ([`docs/evals.md`](docs/evals.md)). Retrieval, citations, refusals and insights are scored separately, so a miss shows the step where it happened. The relevance threshold was chosen on a frozen case set, never on a single question.
 - **Real documents.** Before the first live run below, 19 public insurance documents ran through an isolated stack on the fake provider:
   - policy forms in two editions;
   - declarations pages;
@@ -85,7 +85,7 @@ What the first run left open:
 
 The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and the opening passages in chats of up to three documents. It covered:
 - The eval set again, for $1.08 on the ledger. `docs/evals.md` reports this run.
-- 23 real insurance documents, 3,263 pages, on a separate copy of the stack. 50 questions were asked 91 times, in chats of 1, 3 and 23 documents. Of the 80 asks with an answer in the documents, 73 were answered with the expected value cited on an expected page, and the other 7 were declined. All 11 asks with no answer were declined. [`docs/design.md`](docs/design.md) has the details, under Real documents.
+- 23 real insurance documents, 3,263 pages, on a separate copy of the stack. 50 questions were asked 91 times, in chats of 1, 3 and 23 documents. Of the 80 asks with an answer in the documents, a script passed 71 with the expected value cited on an expected page, and a review of each miss passed 2 more. The other 7 were declined. Of the 11 asks with no answer, 8 came back `not_found` and 3 declined in words. [`docs/design.md`](docs/design.md) has the details, under Real documents.
 
 ## Where the AI was wrong, and what caught it
 
