@@ -11,7 +11,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen.canvas import Canvas
 
 from docvault import pages
-from docvault.domain import DocKind, ErrorCode, ExtractedText, Failure, Page, PageBasis, VaultError
+from docvault.domain import DocKind, ErrorCode, ExtractedText, Failure, Page, PageBasis, PageMap, VaultError
 
 from .conftest import ENDORSEMENT, FACTS, POLICY, QUOTE, SAMPLES, TRUTH
 
@@ -107,6 +107,17 @@ def test_same_limit_wording_in_two_documents_keeps_its_own_page():
         start, end = pages.locate_quote(text, chunk.text)
         assert chunk.page_map.page_at(start) == 2
         assert chunk.text[start:end] == "Each Occurrence Limit\n$1,000,000"
+
+
+def test_the_part_of_a_chunk_on_some_pages_is_a_substring_with_its_page_map_counted_from_its_start():
+    text = "End of five.\n\nAll of six.\n\nStart of seven."
+    page_map = PageMap(((0, 5), (14, 6), (27, 7)))
+
+    assert pages.part_on_pages(text, page_map, 7, 7) == ("Start of seven.", PageMap(((0, 7),)))
+    assert pages.part_on_pages(text, page_map, 6, 9) == ("All of six.\n\nStart of seven.", PageMap(((0, 6), (13, 7))))
+    assert pages.part_on_pages(text, page_map, 4, 5) == ("End of five.", PageMap(((0, 5),)))
+    assert pages.part_on_pages(text, PageMap(((0, 5), (27, 7))), 6, 6) is None
+    assert pages.part_on_pages(text, page_map, 8, 9) is None
 
 
 def test_locate_quote_ignores_case_whitespace_and_typographic_quotes_and_dashes():

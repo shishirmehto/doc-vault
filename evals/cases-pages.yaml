@@ -1,0 +1,57 @@
+# Page cases for python -m docvault.evals --cases evals/cases-pages.yaml. See docs/evals.md.
+#
+# Written on 2026-11-18 for questions that name a place in a document: a page number, the first or last
+# page, the end of the document, and a page the document does not have. They use only facts already planted
+# in samples/facts.yaml. The file was frozen before its first run (sha256 in docs/evals.md), and no question
+# is edited afterwards. The policy has 7 pages and the renewal quote 3.
+#
+# A turn's `values` must all appear in the answer text and its `forbid` strings must not, with "$", ",",
+# "*" and case ignored.
+
+partial: asks questions that name a page only; evals/cases.yaml asks every planted fact and every absent topic
+
+documents:
+  policy: sample-cgl-policy.pdf
+  quote: sample-renewal-quote.pdf
+  endorsement: sample-endorsement-additional-insured.docx
+
+cases:
+- id: policy-last-page
+  scope: [policy]
+  turns:
+  - ask: What is on the last page of the policy?
+    expect: [policy-employment-exclusion]
+    values: [employment]
+
+- id: policy-how-it-ends
+  scope: [policy]
+  turns:
+  - ask: How does the policy end?
+    expect: [policy-employment-exclusion]
+
+- id: policy-page-3
+  scope: [policy]
+  turns:
+  - ask: What does page 3 list?
+    expect: [policy-form-cg-21-47]
+    values: [CG 21 47]
+
+- id: policy-page-5-roofing
+  scope: [policy]
+  turns:
+  - ask: What does page 5 say about roofing jobs?
+    expect: [policy-roofing-height-exclusion]
+    values: [40 feet]
+
+- id: quote-last-page
+  scope: [quote]
+  turns:
+  - ask: What's on the last page of the renewal quote?
+    expect: [quote-new-exclusion]
+    values: [silica]
+
+- id: policy-page-out-of-range
+  scope: [policy]
+  turns:
+  - ask: What does page 12 of the policy say?
+    expect: not_found

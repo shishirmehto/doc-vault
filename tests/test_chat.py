@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from uuid import UUID, uuid4
 
 import httpx2
+import pytest
 
-from docvault import chat
+from docvault import chat, pages, prompts
 from docvault.api import app
-from docvault.chat import Candidate
+from docvault.chat import Candidate, PageRequest
 from docvault.domain import (
     Answered,
     ChunkId,
@@ -263,8 +265,8 @@ def test_a_provider_failure_on_the_answer_writes_no_turn_and_keeps_the_failed_ca
 
 # ------------------------------------------------------------------ pure decisions
 
-POLICY_DOC = DocRef(DocumentId(UUID(int=1)), POLICY, PageBasis.PHYSICAL)
-QUOTE_DOC = DocRef(DocumentId(UUID(int=2)), QUOTE, PageBasis.PHYSICAL)
+POLICY_DOC = DocRef(DocumentId(UUID(int=1)), POLICY, PageBasis.PHYSICAL, 7)
+QUOTE_DOC = DocRef(DocumentId(UUID(int=2)), QUOTE, PageBasis.PHYSICAL, 3)
 
 
 def source(label: str, doc: DocRef, text: str, page_map: PageMap, chunk: int) -> Source:
@@ -424,7 +426,7 @@ def test_each_document_gets_its_quota_of_sources_even_when_another_dominates():
 
 
 def documents(count: int) -> list[DocRef]:
-    return [DocRef(DocumentId(UUID(int=100 + n)), f"doc-{n}.pdf", PageBasis.PHYSICAL) for n in range(count)]
+    return [DocRef(DocumentId(UUID(int=100 + n)), f"doc-{n}.pdf", PageBasis.PHYSICAL, 10) for n in range(count)]
 
 
 def test_a_document_keeps_its_strong_passages_when_the_chat_holds_more_documents_than_slots():
@@ -463,12 +465,87 @@ def test_each_opening_passage_follows_the_k_sources_once_in_a_chat_of_up_to_thre
     ranked = [candidate(first, f"first {n}", 0.05 - n / 1000) for n in range(1, 4)]
     openings = [ranked[0], candidate(second, "second opening", 0.0), candidate(third, "third opening", 0.0)]
 
-    three = chat.select_sources(ranked, k=2, per_doc_min=2, openings=openings)
-    four = chat.select_sources(ranked, k=2, per_doc_min=2, openings=[*openings, candidate(fourth, "fourth opening", 0.0)])
+    three = chat.select_sources(ranked, k=2, per_doc_min=2, ends=openings)
+    four = chat.select_sources(ranked, k=2, per_doc_min=2, ends=[*openings, candidate(fourth, "fourth opening", 0.0)])
 
     assert [(s.label, s.text) for s in three] == [
         ("S1", "first 1"), ("S2", "first 2"), ("S3", "second opening"), ("S4", "third opening")]
     assert [s.text for s in four] == ["first 1", "first 2"]
+
+
+def test_page_passages_lead_and_only_a_chunk_they_hold_whole_is_not_sent_again():
+    first, second = documents(2)
+    ranked = [candidate(first, f"first {n}", 0.05 - n / 1000) for n in range(1, 4)]
+    cut = dataclasses.replace(ranked[0], text="first 1, cut to the page asked about")
+    ends = [candidate(second, "second opening", 0.0), candidate(second, "second closing", 0.0)]
+
+    sources = chat.select_sources(ranked, k=2, per_doc_min=2, on_pages=[cut, ranked[1]], ends=[ranked[1], *ends])
+
+    assert [(s.label, s.text) for s in sources] == [
+        ("S1", "first 1, cut to the page asked about"), ("S2", "first 2"), ("S3", "first 1"), ("S4", "first 3"),
+        ("S5", "second opening"), ("S6", "second closing")]
+
+
+@pytest.mark.parametrize(("question", "expected"), [
+    ("What does page 45 say?", (PageRequest(45, 45),)),
+    ("Summarise p. 45 for me", (PageRequest(45, 45),)),
+    ("What is on pg 45?", (PageRequest(45, 45),)),
+    ("Compare PAGE 3 with Page 3", (PageRequest(3, 3),)),
+    ("What do pages 10-12 cover?", (PageRequest(10, 12),)),
+    ("Read pages 10 to 12", (PageRequest(10, 12),)),
+    ("Read pages 10 through 12", (PageRequest(10, 12),)),
+    ("Summarise pp. 10-12", (PageRequest(10, 12),)),
+    ("Read pages 10\u201312", (PageRequest(10, 12),)),
+    ("Summarise pages 12-10", (PageRequest(10, 12),)),
+    ("Read pages 1-500", (PageRequest(1, 10),)),
+    ("Compare pages 10 and 11", (PageRequest(10, 10), PageRequest(11, 11))),
+    ("What is on the first page?", (PageRequest(1, 1),)),
+    ("Who signs the cover page?", (PageRequest(1, 1),)),
+    ("What does the opening page say?", (PageRequest(1, 1),)),
+    ("What is on the last page?", (PageRequest(-1, -1),)),
+    ("What does the final page list?", (PageRequest(-1, -1),)),
+    ("Is the closing page signed?", (PageRequest(-1, -1),)),
+    ("Does the last page repeat page 2?", (PageRequest(-1, -1), PageRequest(2, 2))),
+    ("Is the notice period 30 days?", ()),
+    ("Is Form CG 21 47 attached?", ()),
+    ("How does this handbook end?", ()),
+    ("Which pages list exclusions?", ()),
+    ("What does page 0 say?", ()),
+])
+def test_a_question_names_pages_by_number_by_range_or_by_end_and_nothing_else_names_one(question, expected):
+    assert chat.page_requests(question) == expected
+
+
+def test_a_page_request_resolves_against_the_page_count_and_a_page_past_the_end_to_nothing():
+    requests = [PageRequest(-1, -1), PageRequest(1, 1), PageRequest(3, 3), PageRequest(5, 14), PageRequest(12, 12)]
+
+    assert [request.resolve(7) for request in requests] == [(7, 7), (1, 1), (3, 3), (5, 7), None]
+
+
+def test_each_source_tag_names_its_pages_and_its_documents_page_count():
+    handbook = DocRef(DocumentId(UUID(int=3)), "handbook.pdf", PageBasis.PHYSICAL, 922)
+    notes = DocRef(DocumentId(UUID(int=4)), "notes.docx", PageBasis.SYNTHETIC, 3)
+
+    prompt = prompts.answer("What does page 45 say?", "What does page 45 say?", [], [
+        source("S1", handbook, "Page forty-five.", PageMap(((0, 45),)), chunk=1),
+        source("S2", handbook, "Forty-five. Forty-six.", PageMap(((0, 45), (12, 46))), chunk=2),
+        source("S3", notes, "Section two.", PageMap(((0, 2),)), chunk=3)])
+
+    assert re.findall(r"<source [^>]*>", prompt.messages[0].content) == [
+        '<source id="S1" document="handbook.pdf" pages="p. 45 of 922">',
+        '<source id="S2" document="handbook.pdf" pages="p. 45-46 of 922">',
+        '<source id="S3" document="notes.docx" pages="section 2 of 3">']
+
+
+def test_ground_cites_a_quote_in_a_page_passage_on_its_page_and_in_its_chunk():
+    text = "End of five.\n\nAll of six.\n\nThis insurance does not apply to roofing."
+    part, page_map = pages.part_on_pages(text, PageMap(((0, 5), (14, 6), (27, 7))), 6, 7)
+
+    answer = chat.ground(draft("It excludes roofing [E1].", ("E1", "S1", "This insurance does not apply to roofing")),
+                         [source("S1", POLICY_DOC, part, page_map, chunk=9)])
+
+    assert answer == Answered("It excludes roofing [1].", (Citation(
+        POLICY_DOC.id, POLICY, 7, PageBasis.PHYSICAL, "This insurance does not apply to roofing", ChunkId(UUID(int=9))),))
 
 
 def test_the_gate_passes_on_similarity_or_an_all_terms_match_and_refuses_nothing_found():
@@ -542,3 +619,106 @@ def test_the_model_writes_the_answer_before_its_follow_ups_and_four_of_them_are_
     assert ledger(ctx) == {turn["id"]: ["embed_query", "answer"]}
     assert list(schema["properties"]) == ["supported", "answer", "evidence", "follow_ups"]
     assert "maxItems" not in schema["properties"]["follow_ups"]
+
+
+# ------------------------------------------------------------------ questions that name a place
+
+
+class Recording(FakeChat):
+    """Keeps every prompt, and declines what its sources do not answer as the OpenAI backend does."""
+
+    declines_unanswerable = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.prompts: list[prompts.Prompt] = []
+
+    def complete_json(self, prompt, output, **kwargs):
+        self.prompts.append(prompt)
+        return super().complete_json(prompt, output, **kwargs)
+
+
+def asked(ctx, document_ids: list[DocumentId], question: str, *, k: int = 16) -> tuple[TurnOutcome, list[tuple], list[Source]]:
+    """Ask in a new chat. Returns the outcome, each source tag the answer prompt rendered as (id, document, pages),
+    and the sources behind them."""
+    recording = Recording()
+    settings = ctx.settings.model_copy(update={"retrieval_k": k})
+    turn = chat.ask(with_chat(dataclasses.replace(ctx, settings=settings), recording),
+                    chat.start(ctx.db, document_ids).id, question)
+    answers = [prompt for prompt in recording.prompts if prompt.name == "answer"]
+    tags = re.findall(r'<source id="(S\d+)" document="([^"]+)" pages="([^"]+)">', answers[0].messages[0].content)
+    return turn.answer.outcome, tags, list(answers[0].inputs["sources"])
+
+
+def searched(ctx, document_ids: list[DocumentId], question: str, *, k: int = 16) -> chat.Found:
+    chat_id = chat.start(ctx.db, document_ids).id
+    [q_vec], _ = ctx.ai.embedder.embed([question], timeout_s=5)
+    with ctx.db.connection() as conn:
+        return chat.search(conn, chat.scope(conn, chat_id), q_vec, question, ctx.ai.embed_model, per_doc=2, k=k)
+
+
+def test_a_question_about_the_last_page_or_a_page_number_sends_that_page_first_and_once(ctx):
+    policy = ready(ctx, POLICY)
+
+    _, last_tags, last = asked(ctx, [policy], "What is on the last page?")
+    _, third_tags, third = asked(ctx, [policy], "What does page 3 list?")
+
+    assert [tag for tag in last_tags if tag[2] == "p. 7 of 7"] == [("S1", POLICY, "p. 7 of 7")]
+    assert [tag for tag in third_tags if tag[2] == "p. 3 of 7"] == [("S1", POLICY, "p. 3 of 7")]
+    with ctx.db.connection() as conn:
+        ords = {row["id"]: row["ord"] for row in conn.execute("SELECT id, ord FROM chunks WHERE document_id = %s",
+                                                              (policy,))}
+    assert [ords[last[0].chunk_id], ords[third[0].chunk_id]] == [5, 1]
+    employment, form = FACTS["policy-employment-exclusion"]["text"], FACTS["policy-form-cg-21-47"]["text"]
+    cited = [chat.ground(draft("It says this [E1].", ("E1", "S1", quote)), sent[:1]).citations
+             for quote, sent in ((employment, last), (form, third))]
+    assert [[(c.page, c.chunk_id) for c in citations] for citations in cited] == [
+        [(7, last[0].chunk_id)], [(3, third[0].chunk_id)]]
+
+
+def test_each_page_a_question_names_gets_its_own_share_of_passages(ctx):
+    policy = ready(ctx, POLICY)
+
+    _, page_and_last, _ = asked(ctx, [policy], "What do page 2 and the last page say?")
+    _, range_and_last, _ = asked(ctx, [policy], "What do pages 1 to 6 and the last page say?")
+
+    assert page_and_last[:3] == [("S1", POLICY, "p. 2 of 7"), ("S2", POLICY, "p. 2 of 7"), ("S3", POLICY, "p. 7 of 7")]
+    assert range_and_last[:3] == [
+        ("S1", POLICY, "p. 1-2 of 7"), ("S2", POLICY, "p. 2-4 of 7"), ("S3", POLICY, "p. 7 of 7")]
+
+
+def test_page_passages_across_a_chat_stop_at_k_in_scope_order(ctx):
+    policy, quote = ready(ctx, POLICY), ready(ctx, QUOTE)
+
+    found = {k: searched(ctx, [policy, quote], "What is on the last page?", k=k).on_pages for k in (16, 1)}
+
+    assert {k: [(p.doc.filename, p.page_map.first_page, p.page_map.last_page) for p in passages]
+            for k, passages in found.items()} == {16: [(POLICY, 7, 7), (QUOTE, 3, 3)], 1: [(POLICY, 7, 7)]}
+
+
+def test_a_question_about_a_page_is_answered_from_that_page_when_the_gate_finds_nothing(ctx):
+    policy = ready(ctx, POLICY)
+    question = "Summarise page 6."
+
+    found = searched(ctx, [policy], question)
+    outcome, tags, _ = asked(ctx, [policy], question)
+
+    assert (chat.gate(found.retrieved, ctx.ai.min_similarity), found.matched(ctx.ai.min_similarity)) == (False, True)
+    assert (outcome, tags[0]) == (TurnOutcome.ANSWERED, ("S1", POLICY, "p. 6 of 7"))
+
+
+def test_a_page_the_document_does_not_have_sends_only_its_opening_and_closing_passages(ctx):
+    policy = ready(ctx, POLICY)
+
+    outcome, tags, _ = asked(ctx, [policy], "What does page 12 say?")
+
+    assert (outcome, tags) == (TurnOutcome.NO_EVIDENCE, [("S1", POLICY, "p. 1-2 of 7"), ("S2", POLICY, "p. 6-7 of 7")])
+
+
+def test_a_two_document_chat_sends_each_documents_opening_then_closing_passage_after_the_k(ctx):
+    policy, quote = ready(ctx, POLICY), ready(ctx, QUOTE)
+
+    _, tags, _ = asked(ctx, [policy, quote], "Do defence costs reduce the limits?", k=1)
+
+    assert tags == [("S1", POLICY, "p. 4-6 of 7"), ("S2", POLICY, "p. 1-2 of 7"), ("S3", POLICY, "p. 6-7 of 7"),
+                    ("S4", QUOTE, "p. 1-3 of 3"), ("S5", QUOTE, "p. 2-3 of 3")]

@@ -445,7 +445,8 @@ def ready_documents(conn: Connection, document_ids: Sequence[DocumentId]) -> lis
     """
     # SHARE holds off a delete or a status change between this check and what the caller's transaction does next.
     found = {row["id"]: row for row in conn.execute(
-        "SELECT id, filename, status, page_basis FROM documents WHERE id = ANY(%s) FOR SHARE", (list(document_ids),))}
+        "SELECT id, filename, status, page_basis, page_count FROM documents WHERE id = ANY(%s) FOR SHARE",
+        (list(document_ids),))}
     if missing := [doc_id for doc_id in document_ids if doc_id not in found]:
         raise documents_not_found(missing, len(document_ids))
     if not_ready := [{"id": str(doc_id), "filename": found[doc_id]["filename"], "status": found[doc_id]["status"]}
@@ -453,7 +454,8 @@ def ready_documents(conn: Connection, document_ids: Sequence[DocumentId]) -> lis
         raise VaultError(ErrorCode.DOCUMENTS_NOT_READY,
                          f"{len(not_ready)} of {len(document_ids)} documents are not ready.",
                          details={"not_ready": not_ready})
-    return [DocRef(doc_id, found[doc_id]["filename"], PageBasis(found[doc_id]["page_basis"])) for doc_id in document_ids]
+    return [DocRef(doc_id, found[doc_id]["filename"], PageBasis(found[doc_id]["page_basis"]), found[doc_id]["page_count"])
+            for doc_id in document_ids]
 
 
 def documents_not_found(missing: Sequence[DocumentId], total: int) -> VaultError:

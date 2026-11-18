@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
+from uuid import UUID, uuid4
+
 import pytest
 
-from docvault import evals
+from docvault import chat, evals
 from docvault.config import Settings
-from docvault.domain import Cell, Purpose, Row, SummaryLength, TurnOutcome
+from docvault.domain import (
+    Cell,
+    ChunkId,
+    DocRef,
+    DocumentId,
+    PageBasis,
+    PageMap,
+    Purpose,
+    Row,
+    SummaryLength,
+    TurnOutcome,
+)
 from docvault.evals import ExpectedField, Fact, FieldResult, Ratio
 from docvault.fake_ai import FakeEmbedder
 
@@ -56,6 +69,43 @@ def test_the_extra_case_set_scores_whole_turns_and_the_answer_text():
         ("deductible-then-renewal-only", ("missing 5,000",)),
         ("additional-insured-outside-scope", ()),
         ("renewal-premium-outside-scope", ())]
+
+
+PAGES = evals.ROOT / "evals" / "cases-pages.yaml"
+
+
+def test_the_page_case_set_loads_and_runs_on_the_fake_provider():
+    settings = Settings(_env_file=None, database_url=TEST_DATABASE_URL, chat_provider="fake", embed_provider="fake")
+    case_set = evals.load_cases(PAGES)
+    turns = [question for case in case_set.cases for question in case.questions]
+
+    report = evals.run(settings, case_set)
+
+    assert (len(case_set.cases), len(turns), sum(len(turn.expected) for turn in turns)) == (6, 6, 5)
+    assert (report.retrieval, report.not_found) == (Ratio(5, 5), Ratio(1, 1))
+    assert [(turn.case, turn.outcome) for turn in report.turns] == [
+        ("policy-last-page", TurnOutcome.MODEL_DECLINED), ("policy-how-it-ends", TurnOutcome.MODEL_DECLINED),
+        ("policy-page-3", TurnOutcome.ANSWERED), ("policy-page-5-roofing", TurnOutcome.ANSWERED),
+        ("quote-last-page", TurnOutcome.ANSWERED), ("policy-page-out-of-range", TurnOutcome.NO_EVIDENCE)]
+    assert [(turn.case, turn.named_page, turn.passes(report.threshold)) for turn in report.turns] == [
+        ("policy-last-page", True, True), ("policy-how-it-ends", False, True), ("policy-page-3", True, True),
+        ("policy-page-5-roofing", True, True), ("quote-last-page", True, True),
+        ("policy-page-out-of-range", False, False)]
+
+
+def turn_result(similarity: float, *, answerable: bool, named_page: bool = False) -> evals.TurnResult:
+    doc = DocRef(DocumentId(UUID(int=1)), POLICY_DEDUCTIBLE.document, PageBasis.PHYSICAL, 7)
+    passage = chat.Candidate(ChunkId(uuid4()), doc, "text", PageMap(((0, 1),)), similarity, 0.0, False)
+    scored = (evals.Scored(POLICY_DEDUCTIBLE, None, False),) if answerable else ()
+    return evals.TurnResult("case", "q", "q", TurnOutcome.ANSWERED, scored, (passage,), named_page, None)
+
+
+def test_a_turn_that_names_a_page_passes_the_gate_at_any_threshold_and_places_no_cut():
+    turns = [turn_result(0.10, answerable=True, named_page=True), turn_result(0.30, answerable=True),
+             turn_result(0.20, answerable=False)]
+
+    assert [turn.passes(0.5) for turn in turns] == [True, False, False]
+    assert evals.fit_gate(turns) == evals.GateFit(0.25, 3, 3, 0.30, 0.20)
 
 
 WIRED = """\

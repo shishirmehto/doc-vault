@@ -425,6 +425,19 @@ def locate_quote(quote: str, text: str) -> tuple[int, int] | None:
     return origin[at], origin[at + len(needle) - 1] + 1
 
 
+def part_on_pages(text: str, page_map: PageMap, first: int, last: int) -> tuple[str, PageMap] | None:
+    """The part of a chunk's text that is on pages first..last, and its page map counted from where the part starts,
+    or None when the chunk holds no text on those pages. The part is a substring of `text`, so a quote found in it is
+    in the chunk too."""
+    ends = [offset for offset, _ in page_map.starts[1:]] + [len(text)]
+    kept = [(offset, end, page) for (offset, page), end in zip(page_map.starts, ends, strict=True) if first <= page <= last]
+    if not kept:
+        return None
+    start = kept[0][0]
+    part = text[start:kept[-1][1]].rstrip()
+    return (part, PageMap(tuple((offset - start, page) for offset, _, page in kept))) if part else None
+
+
 def page_label(basis: PageBasis, number: int) -> str:
     """'p. 12' for PHYSICAL, 'section 12' for SYNTHETIC. The API never calls a synthetic section a page."""
     return f"section {number}" if basis is PageBasis.SYNTHETIC else f"p. {number}"

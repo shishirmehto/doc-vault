@@ -198,7 +198,7 @@ def _strings(turn: Mapping[str, object], key: str) -> tuple[str, ...] | None:
 class Miss(StrEnum):
     """Why an expected fact was not among the sources the answer step saw."""
 
-    GATE = "gate"       # the relevance gate found nothing, so the answer step saw only the opening passages
+    GATE = "gate"       # nothing matched, so the answer step saw only the opening and closing passages
     TEXT = "text"       # no source of the expected document holds the fact's text
     PAGE = "page"       # a source holds the text, but on another page
 
@@ -218,6 +218,7 @@ class TurnResult:
     outcome: TurnOutcome
     scored: tuple[Scored, ...]  # one per expected fact; empty for an out-of-scope question
     candidates: tuple[chat.Candidate, ...]  # what the gate saw
+    named_page: bool                        # the question named a page the documents have, as chat.Found.matched sees it
     text_misses: tuple[str, ...] | None     # None: the question has no values and no forbid
 
     @property
@@ -233,7 +234,7 @@ class TurnResult:
         return any(c.lexical_hit for c in self.candidates)
 
     def passes(self, threshold: float) -> bool:
-        return chat.gate(self.candidates, threshold)
+        return self.named_page or chat.gate(self.candidates, threshold)
 
 
 def retrieval_miss(fact: Fact, sources: Sequence[Source] | None, *, matched: bool) -> Miss | None:
@@ -373,10 +374,11 @@ class GateFit:
 def fit_gate(turns: Sequence[TurnResult]) -> GateFit:
     """The similarity threshold that maximises answerable-passed plus out-of-scope-refused.
 
-    A turn with an all-terms match passes at any threshold, so only the others place the cut. The cut goes
+    A turn with an all-terms match or a page its question names passes at any threshold, so only the others place
+    the cut. The cut goes
     in the middle of the best-scoring gap between neighbouring similarities; a tie goes to the wider gap.
     """
-    similar = [t for t in turns if not t.lexical_hit]
+    similar = [t for t in turns if not t.lexical_hit and not t.named_page]
     cuts = sorted({t.best_similarity for t in similar})
     # (threshold, width of its gap): the middle of every gap, then the two ends, which lose every tie.
     options = [(round((lo + hi) / 2, 3), hi - lo) for lo, hi in itertools.pairwise(cuts)]
@@ -480,21 +482,20 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
                 turn = chat.ask(asking, started.id, question.ask)
                 [q_vec] = queries.vectors
                 with pool.connection() as conn:
-                    candidates = chat.retrieve(conn, started.documents, q_vec, turn.standalone_query,
-                                               ctx.ai.embed_model, per_doc=settings.retrieval_per_doc_min)
-                    first = chat.openings(conn, started.documents, q_vec, ctx.ai.embed_model)
-                matched = chat.gate(candidates, ctx.ai.min_similarity)
+                    found = chat.search(conn, chat.scope(conn, started.id), q_vec, turn.standalone_query,
+                                        ctx.ai.embed_model, per_doc=settings.retrieval_per_doc_min,
+                                        k=settings.retrieval_k)
+                matched = found.matched(ctx.ai.min_similarity)
                 shown = None if answers.sources is None else [source.chunk_id for source in answers.sources]
-                only_openings = [opening.chunk_id for opening in first[:settings.retrieval_k]
-                                 if answers.declines_unanswerable]
-                if (matched and shown is None) or (not matched and (shown or []) != only_openings):
+                only_ends = [end.chunk_id for end in found.ends[:settings.retrieval_k] if answers.declines_unanswerable]
+                if (matched and shown is None) or (not matched and (shown or []) != only_ends):
                     raise RuntimeError(f"{case.id}: the rerun retrieval disagrees with the gate in chat.ask")
                 turns.append(TurnResult(
                     case.id, question.ask, turn.standalone_query, turn.answer.outcome,
                     tuple(Scored(fact, retrieval_miss(fact, answers.sources, matched=matched),
                                  is_cited(fact, turn.answer.citations))
                           for fact in question.expected),
-                    tuple(candidates),
+                    tuple(found.retrieved), bool(found.on_pages),
                     answer_text_misses(turn.answer.text, question.values, question.forbid)
                     if question.values or question.forbid else None))
             # Asked after the case's own turns, so they change no condense call the case is scored on.

@@ -37,7 +37,7 @@ from .pages import page_label
 type Tier = Literal["main", "small"]
 
 CONDENSE_VERSION = "condense-v1"
-ANSWER_VERSION = "answer-v4"
+ANSWER_VERSION = "answer-v5"
 INSIGHTS_VERSION = "insights-v1"
 COMPARE_VERSION = "compare-v1"
 SUMMARY_VERSION = "summary-v1"
@@ -198,6 +198,10 @@ def _conversation(history: Sequence[Turn]) -> str:
 # - Figures quoted exactly: brokers act on limits, deductibles and dates, and a rounded limit is a wrong limit.
 # - Answer the part the sources cover and name the part they do not, so a missing deductible does not hide the limit.
 # - supported: false instead of a guess: a refusal costs the user a follow-up question, a guess can cost a claim.
+# - Page numbers: "the last page" means nothing without the page count, so each source's pages attribute ends in
+#   "of N". A model that cannot find the page asked about would otherwise describe a nearby page as that one.
+# - A question about a whole document answered from some of its pages names those pages: retrieval sends a few
+#   passages of a long document, and an answer that does not say so reads as a summary of all of it.
 # - The conversation only says what the user means. An earlier answer is not a source, so facts come from <source>.
 # - follow_ups are offered as one-click questions under the answer. They must be questions these sources answer,
 #   so a click leads to a cited answer rather than a refusal, and they must not repeat the question just asked.
@@ -224,21 +228,28 @@ total them unless asked; if you calculate, show the calculation.
 the documents do not address.
 7. If the sources do not answer the question, set supported to false, write one sentence in answer saying what the \
 documents do not cover, and leave evidence empty. Do not guess.
-8. If sources disagree, say so and cite each with its own marker. An endorsement changes the form it endorses; \
+8. A page or section number in a question refers to the pages attribute of the <source> tags, where "of N" is the \
+document's page count, so its last page is page N. If no source includes the page asked about, say so instead of \
+guessing what it says.
+9. When the question is about a document as a whole (what is notable, a summary, what to keep in mind) and the \
+sources cover only some of its pages, say which pages the answer draws on, such as "From pages 2 to 28 of 922", so \
+the reader does not take part of the document for all of it.
+10. If sources disagree, say so and cite each with its own marker. An endorsement changes the form it endorses; \
 say which governs when the text says so.
-9. Lead with the direct answer (yes, no, the figure), then the conditions. At most 120 words unless the user asks \
+11. Lead with the direct answer (yes, no, the figure), then the conditions. At most 120 words unless the user asks \
 for detail. Use Markdown only where it helps: a "- " list for three or more parallel items, such as several limits \
 or changes, and **bold** for a key figure. No headings, tables, links, images or code.
-10. When an "Interpreted as" line follows the question, answer the question as that line reads it.
-11. In follow_ups, suggest up to 3 short questions the user could ask next, in plain text, each ending in "?". \
+12. When an "Interpreted as" line follows the question, answer the question as that line reads it.
+13. In follow_ups, suggest up to 3 short questions the user could ask next, in plain text, each ending in "?". \
 Suggest only questions that the text inside <source> tags answers, and never the question just asked."""
 
 
 def answer(question: str, standalone: str, history: Sequence[Turn], sources: Sequence[Source]) -> Prompt:
     """One user message, main model: the conversation when there is one, the sources, then the question.
 
-    Sources are in fused-rank order, and every source names its document and
-    pages, so the model can attribute claims per document in a multi-document chat.
+    Sources are in the order select_sources gives them, and every source names its document, its pages and the
+    document's page count, so the model can attribute claims per document in a multi-document chat and knows which
+    page is the last.
     """
     blocks = [_conversation(history)] if history else []
     blocks.append("\n".join(("<sources>", *(_source(source) for source in sources), "</sources>")))
@@ -252,7 +263,8 @@ def answer(question: str, standalone: str, history: Sequence[Turn], sources: Seq
 def _source(source: Source) -> str:
     first, last = source.page_map.first_page, source.page_map.last_page
     span = page_label(source.doc.page_basis, first) + (f"-{last}" if last != first else "")
-    return f'<source id="{source.label}" document="{source.doc.filename}" pages="{span}">\n{source.text}\n</source>'
+    return (f'<source id="{source.label}" document="{source.doc.filename}" pages="{span} of {source.doc.page_count}">'
+            f"\n{source.text}\n</source>")
 
 
 def no_evidence_text(documents: Sequence[DocRef]) -> str:

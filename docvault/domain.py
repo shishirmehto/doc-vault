@@ -335,6 +335,7 @@ class DocRef:
     id: DocumentId
     filename: str
     page_basis: PageBasis
+    page_count: int
 
 
 @dataclass(frozen=True, slots=True)
