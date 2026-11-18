@@ -37,7 +37,7 @@ from .answer_text import AnswerField, MarkerFilter
 from .cache import Cache
 from .context import Ctx
 from .db import Db, decode_cursor, next_cursor
-from .documents import chunking, ready_documents
+from .documents import ready_documents
 from .domain import (
     Answer,
     Answered,
@@ -267,18 +267,19 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
     return turn
 
 
-def answer_key(ctx: Ctx, documents: Mapping[DocumentId, bytes], question: str) -> str:
-    """The answer cache key for a first question over `documents` (id -> sha256): a hash of every input the
-    answer depends on, so a change to any of them is a miss. The question is compared without case or extra spaces."""
+def answer_key(ctx: Ctx, documents: Mapping[DocumentId, tuple[bytes, str | None]], question: str) -> str:
+    """The answer cache key for a first question over `documents` (id -> sha256 and the chunk settings it was cut
+    with): a hash of every input the answer depends on, so a change to any of them is a miss. A document's own
+    chunking, not the current setting, so a document still waiting to be cut again keys apart from its new cut.
+    The question is compared without case or extra spaces."""
     inputs = {
         "format": ANSWER_CACHE_FORMAT,
-        "documents": sorted([str(doc_id), sha.hex()] for doc_id, sha in documents.items()),
+        "documents": sorted([str(doc_id), sha.hex(), cut] for doc_id, (sha, cut) in documents.items()),
         "question": _same_question(question),
         "prompt_version": prompts.ANSWER_VERSION,
         "chat_model": ctx.ai.chat.models["main"],
         "reasoning_effort": ctx.settings.openai_chat_reasoning_effort,
         "embed_model": ctx.ai.embed_model,
-        "chunking": chunking(ctx.settings),
         "retrieval_k": ctx.settings.retrieval_k,
         "retrieval_per_doc_min": ctx.settings.retrieval_per_doc_min,
         "min_similarity": ctx.ai.min_similarity,
@@ -286,9 +287,9 @@ def answer_key(ctx: Ctx, documents: Mapping[DocumentId, bytes], question: str) -
     return "docvault:answer:" + hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 
 
-def _hashes(conn: Connection, documents: Sequence[DocRef]) -> dict[DocumentId, bytes]:
-    rows = conn.execute("SELECT id, sha256 FROM documents WHERE id = ANY(%s)", ([doc.id for doc in documents],))
-    return {DocumentId(row["id"]): bytes(row["sha256"]) for row in rows}
+def _hashes(conn: Connection, documents: Sequence[DocRef]) -> dict[DocumentId, tuple[bytes, str | None]]:
+    rows = conn.execute("SELECT id, sha256, chunking FROM documents WHERE id = ANY(%s)", ([doc.id for doc in documents],))
+    return {DocumentId(row["id"]): (bytes(row["sha256"]), row["chunking"]) for row in rows}
 
 
 def _cached_answer(cache: Cache, key: str) -> tuple[Answered, tuple[str, ...], dict[str, Any]] | None:

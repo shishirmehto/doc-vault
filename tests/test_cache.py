@@ -224,7 +224,7 @@ def test_every_input_to_a_first_answer_is_in_its_cache_key(ctx, monkeypatch):
         min_similarity = 0.5
 
     a, b = DocumentId(UUID(int=1)), DocumentId(UUID(int=2))
-    docs = {a: b"\x01" * 32, b: b"\x02" * 32}
+    docs = {a: (b"\x01" * 32, "v1 max=1800 overlap=250"), b: (b"\x02" * 32, "v1 max=1800 overlap=250")}
 
     def key(context=ctx, scope=docs, question=LIMIT_QUESTION) -> str:
         return chat.answer_key(context, scope, question)
@@ -233,7 +233,8 @@ def test_every_input_to_a_first_answer_is_in_its_cache_key(ctx, monkeypatch):
         return dataclasses.replace(ctx, settings=ctx.settings.model_copy(update=update))
 
     variants = {
-        "a document's bytes": key(scope={a: b"\x03" * 32, b: docs[b]}),
+        "a document's bytes": key(scope={a: (b"\x03" * 32, docs[a][1]), b: docs[b]}),
+        "a document's chunking": key(scope={a: (docs[a][0], "v1 max=600 overlap=100"), b: docs[b]}),
         "the documents": key(scope={a: docs[a]}),
         "the question": key(question="What is the general aggregate limit?"),
         "the main model": key(context=with_chat(ctx, OtherModel())),
@@ -277,6 +278,26 @@ def test_the_same_first_question_in_a_new_chat_is_answered_from_the_cache_with_n
     assert client.get(f"/chats/{again_chat}/messages").json()["turns"] == [again]
     assert cache.stats() == CacheStats(embedding=Counts(hits=0, misses=1), answer=Counts(hits=2, misses=1), counted_since=NOW)
     assert [ttl for key, ttl in server.ttls.items() if key.startswith("docvault:answer:")] == [30 * 24 * 3600]
+
+
+def test_a_document_cut_again_misses_the_answers_cached_for_its_old_chunks_and_old_chats_still_load(client, ctx):
+    cache, _ = memory_cache(ctx, client)
+    policy = ready(ctx, POLICY)
+    old_chat = new_chat(client, policy)
+    first = ask(client, old_chat, LIMIT_QUESTION)
+    assert ask(client, new_chat(client, policy), LIMIT_QUESTION)["cached"] is True
+
+    small = dataclasses.replace(ctx, settings=ctx.settings.model_copy(
+        update={"chunk_max_chars": 600, "chunk_overlap_chars": 100}))
+    with ctx.db.connection() as conn:
+        assert documents.rechunk(conn, policy, small.settings) is True
+    documents.run_index(small, policy)
+
+    history = client.get(f"/chats/{old_chat}/messages").json()["turns"]
+    after = ask(client, new_chat(client, policy), LIMIT_QUESTION)
+    assert [turn["citations"] for turn in history] == [first["citations"]]
+    assert (after["cached"], after["status"]) == (False, "answered")
+    assert cache.stats().answer == Counts(hits=1, misses=2)
 
 
 def test_a_follow_up_is_never_looked_up_or_stored(client, ctx):

@@ -283,6 +283,7 @@ def chunk_rows(ctx, doc_id):
 def test_reconcile_cuts_a_ready_document_again_after_the_chunk_settings_change(ctx):
     doc_id = upload(ctx, POLICY).document.id
     documents.run_index(ctx, doc_id)
+    insights.run_analyze(ctx, doc_id)
     ctx.jobs.indexed.clear()
     assert documents.reconcile(ctx) == 0
     before = chunk_rows(ctx, doc_id)
@@ -300,7 +301,9 @@ def test_reconcile_cuts_a_ready_document_again_after_the_chunk_settings_change(c
     assert all(len(row["text"]) <= 600 and row["embedding_model"] is None for row in after)
 
     documents.run_index(small, doc_id)
+    insights.run_analyze(small, doc_id)   # queued by the re-embed; the insights were written from the pages, which stay
     assert isinstance(documents.get(ctx.db, doc_id).lifecycle, Ready)
+    assert scalar(ctx.db, "SELECT count(*) FROM llm_calls WHERE purpose = 'insights'") == 1
     assert scalar(ctx.db, "SELECT chunk_count FROM documents WHERE id = %s", (doc_id,)) == len(after)
     assert all(row["embedding_model"] is not None for row in chunk_rows(ctx, doc_id))
     with ctx.db.connection() as conn:

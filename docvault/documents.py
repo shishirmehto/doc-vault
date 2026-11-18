@@ -82,7 +82,7 @@ TRANSITIONS: Mapping[DocStatus, frozenset[DocStatus]] = {
 STALE_AFTER = timedelta(minutes=2)
 INDEX_BATCH = 50
 ANALYZE_BATCH = 50
-RECHUNK_BATCH = 10   # documents re-cut per reconcile tick; a 922-page document takes about a second
+RECHUNK_BATCH = 10   # documents re-cut per reconcile tick
 MAX_RETRIES = 5   # Celery retries after the first attempt (tasks.py); backoff 2, 4, 8, 16, 32 s
 
 # A chunk still to embed: never embedded, or embedded by a model that is no longer the current one.
