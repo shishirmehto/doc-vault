@@ -15,7 +15,7 @@ TIMEOUT_S=${TIMEOUT_S:-180}
 section() { printf '\n== %s\n' "$*"; }
 fail() { echo "demo: $*" >&2; exit 1; }
 
-# GET or POST, fail on any status but the ones listed in OK (default 2xx). Prints the body.
+# GET or POST, and fail on any status outside 2xx. Prints the body.
 call() {
   local out code
   out=$(curl -s -w '\n%{http_code}' "$@") || fail "curl $* did not connect"

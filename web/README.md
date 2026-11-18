@@ -90,6 +90,6 @@ Up in an empty question box brings back the chat's newest question. Up and Down 
 
 ## Tests and fixtures
 
-`src/api/fixtures/` holds responses captured from the running API, with their HTTP status. The chat fixtures come from the fake provider. `fixtures/constructed/` holds the responses no request could reach: failed insights, a 503 with `Retry-After`, an `unverified` turn and an answered turn with no citations. Its README says so.
+`src/api/fixtures/` holds responses captured from the running API, with their HTTP status. The chat fixtures come from the fake provider. `fixtures/constructed/` holds responses built by hand, not captured: failed insights, a 503 with `Retry-After`, a 500 `internal_error`, a stream that ends in `quota_exceeded`, an `unverified` turn, an answered turn with no citations, health with the cache off or unreachable, and processing metrics with the cache off. Its README says how each was made.
 
 The stream tests read a captured stream body split at every byte. The `locateQuote` cases come from the backend's `tests/test_pages.py`. They were checked against the Python `locate_quote` on the same inputs.

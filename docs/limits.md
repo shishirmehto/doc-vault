@@ -4,12 +4,12 @@ The README lists the main ones. This is the full list, by area.
 
 ## Answers and retrieval
 
-- The OpenAI gate threshold (0.20) sits below the lowest answerable turn of the calibration run. On the eval set it passed every question, and the answer step declined the out-of-scope ones (`docs/evals.md`).
-- The tests use canned HTTP responses for the OpenAI backends. Live runs on 2026-11-12 and 2026-11-17 covered the eval set. The first also covered 19 public insurance documents, with streaming, suggestions, comparisons and summaries (`docs/evals.md`, `AI_USAGE.md`).
+- The OpenAI gate threshold (0.20) sits below the lowest answerable turn of the calibration run. On the eval set it passed every question, and the answer step declined the out-of-scope ones ([`docs/evals.md`](evals.md)).
+- The tests use canned HTTP responses for the OpenAI backends. Live runs on 2026-11-12 and 2026-11-17 covered the eval set. The first also covered 19 public insurance documents, with streaming, suggestions, comparisons and summaries. The second also asked 50 questions about 23 real documents (`docs/evals.md`, [`docs/design.md`](design.md), [`AI_USAGE.md`](../AI_USAGE.md)).
 - The fake provider simulates a model's pacing when it streams: it sends its finished answer a word at a time, 25 ms apart in compose (`FAKE_STREAM_DELAY_MS`). The plain route has no delay.
 - During a re-embed after an embedding-model change, a chat over that document refuses with `no_evidence`, and the embedding progress count reads as complete.
 - After an embedding-model change, chats answer only from documents already re-embedded until reconcile finishes.
-- Retrieval sends 16 passages to the answer step. In a test of 50 questions on real documents of up to 922 pages, 4 were declined in at least one chat scope because the passage holding the answer ranked below those 16. Sending 16 instead of eight raised the answer step's input from about 4,300 to 7,700 tokens and its median time from 3.8 to 4.5 s.
+- Retrieval sends 16 passages to the answer step. In a test on real documents of up to 922 pages, 4 of the 50 questions were declined in at least one chat scope, because the passage holding the answer ranked below those 16. Sending 16 instead of eight raised the answer step's input from about 4,300 to 7,700 tokens and its median time from 3.8 to 4.5 s.
 - In chat, "Summarize this document" answers from the opening passage and the 16 passages nearest the question. On a 922-page handbook that covers a few sections, and the answer says so. `POST /documents/{id}/summaries` reads the first 240,000 characters instead.
 - With a key, a question that matches nothing still costs one answer call over the opening passages, about 1,200 input tokens and 3 to 4 s.
 - An answer is kept when at least one of its quotes is found. A sentence whose quote is not found stays in the answer text, without a marker.
@@ -50,6 +50,8 @@ The README lists the main ones. This is the full list, by area.
 ## Uploads, chats and deletes
 
 - A delete racing an upload of the same bytes can delete the blob that the new row needs.
+- Some PDFs print bold text by drawing each glyph twice, so a run of characters that come in identical pairs is halved: "PPoolliiccyy" reads "Policy", and so does a code such as `MMDDYYYY`, which reads `MDYY`. A run of one repeated character, such as `YYYY`, is kept.
+- Text files are read as UTF-8, UTF-16 with a byte-order mark, or cp1252. Other encodings, such as Shift-JIS, are indexed as the wrong characters.
 - An upload sent without Content-Length is read in full into a temporary file before its size is checked, so the limit bounds what is stored, not what a client can send.
 - Chats and comparisons cannot be deleted, and a summary is deleted only with its document.
 - `GET /chats/{id}/messages` returns at most the newest 200 turns of a chat.

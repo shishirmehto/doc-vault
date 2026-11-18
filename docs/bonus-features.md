@@ -1,6 +1,6 @@
 # How the bonus features work
 
-This page covers the features from the case study's bonus list that need more than a line: streamed answers, document versions, comparisons, summary options, live status, the spending cap, the caches, and request ids. `docs/design.md` covers the core: the data model, upload, indexing, insights, chat, retrieval, the prompts and scale.
+This page covers the features from the case study's bonus list that need more than a line: streamed answers, document versions, comparisons, summary options, live status, the spending cap, the caches, and request ids. [`docs/design.md`](design.md) covers the core: the data model, upload, indexing, insights, chat, retrieval, the prompts and scale.
 
 ## Streamed answers
 

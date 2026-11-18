@@ -1,6 +1,6 @@
 # Document lifecycle
 
-This page shows how one uploaded document moves through indexing, from upload to "ready for chat". The chart covers what happens when a worker crashes, when the AI provider fails, when the same job arrives twice, and when you press retry. A model checker (TLC, on the TLA+ model in `formal/`) explored every order of those events within small bounds and checked the rules below. The chart is drawn from that model, not by hand.
+This page shows how one uploaded document moves through indexing, from upload to "ready for chat". The chart covers what happens when a worker crashes, when the AI provider fails, when the same job arrives twice, and when you press retry. A model checker (TLC, on the TLA+ model in [`formal/`](../formal/)) explored every order of those events within small bounds and checked the rules below. The chart is drawn from that model, not by hand.
 
 The top-level states are the values of `status` in `GET /documents/{id}`. The inner states say whether a worker is working on the document at that moment.
 
@@ -110,12 +110,12 @@ The same race happened when the AI provider used up its retries, and on unexpect
 
 **The first fix idea was wrong, and the model said why.** That idea was to let `fail()` take the lease and skip when another worker holds it. TLC answered with a 31-step cycle that breaks `AlwaysSettles`. A file that can never be parsed loops forever, because every time one worker fails it, a re-queued worker has just taken the lease to try again.
 
-**The fix** (`3437628`): `run_index` decides every terminal failure inside its own lease and writes FAILED before it releases the lease. The Celery task only retries. `tests/test_lifecycle_race.py` reproduces the race against real Postgres advisory locks for all three failure kinds. On the code before the fix it fails with `assert [True] == [False]`: the second worker got the lease. After the fix it passes.
+**The fix** (`3437628`): `run_index` decides every terminal failure inside its own lease and writes FAILED before it releases the lease. The Celery task only retries. [`tests/test_lifecycle_race.py`](../tests/test_lifecycle_race.py) reproduces the race against real Postgres advisory locks for all three failure kinds. On the code before the fix it fails with `assert [True] == [False]`: the second worker got the lease. After the fix it passes.
 
 ## What the model leaves out
 
 - Insights (`run_analyze`), document deletes, and re-embedding after an embedding-model change.
-- A failure while the status is still Queued. The transition table in `docvault/documents.py` allows Queued to Failed, for an error before parsing starts. The model has no such step, so the chart has no arrow from Queued to Failed.
+- A failure while the status is still Queued. The transition table in [`docvault/documents.py`](../docvault/documents.py) allows Queued to Failed, for an error before parsing starts. The model has no such step, so the chart has no arrow from Queued to Failed.
 - Time. The two-minute stale threshold is modelled as "may happen at any moment", which can only add orders of events, never remove them.
 - The 50-per-tick bound on reconcile. The model lets reconcile re-queue any in-flight document at any moment, which covers every choice the bounded rule can make.
 - Size. The gate runs with 2 workers, 2 chunks, 1 crash, 2 provider faults, 1 Celery retry, 1 user retry and at most 2 queued jobs. The chart above uses 1 worker and 1 chunk, so it stays readable. A pass covers these bounds, not every possible run.
@@ -128,4 +128,4 @@ python3 formal/check.py             # every rule, about 2 seconds
 python3 formal/check.py --mutants   # prove each rule can fail, about 15 seconds
 ```
 
-The checker needs Java 11 or later. It downloads the pinned `tla2tools.jar` (TLA+ 1.7.4) once and checks its SHA-256. To redraw the chart, run the `/statechart` skill on `formal/DocLifecycle.tla` with `formal/DocLifecycle-doc.cfg` and the view in `formal/view.ts`.
+The checker needs Java 11 or later. It downloads the pinned `tla2tools.jar` (TLA+ 1.7.4) once and checks its SHA-256. To redraw the chart, run the `/statechart` skill on [`formal/DocLifecycle.tla`](../formal/DocLifecycle.tla) with [`formal/DocLifecycle-doc.cfg`](../formal/DocLifecycle-doc.cfg) and the view in [`formal/view.ts`](../formal/view.ts).

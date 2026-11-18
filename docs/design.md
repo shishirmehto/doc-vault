@@ -1,10 +1,10 @@
 # Design
 
-This page explains how Doc Vault stores documents, processes them, and answers questions about them. `docs/bonus-features.md` covers the features from the case study's bonus list, `docs/limits.md` lists every known limit, `docs/lifecycle.md` covers the indexing state machine and its TLA+ model, and `docs/evals.md` covers answer quality.
+This page explains how Doc Vault stores documents, processes them, and answers questions about them. [`docs/bonus-features.md`](bonus-features.md) covers the features from the case study's bonus list, [`docs/limits.md`](limits.md) lists every known limit, [`docs/lifecycle.md`](lifecycle.md) covers the indexing state machine and its TLA+ model, and [`docs/evals.md`](evals.md) covers answer quality.
 
 ## Data model
 
-Postgres 16 with pgvector holds every table. `docvault/schema.sql` is the only schema file, and `db.migrate()` applies it at process start when its hash is new. Each table has one module that writes it. `metrics.py` reads every table and writes none.
+Postgres 16 with pgvector holds every table. [`docvault/schema.sql`](../docvault/schema.sql) is the only schema file, and `db.migrate()` applies it at process start when its hash is new. Each table has one module that writes it. `metrics.py` reads every table and writes none.
 
 | Table | Written by | Holds |
 |---|---|---|
@@ -19,15 +19,15 @@ Postgres 16 with pgvector holds every table. `docvault/schema.sql` is the only s
 | `document_summaries` | `summaries.py` | One row per distinct summary request: the length, the normalised focus (`''` for none), the tone, the text, the sources with their pages and verified quotes, how many sources grounding dropped, and the model and prompt version. Unique on document, length, focus, tone, model and prompt version. Deleted with its document. |
 | `llm_calls` | `ai.py` | Append-only. One row per provider attempt, failed ones included: purpose, model, prompt version, tokens, cost, latency, the document, turn, comparison or summary it is billed to (`one_owner` allows exactly one), and the `request_id` of the API request that caused it. |
 
-Uploaded files live on disk at a path derived from their SHA-256 (`context.BlobStore`), so the database stores no path and the same bytes are stored once. The cache Redis holds embeddings and answers that the app can compute again, and its own hit and miss counts (Caches, in `docs/bonus-features.md`).
+Uploaded files live on disk at a path derived from their SHA-256 (`context.BlobStore`), so the database stores no path and the same bytes are stored once. The cache Redis holds embeddings and answers that the app can compute again, and its own hit and miss counts (Caches, in [`docs/bonus-features.md`](bonus-features.md)).
 
 ## Request flows
 
-**Upload.** `POST /documents` streams the file to disk while hashing it and stops at `MAX_UPLOAD_BYTES` (50 MB). A Content-Length over the limit gets 413 before the body is read. `pages.sniff_kind` reads the first bytes, not the extension. The insert does nothing on a conflict over `sha256`, so bytes seen before return the existing document with 200 and cost nothing. A new document returns 202 and is enqueued on the `ingest` queue.
+**Upload.** `POST /documents` streams the file to disk while hashing it and stops at `MAX_UPLOAD_BYTES` (50 MiB). A Content-Length over the limit gets 413 before the body is read. `pages.sniff_kind` reads the first bytes, not the extension. The insert does nothing on a conflict over `sha256`, so bytes seen before return the existing document with 200 and cost nothing. A new document returns 202 and is enqueued on the `ingest` queue.
 
 **Index.** `documents.run_index` takes a per-document advisory lock (`pg_try_advisory_lock`), so a duplicate delivery returns at once. Parsing extracts pages, cuts chunks and writes pages, chunks and parse facts in one transaction. It then enqueues insights and embeds pending chunks in batches of 128, one transaction per batch. A crash resumes at the first chunk without an embedding, and no parse or batch is paid for twice. A retryable failure raises for Celery to retry (five retries, 2 to 32 seconds apart). The last failure writes `failed` while the worker still holds the lock. `reconcile` runs every 60 seconds and re-enqueues stalled documents, at most 50 per tick. It also re-embeds ready documents after the embedding model changes, and enqueues missing insights.
 
-A document's `status` moves like this. A crash or a single provider error does not change it: the job is redelivered, or `reconcile` queues it again, and the next worker resumes. An unexpected error marks the document `failed` at once. The transition table also allows `queued` to `failed`, for an error before parsing starts. `docs/lifecycle.md` has the full chart, with the crash paths.
+A document's `status` moves like this. A crash or a single provider error does not change it: the job is redelivered, or `reconcile` queues it again, and the next worker resumes. An unexpected error marks the document `failed` at once. The transition table also allows `queued` to `failed`, for an error before parsing starts. [`docs/lifecycle.md`](lifecycle.md) has the full chart, with the crash paths.
 
 ```mermaid
 stateDiagram-v2
@@ -48,7 +48,7 @@ stateDiagram-v2
 **Ask.** `chat.ask` runs these steps:
 
 1. Check that the chat exists and none of its documents is deleted, and read its scope and last four turns, in one connection.
-2. For a chat's first question only, look the answer up in the answer cache under `chat.answer_key` (Caches, in `docs/bonus-features.md`). A hit writes a `chat_turns` row marked `cached = true` with the stored answer, citations and suggestions, and returns it. It makes no model call of any kind, the query embedding included.
+2. For a chat's first question only, look the answer up in the answer cache under `chat.answer_key` (Caches, in [`docs/bonus-features.md`](bonus-features.md)). A hit writes a `chat_turns` row marked `cached = true` with the stored answer, citations and suggestions, and returns it. It makes no model call of any kind, the query embedding included.
 3. Check the spending cap with `AI.check_budget` (Spending cap, in `docs/bonus-features.md`). Over the cap, raise 429 `quota_exceeded` before any model call.
 4. After the first question, the small model rewrites each question into a standalone query from the last four turns. The first question is used as asked.
 5. Embed the query, then run one SQL statement over the chat's documents (see Retrieval).
@@ -79,13 +79,13 @@ Three extraction rules came from a run on real insurance PDFs:
 - `ts_rank_cd` against the query terms joined with OR. With AND, "Compare the general aggregate limit in the two documents." matched none of the two documents' eight chunks.
 - Reciprocal rank fusion of the two rankings (k = 60), over the top 50 of each, plus each document's best two chunks by distance.
 
-`chat.select_sources` sends 16 chunks. Each document is first guaranteed its best two by fused score, as long as the guarantees fill at most half the slots, and the rest go by fused score. In a chat of up to three documents, each document's opening passage follows the 16, so a question about the whole document sees its title page. A chat of up to four documents sees at least two passages from each, five to eight documents get one each, and more than eight get the plain top 16. A document's strong second passage is then never crowded out by many weak first ones. The live question sets cover chats of one to three documents and of 23; four to 22 are covered by unit tests only. The gate passes when the best similarity reaches the embedder's `min_similarity`, or when one chunk contains every query term. The second arm keeps exact identifiers such as a form number from being refused by a semantic threshold. The fake embedder's threshold (0.184) comes from the eval set. The OpenAI threshold (0.20) comes from a calibration run with a key. It sits below the lowest answerable turn, because answerable and out-of-scope similarities overlap (`docs/evals.md`).
+`chat.select_sources` sends 16 chunks. Each document is first guaranteed its best two by fused score, as long as the guarantees fill at most half the slots, and the rest go by fused score. In a chat of up to three documents, each document's opening passage follows the 16, so a question about the whole document sees its title page. A chat of up to four documents sees at least two passages from each, five to eight documents get one each, and more than eight get the plain top 16. A document's strong second passage is then never crowded out by many weak first ones. The live question sets cover chats of one to three documents and of 23; four to 22 are covered by unit tests only. The gate passes when the best similarity reaches the embedder's `min_similarity`, or when one chunk contains every query term. The second arm keeps exact identifiers such as a form number from being refused by a semantic threshold. The fake embedder's threshold (0.184) comes from the eval set. The OpenAI threshold (0.20) comes from a calibration run with a key. It sits below the lowest answerable turn, because answerable and out-of-scope similarities overlap ([`docs/evals.md`](evals.md)).
 
 The scan is exact, not approximate. Over 23 real documents, 5,539 chunks, it took 87 ms at the median (Scale, below). A chat may hold 50 documents of up to 2,000 pages, far more chunks than that, and that size is not measured. There is no vector index.
 
 ## Prompts
 
-`docvault/prompts.py` holds every prompt, each with a name and version that every `llm_calls` row records. Each prompt carries a comment on why it is worded the way it is. In short:
+[`docvault/prompts.py`](../docvault/prompts.py) holds every prompt, each with a name and version that every `llm_calls` row records. Each prompt carries a comment on why it is worded the way it is. In short:
 
 - **condense** (small model) keeps the user's wording, amounts and defined terms, because the rewrite drives both the embedding and the full-text search. It must not answer, because the answer would be searched instead of the question.
 - **answer** (main model, `answer-v2`) treats source text as data, never instructions. It asks for a verbatim quote of at most 40 words per marker, because `chat.ground` drops every quote it cannot find. It asks for figures exactly as written and a refusal (`supported: false`) over a guess, because a wrong limit costs a broker more than a follow-up question. It answers the covered part of a question and names the rest. It suggests up to three follow-up questions that its sources answer, so a click on one leads to a cited answer. The schema puts no limit on their count, so a fourth question costs no repair call. `chat.suggestions` keeps three.
@@ -94,13 +94,13 @@ The scan is exact, not approximate. Over 23 real documents, 5,539 chunks, it too
 - **summary** (main model, `summary-v1`) treats the length as a word target, because a reader picks how much to read, not how much the document holds. The reader's interest steers what it leads with, and when the document says nothing about it the summary says so in one sentence instead of describing typical coverage, because invented coverage is the harm a broker's client cannot check. Sources cite the `<page n>` and copy the quote exactly, because `summaries.ground` drops a quote that is not on its page. The client tone explains insurance terms in everyday words and keeps every amount, date and name as written. The schema has no limit on sources, so a seventh never fails validation, and the code keeps 6.
 - **repair** shows the model its invalid JSON and the validator's errors once, under the original prompt's name, so the ledger counts repairs against the prompt that needed them. A comparison or a summary gets no repair turn: each is synchronous, and a second call could outlast the web proxy's 120 s.
 
-All five calls use strict JSON-schema output (`response_format`). The schemas are the `*Draft` models in `prompts.py`.
+All five calls use strict JSON-schema output (`response_format`). The schemas are `CondensedQuery` and the `*Draft` models in `prompts.py`.
 
 ## Scale
 
 ### What is measured
 
-`scripts/scale_probe.py` seeds synthetic rows into a scratch database on the compose Postgres and reports the median of five runs of each read. Machine: the development Mac, Postgres 16 in Docker.
+[`scripts/scale_probe.py`](../scripts/scale_probe.py) seeds synthetic rows into a scratch database on the compose Postgres and reports the median of five runs of each read. Machine: the development Mac, Postgres 16 in Docker.
 
 | Read | 5,000 documents | 50,000 documents |
 |---|---|---|
@@ -111,14 +111,14 @@ All five calls use strict JSON-schema output (`response_format`). The schemas ar
 | `reconcile` rule 1 pick (500 and 5,000 stale documents) | 0.2 ms | 1.5 ms |
 | `chat.retrieve` over 3 documents (30 chunks) | 1.6 ms | 1.0 ms |
 
-The 50,000-document set has 135,000 `step_runs`, 150,000 `llm_calls` and 50,000 `chat_turns` rows, spread over seven days. Reruns differ by up to about 20%. The metrics reads grow with the rows inside the window. Retrieval cost depends on the chat's scope, not on the vault's size. On the fake provider, a sample document reaches `ready` in 62 to 118 ms on a warm worker and in about 900 ms on the first run after a fresh start (`scripts/demo.sh` output).
+The 50,000-document set has 135,000 `step_runs`, 150,000 `llm_calls` and 50,000 `chat_turns` rows, spread over seven days. Reruns differ by up to about 20%. The metrics reads grow with the rows inside the window. Retrieval cost depends on the chat's scope, not on the vault's size. On the fake provider, a sample document reaches `ready` in 62 to 118 ms on a warm worker and in about 900 ms on the first run after a fresh start ([`scripts/demo.sh`](../scripts/demo.sh) output).
 
 ### Real documents
 
 On 2026-11-17, 23 real insurance documents were indexed on a separate copy of the stack with the OpenAI models, and the questions below were asked at `f9f69eb`. The public ones are a 922-page crop-insurance handbook, a 906-page federal law, two editions of a loss-adjustment handbook (400 and 405 pages), and a flood insurance manual with its policy forms. The rest are not public and are not in this repository.
 
 - Indexing: 3,263 pages and 5,539 chunks with 0 failures. The 922-page handbook was ready to chat 29.2 s after upload.
-- Answers: 50 questions, asked 91 times in chats of 1, 3 and 23 documents. After review, 73 of the 80 answerable asks were answered with the expected value cited on an expected page, and all 11 with no answer in the documents were declined. The 7 misses were declines. No answer gave a wrong figure.
+- Answers: 50 questions, asked 91 times in chats of 1, 3 and 23 documents. After review, 73 of the 80 answerable asks were answered with the expected value cited on an expected page, and all 11 with no answer in the documents were declined. The 7 missed asks were declines. No answer gave a wrong figure.
 - `chat.retrieve`: median 23 ms over one document's 1,218 chunks and 87 ms over all 5,539, five runs each inside the API container.
 
 ### What is reasoned
@@ -126,7 +126,7 @@ On 2026-11-17, 23 real insurance documents were indexed on a separate copy of th
 - Ingest throughput is set by worker concurrency (4 in compose) and the provider's rate limits. Embedding sends 128 chunks per call, and insights make one call per document. More `worker` replicas scale ingest, and each document's lock keeps duplicates harmless.
 - `reconcile` adds at most 50 duplicate index messages a minute, however long the backlog is. It used to add one per stale document per minute.
 - Duplicate uploads cost nothing: the hash makes them one document.
-- Spend is visible per purpose and model in `GET /metrics/processing`, and per turn in each answer's `usage`. `DAILY_AI_BUDGET_USD` bounds it per UTC day, apart from the overshoot that `docs/bonus-features.md` describes under Spending cap.
+- Spend is visible per purpose and model in `GET /metrics/processing`, and per turn in each answer's `usage`. `DAILY_AI_BUDGET_USD` bounds it per UTC day, apart from the overshoot that [`docs/bonus-features.md`](bonus-features.md) describes under Spending cap.
 
 ### What changes past that
 

@@ -1,6 +1,6 @@
 # Evals
 
-`docvault/evals.py` asks a fixed set of broker questions about the three sample documents and scores retrieval, answers, refusals and insights separately, so a miss shows the step where it happened. It also compares the policy with its renewal quote and scores the comparison, and summarises each sample at each length and scores the summaries' sources. The case set is `evals/cases.yaml`, and the expected values come from `samples/facts.yaml`.
+[`docvault/evals.py`](../docvault/evals.py) asks a fixed set of broker questions about the three sample documents and scores retrieval, answers, refusals and insights separately, so a miss shows the step where it happened. It also compares the policy with its renewal quote and scores the comparison, and summarises each sample at each length and scores the summaries' sources. The case set is [`evals/cases.yaml`](../evals/cases.yaml), and the expected values come from [`samples/facts.yaml`](../samples/facts.yaml).
 
 ## Results
 
@@ -19,7 +19,7 @@ One run of the full case set on 2026-11-17 at `f9f69eb`, on the configured OpenA
 | Equal fields kept equal | 1/1 (100%) |
 | Summary source grounding | 54/54 (100%), 18 at each length |
 | Gate at 0.20: answerable turns passed | 28/28 (100%) |
-| Gate at 0.20: out-of-scope turns refused | 0/16 (0%) |
+| Gate at 0.20: out-of-scope turns refused | 0/16 (0%), by design: the gate sits below the lowest answerable turn, and the answer step declined 15 of the 16 |
 | p95 turn latency | 8.2 s |
 
 The four citation misses are the two turns in `aggregate-then-medical`. The answers are right ("from $2,000,000 to $3,000,000", "from $5,000 to $10,000"), but they cite the quote's change list on page 3, as the Known limits section predicts. The one not-found miss is the flood question in `insured-then-fired-employee`. The answer says the documents do not establish flood cover, and it counts as answered because it cites the coverage grant.
@@ -36,8 +36,8 @@ DATABASE_URL=postgresql://vault:vault@localhost:54329/vault uv run python -m doc
 
 - The run works in its own database: the `DATABASE_URL` database name plus `_evals` (here `vault_evals`). It drops and recreates that database at the start of every run and never opens `vault` or `vault_test`. Blobs go to a temporary directory.
 - `--calibrate` prints, instead of the results, every turn's standalone query, best vector similarity and whether one chunk matched every query term, then the gate threshold that fits the set best.
-- The eval needs the dev dependencies (`pyyaml`), so it runs on the host with `uv run`. The Docker image installs `--no-dev` and holds neither `evals/` nor `samples/`.
-- Without a key the eval runs on the fake provider. That run says nothing about answer quality. `tests/test_evals.py` runs it in `<test database>_evals` and fails when a code change moves its numbers.
+- The eval needs the dev dependencies (`pyyaml`), so it runs on the host with `uv run`. The Docker image installs `--no-dev` and holds neither [`evals/`](../evals/) nor [`samples/`](../samples/).
+- Without a key the eval runs on the fake provider. That run says nothing about answer quality. [`tests/test_evals.py`](../tests/test_evals.py) runs it in `<test database>_evals` and fails when a code change moves its numbers.
 
 ## Calibrate the OpenAI gate
 
@@ -61,7 +61,7 @@ Each answerable turn names one or more expected facts. A comparison names one fa
 | Citation accuracy | A citation of the expected document has the expected page, and its quote contains the fact's text after collapsing whitespace. An answerable turn that comes back `not_found` misses every fact it expected. |
 | Not-found accuracy | An out-of-scope turn comes back `not_found`, for any reason (`no_evidence`, `model_declined` or `unverified`). |
 | Key-fact grounding | Insights key facts kept, over kept plus dropped, summed over the three documents. `insights.verify` keeps a fact only when its quote is on the page it cites, so every kept fact is grounded by construction. This number says how often the model cited the wrong page or misquoted, not whether the kept facts are the right ones. |
-| Key-fact recall | Planted facts whose text appears in a kept key fact's quote on the same document and page. The denominator is `samples/facts.yaml` without the two running footers (28 facts), because a footer repeated on every page is not a key fact. |
+| Key-fact recall | Planted facts whose text appears in a kept key fact's quote on the same document and page. The denominator is [`samples/facts.yaml`](../samples/facts.yaml) without the two running footers (28 facts), because a footer repeated on every page is not a key fact. |
 | Suggestions answered | After a case's own turns, every suggestion under its last turn is asked in that chat, the way a click on one asks it, and should come back `answered`. These turns are kept out of every other number: they have no expected facts, so they would count as out of scope and move the gate fit. |
 | Cell grounding | Comparison cells kept, over kept plus dropped. `compare.ground` keeps a filled cell only when its quote is on the page it cites, so every kept cell is grounded by construction. Like key-fact grounding, this says how often the model cited the wrong page or misquoted. |
 | Difference recall | The comparison case is built in code from `samples/facts.yaml`, not from `cases.yaml`, whose hash is frozen. It compares the policy with the renewal quote, with no focus. Each entry under `changes` (general aggregate limit, medical expense limit, property damage deductible, premium) counts when one row has `differs` true, its policy cell is on the planted page with the planted text inside its quote and its value inside the planted text, and its quote cell likewise. The value check stops a row whose long quote runs on into a neighbouring fact from matching that fact. A change found only as two rows, or with a cell on the wrong page, is a miss. |
@@ -72,7 +72,7 @@ Each answerable turn names one or more expected facts. A comparison names one fa
 
 ## The case set
 
-`evals/cases.yaml` holds 36 cases with 44 turns: 28 answerable turns with 34 expected facts, and 16 out-of-scope turns. `evals.load_cases` checks it against `samples/facts.yaml` before a run. Every fact id must exist and sit in the chat's scope. Every fact must be asked or listed under `not_asked` with a reason. Every `absent_topics` entry must appear in an out-of-scope question.
+[`evals/cases.yaml`](../evals/cases.yaml) holds 36 cases with 44 turns: 28 answerable turns with 34 expected facts, and 16 out-of-scope turns. `evals.load_cases` checks it against [`samples/facts.yaml`](../samples/facts.yaml) before a run. Every fact id must exist and sit in the chat's scope. Every fact must be asked or listed under `not_asked` with a reason. Every `absent_topics` entry must appear in an out-of-scope question.
 
 - Questions use a broker's words, not the fact's. A question that repeats a fact's words passes the gate's all-terms arm every time and measures nothing.
 - Out-of-scope questions cover each absent topic, then questions that share the documents' vocabulary without being answered by them (an umbrella limit, a producer's commission, a deductible in the endorsement).

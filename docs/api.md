@@ -1,6 +1,6 @@
 # API reference
 
-Every error a route returns has one shape, `{"error": {"code", "message", "retryable", "details"}}`, and OpenAPI declares it on every route. The examples use `API=http://localhost:8000`.
+Every error a route returns has one shape, `{"error": {"code", "message", "retryable", "details"}}`, except the 503 from `GET /health`, which carries the health report. OpenAPI declares that shape for the error codes each route names. `GET /metrics/documents` names none, `GET /health` declares its 503 as the health report, and no route declares the 500 `internal_error`. The examples use `API=http://localhost:8000`.
 
 Every response carries an `X-Request-ID` header. A request may send its own id of up to 64 characters, each a letter, a digit, `.`, `_` or `-`. The API returns that id unchanged and replaces any other value with a fresh 32-character hex id. The web UI's API calls each send a fresh id when the browser can make one (`crypto.randomUUID`), and its `/api` proxy passes the header both ways. The live-status stream sends none, so the API makes its id.
 
@@ -18,7 +18,7 @@ The id follows the request through the logs. The API writes one line per request
 
 ## Documents
 
-`POST /documents` uploads one file (PDF, DOCX or TXT, at most 50 MB). It returns 202 with a queued document, or 200 with the existing document when the same bytes were uploaded before.
+`POST /documents` uploads one file (PDF, DOCX or TXT, at most 50 MiB). It returns 202 with a queued document, or 200 with the existing document when the same bytes were uploaded before.
 
 ```bash
 curl -s -F file=@samples/sample-cgl-policy.pdf $API/documents
@@ -45,7 +45,7 @@ curl -s "$API/documents?latest=true&limit=100"
 curl -s $API/documents/$DOC/versions
 ```
 
-`GET /documents/{id}` returns one document. `status` is `queued`, `parsing`, `embedding`, `ready` or `failed`. `pages` is the stored page count once parsing has finished, in every status. A failed document has `error` and `failed_stage` (`parse` or `embed`).
+`GET /documents/{id}` returns one document. `status` is `queued`, `parsing`, `embedding`, `ready` or `failed`. `pages` is the stored page count once parsing has finished, in every status. A failed document has `error` and `failed_stage` (`parse` or `embed`). A file that cannot be parsed fails at `parse` with `unreadable_file`, `encrypted_pdf` (a PDF that needs a password to open), `no_extractable_text` (no page has text, as in a scanned PDF) or `too_many_pages` (more than 2,000 pages).
 
 ```bash
 curl -s $API/documents/$DOC
@@ -278,7 +278,7 @@ curl -s $API/health
 | 429 | `rate_limited` and `quota_exceeded`, each with `Retry-After` |
 | 500 | `internal_error` (an exception no route expected; `retryable: true`, with `X-Request-ID`) |
 | 502 | `ai_bad_output` |
-| 503 | `ai_unavailable`, with `Retry-After: 5` when `retryable` is true |
+| 503 | `ai_unavailable`, with `Retry-After: 5` when `retryable` is true, and `too_many_streams`, with `Retry-After: 5` |
 
 A path or a method that no route serves gets FastAPI's default body, not this shape: `{"detail": "Not Found"}` with 404, or `{"detail": "Method Not Allowed"}` with 405.
 

@@ -100,7 +100,7 @@ The cache Redis holds the embedding cache and the answer cache, and the app runs
 4. Otherwise the model answers from 16 sources and quotes each source it uses.
 5. The code looks for every quote in the source it names. It drops a quote it cannot find, and a kept citation names the page where its quote starts. When it finds none, the turn is `unverified` and the draft answer is not shown.
 
-**Scale.** Uploads return at once and the work runs in Celery workers, so more `worker` replicas raise ingest throughput, and a lock on each document keeps duplicate jobs harmless. A file uploaded twice is stored and indexed once. Retrieval cost depends on the documents in a chat, not on the size of the vault. [`docs/design.md`](docs/design.md) has timings at 5,000 and 50,000 documents, and says what changes past that. On 23 real documents, 3,263 pages, the largest 922, 50 questions were asked 91 times: of the 80 asks with an answer in the documents, 73 were answered right, and all 11 without one were declined.
+**Scale.** Uploads return at once and the work runs in Celery workers, so more `worker` replicas raise ingest throughput, and a lock on each document keeps duplicate jobs harmless. A file uploaded twice is stored and indexed once. Retrieval cost depends on the documents in a chat, not on the size of the vault. [`docs/design.md`](docs/design.md) has timings at 5,000 and 50,000 documents, and says what changes past that. On 23 real documents, 3,263 pages, indexing had no failures. The largest, 922 pages, was ready to chat 29.2 s after upload, and retrieval over all 5,539 chunks took 87 ms at the median.
 
 **Prompts.** [`docvault/prompts.py`](docvault/prompts.py) holds every prompt. Each prompt is versioned and carries a note on why it is worded the way it is. `docs/design.md` gives that reasoning in short.
 
@@ -116,7 +116,9 @@ On the OpenAI models, in the latest run, on 2026-11-17:
 | The answer cites the fact on the right page | 30 of 34 |
 | A question with no answer in the documents is declined | 15 of 16 |
 
-One live run also covered 19 public insurance documents. Of 25 answerable questions, 21 were answered right and 4 in part, and every citation was on the page it named. `AI_USAGE.md` has the details.
+On 2026-11-17, 50 questions were also asked 91 times about 23 real insurance documents, in chats of 1, 3 and 23 documents. Of the 80 asks with an answer in the documents, 73 were answered with the expected value cited on an expected page, and the other 7 were declined. All 11 asks with no answer in the documents were declined. [`docs/design.md`](docs/design.md) has the details, under Real documents.
+
+An earlier live run, on 2026-11-12, sent eight passages to the answer step instead of 16. On 19 public insurance documents, 21 of 25 answerable questions were answered right and 4 in part. [`AI_USAGE.md`](AI_USAGE.md) describes that run.
 
 ## API
 
@@ -138,14 +140,14 @@ One live run also covered 19 public insurance documents. Of 25 answerable questi
 | `GET /metrics/documents`, `GET /metrics/processing` | Read the document statistics and the processing metrics. |
 | `GET /health` | Check Postgres, Redis, the AI mode, the spending cap and the cache. |
 
-Every error a route returns has one shape, `{"error": {"code", "message", "retryable", "details"}}`. [`docs/api.md`](docs/api.md) is the full reference, with a `curl` example for every route.
+Every error a route returns has one shape, `{"error": {"code", "message", "retryable", "details"}}`, except the 503 from `GET /health`, which carries the health report. [`docs/api.md`](docs/api.md) is the full reference, with a `curl` example for every route.
 
 ## Assumptions and design choices
 
 The app assumes:
 
 - The users are insurance brokers and their clients, and the documents are policies, quotes and endorsements in English.
-- Files are PDF, DOCX or TXT, at most 50 MiB and 2,000 pages. A scanned PDF fails with `no_extractable_text`, because OCR is out of scope. A PDF that needs a password to open fails with `encrypted_pdf`.
+- Files are PDF, DOCX or TXT, at most 50 MiB. A PDF may have up to 2,000 pages, and a Word or text file about 6,000,000 characters. A scanned PDF fails with `no_extractable_text`, because OCR is out of scope. A PDF that needs a password to open fails with `encrypted_pdf`.
 - DOCX and TXT have no reliable page numbers, so their citations name a section, not a page.
 - There is one vault and no login. Rate limits apply per client address.
 - A chat's documents are fixed when the chat starts. If one of them is deleted, the chat refuses new questions with 409 `documents_deleted`.
@@ -176,7 +178,7 @@ If you started the stack with another `DB_PORT`, point the tests at it with `TES
 
 - The tests use canned HTTP responses for the OpenAI backends. The live API was run on 2026-11-12 and on 2026-11-17.
 - Insights read the first 240,000 characters of a document, so a longer document is covered only in part.
-- A chat sends 16 passages to the answer step. In a test of 50 questions on real documents of up to 922 pages, 4 were declined in at least one chat scope because the passage holding the answer ranked below those 16.
+- A chat sends 16 passages to the answer step. In a test on real documents of up to 922 pages, 4 of the 50 questions were declined in at least one chat scope, because the passage holding the answer ranked below those 16.
 - An answer is kept when at least one of its quotes is found in its source. A sentence whose quote is not found stays in the answer, without a citation number.
 - "Differs" in a comparison compares the text of two values, not their meaning, so two wordings of the same term are marked as different.
 - A comparison and a summary each run inside the request, as one model call of at most 90 s.
