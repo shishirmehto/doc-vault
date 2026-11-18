@@ -106,7 +106,7 @@ def extract(kind: DocKind, path: Path, *, max_pages: int) -> ExtractedText:
     except Exception as exc:
         raise VaultError(ErrorCode.UNREADABLE_FILE,
                          f"The file could not be read as {kind.value.upper()}. It may be damaged.") from exc
-    _check_page_count(len(doc.pages), max_pages)
+    _check_size(doc, max_pages)
     if not any(page.text for page in doc.pages):
         if kind is DocKind.PDF:
             raise VaultError(ErrorCode.NO_EXTRACTABLE_TEXT,
@@ -119,6 +119,17 @@ def extract(kind: DocKind, path: Path, *, max_pages: int) -> ExtractedText:
 def _check_page_count(count: int, max_pages: int) -> None:
     if count > max_pages:
         raise VaultError(ErrorCode.TOO_MANY_PAGES, f"The document has {count} pages. The limit is {max_pages}.")
+
+
+def _check_size(doc: ExtractedText, max_pages: int) -> None:
+    """DOCX and TXT have no pages, so their limit is the same count of SYNTHETIC sections, told in characters."""
+    if doc.basis is PageBasis.PHYSICAL or len(doc.pages) <= max_pages:
+        _check_page_count(len(doc.pages), max_pages)
+        return
+    chars = sum(len(page.text) for page in doc.pages)
+    raise VaultError(ErrorCode.TOO_MANY_PAGES,
+                     f"The text is {chars:,} characters long, more than one file can hold "
+                     f"(about {max_pages * SYNTHETIC_PAGE_CHARS:,}). Split it and upload the parts.")
 
 
 def _extract_pdf(path: Path, max_pages: int) -> ExtractedText:

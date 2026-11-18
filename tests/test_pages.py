@@ -333,3 +333,13 @@ def test_a_docx_table_reads_a_merged_cell_once_and_keeps_a_table_nested_in_a_cel
 
     assert pages.extract(DocKind.DOCX, path, max_pages=10).pages[0].text == (
         "Schedule\nGeneral Aggregate | $2,000,000\nDeductible | per claim | $2,500\nWaiting period | 30 days")
+
+
+def test_a_text_file_over_the_limit_is_measured_in_characters_not_pages(tmp_path):
+    path = tmp_path / "long.txt"
+    path.write_text("\n\n".join("Paragraph. " + "word " * 500 for _ in range(4)))
+    with pytest.raises(VaultError) as raised:
+        pages.extract(DocKind.TXT, path, max_pages=3)
+    assert raised.value.failure == Failure(
+        ErrorCode.TOO_MANY_PAGES, "The text is 10,040 characters long, more than one file can hold (about 9,000). "
+        "Split it and upload the parts.", retryable=False)
