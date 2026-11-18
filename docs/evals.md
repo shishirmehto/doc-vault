@@ -4,27 +4,29 @@
 
 ## Results
 
-One run of the full case set on 2026-11-17 at `f9f69eb`, on the configured OpenAI models, cost $1.08 on the ledger. The answer step received 16 sources, and the opening passages in chats of up to three documents. One answer call hit a provider error, and the gateway's retry succeeded.
+One run of the full case set on 2026-11-18 at `a10a653`, with the answer prompt `answer-v3`, on the configured OpenAI models, cost $1.10 on the ledger. The answer step received 16 sources, and the opening passages in chats of up to three documents. No model call failed.
 
 | Number | Result |
 |---|---|
 | Retrieval hit rate | 34/34 (100%) |
 | Citation accuracy | 30/34 (88%) |
-| Not-found accuracy | 15/16 (94%) |
+| Not-found accuracy | 14/16 (88%) |
 | Key-fact grounding | 36/36 (100%) |
 | Key-fact recall | 19/28 (68%) |
-| Suggestions answered | 83/83 (100%) |
+| Suggestions answered | 82/82 (100%) |
 | Cell grounding | 45/45 (100%) |
 | Difference recall | 4/4 (100%) |
 | Equal fields kept equal | 1/1 (100%) |
 | Summary source grounding | 54/54 (100%), 18 at each length |
 | Gate at 0.20: answerable turns passed | 28/28 (100%) |
-| Gate at 0.20: out-of-scope turns refused | 0/16 (0%), by design: the gate sits below the lowest answerable turn, and the answer step declined 15 of the 16 |
-| p95 turn latency | 8.2 s |
+| Gate at 0.20: out-of-scope turns refused | 0/16 (0%), by design: the gate sits below the lowest answerable turn, and the answer step declined 14 of the 16 |
+| p95 turn latency | 8.4 s |
 
-The four citation misses are the two turns in `aggregate-then-medical`. The answers are right ("from $2,000,000 to $3,000,000", "from $5,000 to $10,000"), but they cite the quote's change list on page 3, as the Known limits section predicts. The one not-found miss is the flood question in `insured-then-fired-employee`. The answer says the documents do not establish flood cover, and it counts as answered because it cites the coverage grant.
+The four citation misses are the two turns in `aggregate-then-medical`. The answers are right ("from $2,000,000 to $3,000,000", "from $5,000 to $10,000"), but they cite the quote's change list on page 3, as the Known limits section predicts. The two not-found misses are the flood question in `insured-then-fired-employee` and `rented-equipment`. Each answer says in its first sentence that the documents do not establish the cover or the limit, and counts as answered because it goes on to cite the coverage grant or related limits.
 
-The gate passed every turn, so the answer step declined the 15 out-of-scope turns itself.
+The gate passed every turn, so the answer step declined the 14 out-of-scope turns itself.
+
+`answer-v3` lets the answer use a Markdown list and bold, which the web UI renders. The previous prompt, `answer-v2`, scored the same on 2026-11-17 at `f9f69eb` ($1.08), except that it declined `rented-equipment` (15/16) and 83 suggestions came back answered. All three runs of the Markdown prompts answered `rented-equipment` this way. The first Markdown wording also cited `deductible-differ-explicit` to the quote's change list in two runs out of two (28/34), and the shipped wording cites it on the right pages.
 
 ## Run the evals
 

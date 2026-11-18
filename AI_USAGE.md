@@ -60,7 +60,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 
 ## The live runs
 
-Two runs used the OpenAI key.
+Three runs used the OpenAI key.
 
 The first, on 2026-11-12, sent eight passages to the answer step. It cost $3.17 on the ledger, $1.18 of it for the eval set. It covered:
 - **The eval set.** Retrieval found 34 of 34 expected facts, 30 of 34 were cited on the right page, and 15 of 16 out-of-scope questions were declined. The 2026-11-17 rerun gave the same three numbers, and [`docs/evals.md`](docs/evals.md) reports that rerun.
@@ -84,8 +84,10 @@ What the first run left open:
 - The eval's case set was written for the sample documents. The 31 real-document questions are a hand-graded spot check, not a scored set.
 
 The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and the opening passages in chats of up to three documents. It covered:
-- The eval set again, for $1.08 on the ledger. `docs/evals.md` reports this run.
+- The eval set again, for $1.08 on the ledger.
 - 23 real insurance documents, 3,263 pages, on a separate copy of the stack. 50 questions were asked 91 times, in chats of 1, 3 and 23 documents. Of the 80 asks with an answer in the documents, a script passed 71 with the expected value cited on an expected page, and a review of each miss passed 2 more. The other 7 were declined. Of the 11 asks with no answer, 8 came back `not_found` and 3 declined in words. [`docs/design.md`](docs/design.md) has the details, under Real documents.
+
+The third, on 2026-11-18, ran the eval set three times while the answer prompt was changed to allow Markdown lists and bold, about $1.10 a run. [`docs/evals.md`](docs/evals.md) reports the last run, at `a10a653`.
 
 ## Where the AI was wrong, and what caught it
 
@@ -109,6 +111,7 @@ The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and
 | To show one citation number per sentence, a change paired a source's markers with its quotes by position, but the model lists quotes in any order, so a sentence could cite another sentence's quote | An independent review agent reproduced it, then broke both fixes that followed: matching by shared figures and words, and a one-to-one check on those matches. The change was withdrawn, and each marker again shows every verified quote of its source | `613dfb5`, `a6e39d7`, `0ccc135` |
 | A change to text decoding read cp1252 text with an accent next to a curly quote as broken UTF-8, so French accents became U+FFFD | The same review agent, with a reproduction | `613dfb5` |
 | The README gave the real-document scores after review only, while the run's own report treats the strict scores as the headline | A grader agent that scored the repo against the case study | `bbe6354` |
+| The first Markdown wording of the answer prompt tied formatting to supported answers and cost two eval turns: a deductible cited to the quote's change list, and an out-of-scope question answered with related limits | The live eval, run a second time to rule out noise: the same two turns missed both times. A reworded prompt recovered the citation; the out-of-scope turn still answers with related limits | `a10a653`, [`docs/evals.md`](docs/evals.md) |
 
 ## AI inside the product
 

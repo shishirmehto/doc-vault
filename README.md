@@ -96,7 +96,7 @@ The cache Redis holds the embedding cache and the answer cache, and the app runs
 
 1. A follow-up is rewritten into a standalone question, from the last four turns.
 2. The question is embedded. One SQL statement then ranks the chunks of the chat's documents by vector distance and full-text rank.
-3. If no chunk passes the relevance gate, then with a key the answer step sees only each document's opening passage. That answers "What is this about?" from the title page. Anything else comes back "not found". The OpenAI threshold, 0.20, sits below every answerable eval question, so on the eval set the gate let all 44 questions through, and the answer step itself declined 15 of the 16 with no answer.
+3. If no chunk passes the relevance gate, then with a key the answer step sees only each document's opening passage. That answers "What is this about?" from the title page. Anything else comes back "not found". The OpenAI threshold, 0.20, sits below every answerable eval question, so on the eval set the gate let all 44 questions through, and the answer step itself declined 14 of the 16 with no answer.
 4. Otherwise the model answers from 16 sources and quotes each source it uses.
 5. The code looks for every quote in the source it names. It drops a quote it cannot find, and a kept citation names the page where its quote starts. When it finds none, the turn is `unverified` and the draft answer is not shown.
 
@@ -114,22 +114,22 @@ The cache Redis holds the embedding cache and the answer cache, and the app runs
 - Answer the part the sources cover and name the part they do not, so a missing deductible does not hide the limit.
 - Decline rather than guess. A refusal costs the user a follow-up question, and a guess can cost a claim.
 
-The answer prompt changed once, to add follow-up questions (`6ff08d4`). The tuning after the live runs was in what it receives. Sending 16 passages instead of eight, with each document's guaranteed share capped at half of them, fixed 7 of the real-document questions and broke none, and raised the answer step's input from about 4,300 to 7,700 tokens. Each document's opening passage was added so that "What is this about?" is answered (`f9f69eb`). [`docs/design.md`](docs/design.md#prompts) gives the reasons behind the other prompts: the follow-up rewrite, insights, summaries, comparison and the JSON repair turn.
+The answer prompt changed twice: to add follow-up questions (`6ff08d4`), and to allow a Markdown list and bold, which the web UI renders with `react-markdown` (`a10a653`). On the eval that second change kept retrieval and citations level and lost one decline, described in [`docs/evals.md`](docs/evals.md). The tuning after the live runs was in what it receives. Sending 16 passages instead of eight, with each document's guaranteed share capped at half of them, fixed 7 of the real-document questions and broke none, and raised the answer step's input from about 4,300 to 7,700 tokens. Each document's opening passage was added so that "What is this about?" is answered (`f9f69eb`). [`docs/design.md`](docs/design.md#prompts) gives the reasons behind the other prompts: the follow-up rewrite, insights, summaries, comparison and the JSON repair turn.
 
 ## Answer quality
 
 [`docs/evals.md`](docs/evals.md) scores a fixed set of 44 questions on the sample documents. 28 of them can be answered, with 34 expected facts between them, and 16 cannot.
 
-On the OpenAI models, in the latest run, on 2026-11-17:
+On the OpenAI models, in the latest run, on 2026-11-18:
 
 | Measure | Result |
 |---|---|
 | Retrieval finds the expected fact | 34 of 34 |
 | The answer cites the fact on the right page | 30 of 34 |
-| A question with no answer in the documents is declined | 15 of 16 |
+| A question with no answer in the documents is declined | 14 of 16 |
 | A planted fact appears in a key fact's quote, on its page | 19 of 28 |
 
-On 2026-11-17, 50 questions were also asked 91 times about 23 real insurance documents, in chats of 1, 3 and 23 documents. Each question named its expected value and page. A script scored every ask, and then each miss was read. Of the 80 asks with an answer in the documents, 71 passed the script with the expected value cited on an expected page. The review passed 2 more, which wrote "115 percent" as "multiplied by 1.15". The other 7 were declined, and no answer gave a wrong figure. Of the 11 asks with no answer, 8 came back `not_found` and 3 said in their first sentence that the documents do not cover it. Some of these documents are copyrighted, so the documents, questions and scores are kept outside this repository, and these figures cannot be rerun from it. [`docs/design.md`](docs/design.md) has the details, under Real documents.
+On 2026-11-17, on the previous answer prompt (`answer-v2`), 50 questions were also asked 91 times about 23 real insurance documents, in chats of 1, 3 and 23 documents. Each question named its expected value and page. A script scored every ask, and then each miss was read. Of the 80 asks with an answer in the documents, 71 passed the script with the expected value cited on an expected page. The review passed 2 more, which wrote "115 percent" as "multiplied by 1.15". The other 7 were declined, and no answer gave a wrong figure. Of the 11 asks with no answer, 8 came back `not_found` and 3 said in their first sentence that the documents do not cover it. Some of these documents are copyrighted, so the documents, questions and scores are kept outside this repository, and these figures cannot be rerun from it. [`docs/design.md`](docs/design.md) has the details, under Real documents.
 
 ## API
 
