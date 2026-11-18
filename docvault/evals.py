@@ -1,16 +1,19 @@
 """Retrieval, answer, insights, comparison and summary evals over the sample documents.
 
-  uv run python -m docvault.evals [--calibrate] [--out FILE]
+  uv run python -m docvault.evals [--calibrate] [--out FILE] [--cases FILE]
 
-Runs the fixed case set in evals/cases.yaml against the configured provider (the fake when no key is set)
-in its own database, <DATABASE_URL name>_evals, dropped and recreated each run. It uploads the samples through
-documents.upload, runs run_index and run_analyze in-process (no Celery, no Redis), asks every case
-through chat.start and chat.ask, then compares the policy with its renewal quote through compare.create and
-summarises each sample at each length through summaries.create. Each number is scored apart, so it shows where a
-miss happens:
+Runs the fixed case set in evals/cases.yaml (or the case file given by --cases) against the configured provider
+(the fake when no key is set) in its own database, <DATABASE_URL name>_evals, dropped and recreated each run. It
+uploads the samples through documents.upload, runs run_index and run_analyze in-process (no Celery, no Redis), asks
+every case through chat.start and chat.ask, then compares the policy with its renewal quote through compare.create
+and summarises each sample at each length through summaries.create. Each number is scored apart, so it shows where
+a miss happens:
 
   retrieval hit rate   the expected document and page are among the sources given to the answer step
   citation accuracy    a citation of the expected document has the expected page and quotes the fact
+  cited in full        an answerable turn cites every one of its expected facts that way
+  answer text          a turn with `values` or `forbid` holds every value and no forbidden string in its answer
+                       text, as whole words and numbers, with case, "$", "," and "*" ignored
   not-found accuracy   an out-of-scope question comes back not_found
   key-fact grounding   insights facts kept / (kept + dropped), and the planted facts they recall
   suggestions answered every suggestion under a case's last turn, asked in that chat after the case, comes back
@@ -23,6 +26,9 @@ miss happens:
                        focus in the plain tone
   cost and latency     metrics.processing_stats over the run: llm_calls by purpose and model, chat_turns p95
 
+A case file whose top level has a `partial:` reason skips the two coverage checks (every planted fact asked or
+listed in not_asked, every absent topic asked by an out-of-scope question), and needs no not_asked.
+
 --calibrate prints each turn's best vector similarity and all-terms match instead, then the relevance-gate
 threshold that maximises answerable-passed plus out-of-scope-refused. Results print to stdout, and --out
 writes them between the results markers of a Markdown file.
@@ -33,6 +39,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import itertools
+import re
 import shlex
 import subprocess
 import sys
@@ -92,6 +99,8 @@ class Fact:
 class Question:
     ask: str
     expected: tuple[Fact, ...]      # empty: the documents in scope do not answer it
+    values: tuple[str, ...] = ()
+    forbid: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +139,9 @@ def load_cases(path: Path = CASES) -> CaseSet:
     facts = {f["id"]: Fact(f["id"], f["document"], f["page"], f["text"]) for f in truth["facts"]}
     aliases: dict[str, str] = spec["documents"]
     problems: list[str] = []
+    partial = "partial" in spec
+    if partial and not (isinstance(spec["partial"], str) and spec["partial"].strip()):
+        problems.append("partial: give the reason the file skips the coverage checks")
     cases: list[Case] = []
     for raw in spec["cases"]:
         problems += [f"{raw['id']}: unknown document {alias!r}" for alias in raw["scope"] if alias not in aliases]
@@ -141,14 +153,22 @@ def load_cases(path: Path = CASES) -> CaseSet:
             expected = tuple(facts[fact_id] for fact_id in expect if fact_id in facts)
             problems += [f"{raw['id']}: {fact.id} is in {fact.document}, outside the chat's scope"
                          for fact in expected if fact.document not in scope]
-            questions.append(Question(turn["ask"], expected))
+            values, forbid = _strings(turn, "values"), _strings(turn, "forbid")
+            for key, texts in (("values", values), ("forbid", forbid)):
+                if texts is None:
+                    problems.append(f"{raw['id']}: {key} is not a list")
+                problems += [f"{raw['id']}: empty {key} entry {text!r}" for text in texts or () if not _plain(text)]
+            if values and not expect:
+                problems.append(f"{raw['id']}: values on a not_found turn")
+            questions.append(Question(turn["ask"], expected, values or (), forbid or ()))
         cases.append(Case(raw["id"], scope, tuple(questions)))
-    asked = {fact.id for case in cases for question in case.questions for fact in question.expected}
-    problems += [f"{fact_id} is neither asked nor listed in not_asked"
-                 for fact_id in facts.keys() - asked - spec["not_asked"].keys()]
-    out_of_scope = [question.ask.lower() for case in cases for question in case.questions if not question.expected]
-    problems += [f"no out-of-scope question asks about {topic!r}" for topic in truth["absent_topics"]
-                 if not any(topic in ask for ask in out_of_scope)]
+    if not partial:
+        asked = {fact.id for case in cases for question in case.questions for fact in question.expected}
+        problems += [f"{fact_id} is neither asked nor listed in not_asked"
+                     for fact_id in facts.keys() - asked - spec.get("not_asked", {}).keys()]
+        out_of_scope = [question.ask.lower() for case in cases for question in case.questions if not question.expected]
+        problems += [f"no out-of-scope question asks about {topic!r}" for topic in truth["absent_topics"]
+                     if not any(topic in ask for ask in out_of_scope)]
     if len({case.id for case in cases}) < len(cases):
         problems.append("case ids repeat")
     fields: list[ExpectedField] = []
@@ -163,6 +183,13 @@ def load_cases(path: Path = CASES) -> CaseSet:
     planted = tuple(facts[f["id"]] for f in truth["facts"] if "repeated_on" not in f)
     comparison = ComparisonCase((fields[0].policy.document, fields[0].quote.document), tuple(fields))
     return CaseSet(tuple(aliases.values()), planted, tuple(cases), comparison)
+
+
+def _strings(turn: Mapping[str, object], key: str) -> tuple[str, ...] | None:
+    """The turn's optional list under key, numbers as str, or None when it is not a list. A bare string must not
+    pass, or tuple() would split it into characters that every answer holds."""
+    items = turn.get(key) or []
+    return tuple("" if item is None else str(item) for item in items) if isinstance(items, list) else None
 
 
 # ------------------------------------------------------------------ scoring
@@ -191,6 +218,7 @@ class TurnResult:
     outcome: TurnOutcome
     scored: tuple[Scored, ...]  # one per expected fact; empty for an out-of-scope question
     candidates: tuple[chat.Candidate, ...]  # what the gate saw
+    text_misses: tuple[str, ...] | None     # None: the question has no values and no forbid
 
     @property
     def answerable(self) -> bool:
@@ -218,6 +246,25 @@ def is_cited(fact: Fact, citations: Sequence[Citation]) -> bool:
     text = collapse_whitespace(fact.text)
     return any(c.filename == fact.document and c.page == fact.page and text in collapse_whitespace(c.quote)
                for c in citations)
+
+
+def answer_text_misses(answer: str, values: Sequence[str], forbid: Sequence[str]) -> tuple[str, ...]:
+    """Each value the answer text lacks, then each forbidden string it holds, as whole words and numbers, with case,
+    "$", "," and "*" ignored on both sides: '**$3,450**' holds '3,450', and '$13,450' does not."""
+    text = _plain(answer)
+    return (*(f"missing {value}" for value in values if not _mentions(text, value)),
+            *(f"says {said}" for said in forbid if _mentions(text, said)))
+
+
+_IGNORED = str.maketrans("", "", "$,*")
+
+
+def _plain(text: str) -> str:
+    return collapse_whitespace(text.casefold().translate(_IGNORED))
+
+
+def _mentions(plain: str, wanted: str) -> bool:
+    return re.search(rf"(?<![0-9a-z]){re.escape(_plain(wanted))}(?![0-9a-z])", plain) is not None
 
 
 class Ratio(NamedTuple):
@@ -285,6 +332,14 @@ class Report:
     @property
     def citation(self) -> Ratio:
         return _ratio(s.cited for t in self.turns for s in t.scored)
+
+    @property
+    def cited_in_full(self) -> Ratio:
+        return _ratio(all(s.cited for s in t.scored) for t in self.turns if t.answerable)
+
+    @property
+    def answer_text(self) -> Ratio:
+        return _ratio(not t.text_misses for t in self.turns if t.text_misses is not None)
 
     @property
     def not_found(self) -> Ratio:
@@ -439,7 +494,9 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
                     tuple(Scored(fact, retrieval_miss(fact, answers.sources, matched=matched),
                                  is_cited(fact, turn.answer.citations))
                           for fact in question.expected),
-                    tuple(candidates)))
+                    tuple(candidates),
+                    answer_text_misses(turn.answer.text, question.values, question.forbid)
+                    if question.values or question.forbid else None))
             # Asked after the case's own turns, so they change no condense call the case is scored on.
             suggested += [Suggested(case.id, ask, chat.ask(asking, started.id, ask).answer.outcome)
                           for ask in turn.suggestions]
@@ -496,6 +553,8 @@ def render(report: Report, command: str) -> str:
         "|---|---|",
         f"| Retrieval hit rate (expected facts in the answer step's sources) | {report.retrieval} |",
         f"| Citation accuracy (expected facts cited on their page) | {report.citation} |",
+        f"| Turns cited in full (answerable turns with every expected fact cited) | {report.cited_in_full} |",
+        f"| Answer text (turns holding every expected value and no forbidden one) | {report.answer_text} |",
         f"| Not-found accuracy (out-of-scope turns not answered) | {report.not_found} |",
         f"| Key-fact grounding (insights facts kept / kept + dropped) | {report.grounding} |",
         f"| Key-fact recall (planted facts in a kept key fact) | {report.recall} |",
@@ -524,11 +583,12 @@ def render(report: Report, command: str) -> str:
         "|---|---|---|---|---|---|",
         *(_field_line(result) for result in report.fields),
         "",
-        "| Case | Question | Interpreted as | Outcome | Retrieval | Citation |",
-        "|---|---|---|---|---|---|",
+        "| Case | Question | Interpreted as | Outcome | Retrieval | Citation | Answer text |",
+        "|---|---|---|---|---|---|---|",
         *(f"| {t.case} | {_cell(t.question)} | {_interpreted(t)} | {t.outcome} | "
           f"{_score(t, [f'{s.fact.id}: {s.retrieval}' for s in t.scored if s.retrieval])} | "
-          f"{_score(t, [f'missed {s.fact.id}' for s in t.scored if not s.cited])} |" for t in turns),
+          f"{_score(t, [f'missed {s.fact.id}' for s in t.scored if not s.cited])} | {_text_cell(t.text_misses)} |"
+          for t in turns),
     ]
     missed = [s for s in report.suggested if s.outcome is not TurnOutcome.ANSWERED]
     lines += ["", "| Case | Suggestion not answered | Outcome |", "|---|---|---|",
@@ -577,6 +637,10 @@ def _score(turn: TurnResult, misses: Sequence[str]) -> str:
     if not turn.answerable:
         return "out of scope"
     return f"{len(turn.scored) - len(misses)}/{len(turn.scored)}" + (f" ({'; '.join(misses)})" if misses else "")
+
+
+def _text_cell(misses: Sequence[str] | None) -> str:
+    return "-" if misses is None else _cell("; ".join(misses)) if misses else "ok"
 
 
 def _cell(text: str) -> str:

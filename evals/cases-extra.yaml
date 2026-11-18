@@ -1,0 +1,91 @@
+# Extra cases for python -m docvault.evals --cases evals/cases-extra.yaml. See docs/evals.md.
+#
+# Written on 2026-11-18, after the gate threshold was calibrated on evals/cases.yaml, so the gate never saw
+# these questions. They use only facts already planted in samples/facts.yaml. The file was frozen before its
+# first run (sha256 in docs/evals.md), and no question is edited afterwards.
+#
+# Each case asks a kind of question the main set does not:
+#   two facts at the two ends of one document, four facts spread through one document, a figure worked out
+#   from two cited figures, a date that decides the answer, a follow-up that narrows the last question, and
+#   a question that only a document outside the chat answers.
+#
+# A turn's `values` must all appear in the answer text and its `forbid` strings must not, with "$", ",",
+# "*" and case ignored.
+
+partial: asks new kinds of question only; evals/cases.yaml asks every planted fact and every absent topic
+
+documents:
+  policy: sample-cgl-policy.pdf
+  quote: sample-renewal-quote.pdf
+  endorsement: sample-endorsement-additional-insured.docx
+
+cases:
+# The first and the last page of the policy (pages 1 and 7) in one question.
+- id: start-end-policy-period-termination
+  scope: [policy]
+  turns:
+  - ask: Between which dates is the client insured, and does that include wrongful-termination claims?
+    expect: [policy-period, policy-employment-exclusion]
+
+- id: start-end-policy-number-refused-hire
+  scope: [policy]
+  turns:
+  - ask: What's the policy number, and would it respond if they turned down a job applicant who then sued?
+    expect: [policy-number, policy-employment-exclusion]
+    values: [SAMPLE-CGL-2026-0001]
+
+# The first and the last page of the renewal quote (pages 1 and 3).
+- id: start-end-quote-term-exclusion
+  scope: [quote]
+  turns:
+  - ask: What term would the renewal run for, and is the carrier adding any exclusion?
+    expect: [quote-period, quote-new-exclusion]
+    values: [silica]
+
+# Four facts from pages 1, 2, 5 and 6 of one document.
+- id: policy-spread-facts
+  scope: [policy]
+  turns:
+  - ask: For my file note, give me the policy period, the per-occurrence limit, the roofing height restriction and the cancellation notice.
+    expect: [policy-period, policy-each-occurrence-limit, policy-roofing-height-exclusion, policy-cancellation-notice]
+    values: ["1,000,000", 40 feet, 30 days]
+
+# A figure worked out from two cited figures: $21,900 - $18,450.
+- id: premium-increase
+  scope: [policy, quote]
+  turns:
+  - ask: How much more will the client pay at renewal?
+    expect: [policy-premium, quote-premium]
+    values: ["3,450"]
+
+# A date decides the answer: the endorsement applies from 03/15/2026.
+- id: endorsement-before-effective-date
+  scope: [endorsement]
+  turns:
+  - ask: Is Example Property Holdings covered for an accident on 1 February 2026?
+    expect: [endorsement-effective-date]
+
+# A follow-up that narrows the last question instead of changing its topic.
+- id: deductible-then-renewal-only
+  scope: [policy, quote]
+  turns:
+  - ask: How much does the client bear on each property damage claim?
+    expect: [policy-deductible, quote-deductible]
+  - ask: Just the renewal one, please.
+    expect: [quote-deductible]
+    values: ["5,000"]
+
+# Only a document outside the chat answers these.
+- id: additional-insured-outside-scope
+  scope: [quote]
+  turns:
+  - ask: Who is the additional insured on this account?
+    expect: not_found
+    forbid: [Example Property Holdings]
+
+- id: renewal-premium-outside-scope
+  scope: [policy]
+  turns:
+  - ask: What premium is the carrier asking for the renewal?
+    expect: not_found
+    forbid: ["21,900"]
