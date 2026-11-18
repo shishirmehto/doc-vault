@@ -69,7 +69,7 @@ MAX_SUGGESTION_CHARS = 160
 UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify an answer against their text, "
                    "so I am not giving one.")
 OPENING_DOCS = 3            # a chat of up to this many documents sends each one's opening passage with its k sources
-ANSWER_CACHE_FORMAT = 3     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
+ANSWER_CACHE_FORMAT = 4     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
 
 
@@ -556,36 +556,53 @@ def ground(draft: AnswerDraft, sources: Sequence[Source]) -> Answer:
     dropped. A kept citation quotes the source span, not the model's copy, and
     takes the page where that span starts inside the chunk, so a chunk spanning
     pages 11-12 cites 12 when the quoted words are on 12. Citations are numbered
-    1..n in evidence order, and each [S#] marker becomes the numbers of its
-    label's citations. Nothing verified -> UNVERIFIED.
+    1..n in evidence order, a repeated quote keeps its first number, and each
+    [S#] marker becomes numbers as _rewrite_markers says. Nothing verified ->
+    UNVERIFIED.
     """
     if not draft.supported:
         return NotFound(TurnOutcome.MODEL_DECLINED, _rewrite_markers(draft.answer, {}))
     by_label = {source.label: source for source in sources}
     citations: list[Citation] = []
-    refs: dict[str, list[int]] = {}
-    seen: set[tuple[str, int, int]] = set()
+    numbers: dict[str, list[int | None]] = {}   # per label, each evidence item's citation number; None: not found
+    seen: dict[tuple[str, int, int], int] = {}
     for evidence in draft.evidence:
         source = by_label.get(evidence.source)
         span = None if source is None else pages.locate_quote(evidence.quote, source.text)
-        if span is None or (evidence.source, *span) in seen:
-            continue
-        seen.add((evidence.source, *span))
-        start, end = span
-        citations.append(Citation(source.doc.id, source.doc.filename, source.page_map.page_at(start),
-                                  source.doc.page_basis, pages.collapse_whitespace(source.text[start:end]),
-                                  source.chunk_id))
-        refs.setdefault(evidence.source, []).append(len(citations))
+        if span is not None and (evidence.source, *span) not in seen:
+            start, end = span
+            citations.append(Citation(source.doc.id, source.doc.filename, source.page_map.page_at(start),
+                                      source.doc.page_basis, pages.collapse_whitespace(source.text[start:end]),
+                                      source.chunk_id))
+            seen[(evidence.source, *span)] = len(citations)
+        numbers.setdefault(evidence.source, []).append(None if span is None else seen[(evidence.source, *span)])
     if not citations:
         return NotFound(TurnOutcome.UNVERIFIED, UNVERIFIED_TEXT)
-    return Answered(_rewrite_markers(draft.answer, refs), (citations[0], *citations[1:]))
+    return Answered(_rewrite_markers(draft.answer, numbers), (citations[0], *citations[1:]))
 
 
-def _rewrite_markers(text: str, refs: Mapping[str, Sequence[int]]) -> str:
-    """Each marker run becomes "[1][2]" for its labels' verified citations. A run with none is removed with the
-    spaces before it, so "limit [S9]." reads "limit." rather than "limit ."."""
+def _rewrite_markers(text: str, numbers: Mapping[str, Sequence[int | None]]) -> str:
+    """Replace each marker run with citation numbers, such as "[1][2]".
+
+    The prompt asks for one evidence item per marker, in order. When a label
+    has as many markers as evidence items, its k-th marker gets the k-th item's
+    number, and none when that quote was not found. Otherwise each of its
+    markers gets all of its found numbers. A run left with no number is removed
+    with the spaces before it, so "limit [S9]." reads "limit." rather than
+    "limit .".
+    """
+    markers = Counter(_LABEL.findall("".join(match["run"] for match in _MARKERS.finditer(text))))
+    used: Counter[str] = Counter()
+
+    def refs(label: str) -> list[int]:
+        items = numbers.get(label, ())
+        used[label] += 1
+        if markers[label] == len(items):
+            return [ref] if (ref := items[used[label] - 1]) is not None else []
+        return [ref for ref in items if ref is not None]
+
     def replace(match: re.Match[str]) -> str:
-        cited = dict.fromkeys(ref for label in _LABEL.findall(match["run"]) for ref in refs.get(label, ()))
+        cited = dict.fromkeys(ref for label in _LABEL.findall(match["run"]) for ref in refs(label))
         return match["pad"] + "".join(f"[{ref}]" for ref in cited) if cited else ""
 
     return _MARKERS.sub(replace, text).strip()

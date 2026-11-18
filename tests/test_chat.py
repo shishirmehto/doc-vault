@@ -316,6 +316,31 @@ def test_ground_rewrites_a_marker_naming_two_sources_and_cites_a_repeated_quote_
     assert [(c.filename, c.quote) for c in answer.citations] == [(POLICY, limit), (QUOTE, limit)]
 
 
+def test_ground_gives_each_marker_of_a_source_the_number_of_the_quote_written_for_it():
+    text = "Changes at renewal\nGeneral Aggregate Limit $3,000,000\nMedical Expense Limit $10,000\nSilica exclusion added."
+    changes = source("S1", QUOTE_DOC, text, PageMap(((0, 2),)), chunk=31)
+
+    answer = chat.ground(draft("The aggregate rises to $3,000,000 [S1]. Medical expense rises to $10,000 [S1]. "
+                               "A silica exclusion is added [S1]. So the aggregate is $3,000,000 [S1].",
+                               ("S1", "General Aggregate Limit $3,000,000"), ("S1", "Medical Expense Limit $10,000"),
+                               ("S1", "Silica exclusion added."), ("S1", "General Aggregate Limit $3,000,000")),
+                         [changes])
+
+    assert answer.text == ("The aggregate rises to $3,000,000 [1]. Medical expense rises to $10,000 [2]. "
+                           "A silica exclusion is added [3]. So the aggregate is $3,000,000 [1].")
+
+
+def test_ground_leaves_a_sentence_whose_own_quote_was_not_found_without_a_number():
+    text = "General Aggregate Limit $3,000,000\nMedical Expense Limit $10,000"
+    limits_page = source("S1", QUOTE_DOC, text, PageMap(((0, 2),)), chunk=32)
+
+    answer = chat.ground(draft("The aggregate is $3,000,000 [S1]. Medical expense is $25,000 [S1].",
+                               ("S1", "General Aggregate Limit $3,000,000"), ("S1", "Medical Expense Limit $25,000")),
+                         [limits_page])
+
+    assert answer.text == "The aggregate is $3,000,000 [1]. Medical expense is $25,000."
+
+
 def test_ground_refuses_a_declined_draft_and_a_draft_with_nothing_verified():
     declined = chat.ground(draft("The documents do not mention flood cover [S1].", supported=False), limits())
     unverified = chat.ground(draft("The limit is one million [S1].", ("S1", "a limit of one million dollars")),
