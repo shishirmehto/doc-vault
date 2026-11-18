@@ -31,12 +31,13 @@ curl --retry 10 --retry-all-errors --retry-delay 1 localhost:8000/health   # ret
 
 - The web UI is at `http://localhost:3000`.
 - Swagger is at `http://localhost:8000/docs`.
+- The default models are `gpt-6.1-sol` for answers, insights, comparisons and summaries, and `gpt-6-luna` for rewriting follow-ups. If your key cannot use them, set `OPENAI_CHAT_MODEL` and `OPENAI_SMALL_MODEL` in `.env` before `docker compose up` (more below).
 
 `GET /health` returns `"ai_mode": "live"` when `OPENAI_API_KEY` is set. With no key the stack still runs, on a deterministic fake provider, and `/health` returns `"ai_mode": "fake"`. The fake provider is for tests and offline runs, so judge answer quality with a key.
 
 `live` means that a key is set, not that the key works. To confirm it, ask one question and read `GET /metrics/processing`. On the default models, its `ai.cost_usd` is then above zero.
 
-If your key cannot use a default model, set another one in `.env`. [`.env.example`](.env.example) lists the common settings, with the default models, and [`docvault/config.py`](docvault/config.py) lists every setting. For a model that takes no reasoning effort, such as `gpt-4.1` or `gpt-4o`, also leave `OPENAI_CHAT_REASONING_EFFORT` and `OPENAI_SMALL_REASONING_EFFORT` empty. Cost tracking knows the prices of the default models and a few others (`PRICES` in [`docvault/ai.py`](docvault/ai.py)), so calls to another model are logged without a cost. To cap AI spend, set `DAILY_AI_BUDGET_USD`, in US dollars per day.
+[`.env.example`](.env.example) lists the common settings, with the default models, and [`docvault/config.py`](docvault/config.py) lists every setting. For a model that takes no reasoning effort, such as `gpt-4.1` or `gpt-4o`, also leave `OPENAI_CHAT_REASONING_EFFORT` and `OPENAI_SMALL_REASONING_EFFORT` empty. Cost tracking knows the prices of the default models and a few others (`PRICES` in [`docvault/ai.py`](docvault/ai.py)), so calls to another model are logged without a cost. To cap AI spend, set `DAILY_AI_BUDGET_USD`, in US dollars per day.
 
 `API_PORT`, `DB_PORT` and `WEB_PORT` change the host ports, so a second stack can run beside the first:
 
@@ -109,7 +110,7 @@ Scoring is strict. A citation counts only on the page where the fact was planted
 
 The samples are small. They make 11 chunks, and each answer receives up to 16 passages, so at these settings retrieval cannot miss and 34 of 34 measures little. A retrieval-only benchmark asks 53 frozen questions about four public-domain PDFs of 2,633 pages. At `703cca0`, 52 of the 53 found a passage on the expected page within the 16 passages sent ([benchmark](docs/evals.md#retrieval-benchmark-on-long-public-documents)).
 
-On 2026-11-17, on an earlier answer prompt (`answer-v2`), 50 questions were asked 91 times about 23 real insurance documents, which are kept outside this repository. Of the 80 asks with an answer in the documents, a script passed 71 with the expected value cited on an expected page, and a review of each miss passed 2 more. The other 7 were declined, and no answer gave a wrong figure ([real documents](docs/design.md#real-documents)).
+As a spot check that cannot be rerun from this repository, on 2026-11-17, on an earlier answer prompt (`answer-v2`), 50 questions were asked 91 times about 23 real insurance documents, which are kept outside it. Of the 80 asks with an answer in the documents, a script passed 71 with the expected value cited on an expected page, and a review of each miss passed 2 more. The other 7 were declined, and no answer gave a wrong figure ([real documents](docs/design.md#real-documents)).
 
 ## Performance
 
