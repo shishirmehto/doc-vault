@@ -151,7 +151,7 @@ class VaultError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class Parsed:
-    """Facts recorded once by the parse checkpoint. Immutable afterwards."""
+    """Facts recorded by the parse checkpoint. Only chunk_count changes later, when rechunk cuts the pages again."""
 
     basis: PageBasis
     page_count: int

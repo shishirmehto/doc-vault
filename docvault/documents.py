@@ -8,6 +8,7 @@ it. Format and page rules live in pages.py; model calls go through ai.py.
 Idempotency model:
   - The outputs are the checkpoints. "Has parse facts" means parse is done.
     "Chunks with embedding_model = current" means those chunks are embedded.
+    "chunking = current" means the chunks were cut with the current settings.
     A rerun reads the outputs, skips finished work, and redoes only the gap.
   - Each checkpoint commits its outputs and its state transition in one
     transaction, so a crash leaves both or neither.
@@ -29,6 +30,7 @@ from psycopg.types.json import Jsonb
 
 from . import insights, pages
 from .ai import DocOwner
+from .config import Settings
 from .context import Ctx
 from .db import Db, Lease, PipelineSteps, decode_cursor, next_cursor, pipeline_steps
 from .domain import (
@@ -41,6 +43,7 @@ from .domain import (
     Embedding,
     ErrorCode,
     Existing,
+    ExtractedText,
     Failed,
     Failure,
     FamilyId,
@@ -72,17 +75,23 @@ TRANSITIONS: Mapping[DocStatus, frozenset[DocStatus]] = {
     DocStatus.QUEUED: frozenset({DocStatus.PARSING, DocStatus.EMBEDDING, DocStatus.FAILED}),
     DocStatus.PARSING: frozenset({DocStatus.EMBEDDING, DocStatus.FAILED}),
     DocStatus.EMBEDDING: frozenset({DocStatus.READY, DocStatus.FAILED}),
-    DocStatus.READY: frozenset({DocStatus.EMBEDDING}),   # embedding model changed; reconcile re-embeds
+    DocStatus.READY: frozenset({DocStatus.EMBEDDING}),   # embedding model or chunk settings changed; reconcile re-embeds
     DocStatus.FAILED: frozenset({DocStatus.QUEUED}),     # POST /documents/{id}/retry
 }
 
 STALE_AFTER = timedelta(minutes=2)
 INDEX_BATCH = 50
 ANALYZE_BATCH = 50
+RECHUNK_BATCH = 10   # documents re-cut per reconcile tick; a 922-page document takes about a second
 MAX_RETRIES = 5   # Celery retries after the first attempt (tasks.py); backoff 2, 4, 8, 16, 32 s
 
 # A chunk still to embed: never embedded, or embedded by a model that is no longer the current one.
 _PENDING = "embedding_model IS DISTINCT FROM %s"
+
+
+def chunking(settings: Settings) -> str:
+    """The chunk settings a document's chunks are cut with, as documents.chunking stores them."""
+    return f"v{pages.CHUNKER_VERSION} max={settings.chunk_max_chars} overlap={settings.chunk_overlap_chars}"
 
 
 def sources_of(target: DocStatus) -> list[DocStatus]:
@@ -276,11 +285,47 @@ def _parse(ctx: Ctx, conn: Connection, doc_id: DocumentId, kind: DocKind, sha: S
         cur.executemany("INSERT INTO chunks (document_id, ord, text, page_map) VALUES (%s, %s, %s, %s)",
                         [(doc_id, draft.ord, draft.text, Jsonb(draft.page_map.starts)) for draft in drafts])
         cur.execute("UPDATE documents SET page_basis = %s, page_count = %s, chunk_count = %s, empty_pages = %s,"
-                    " outline = %s WHERE id = %s",
+                    " outline = %s, chunking = %s WHERE id = %s",
                     (text.basis, len(text.pages), len(drafts), [p.number for p in text.pages if not p.text],
                      Jsonb([{"title": entry.title, "level": entry.level, "page": entry.page} for entry in text.outline]),
-                     doc_id))
+                     chunking(ctx.settings), doc_id))
         transition(conn, doc_id, DocStatus.EMBEDDING)
+
+
+def rechunk(conn: Connection, doc_id: DocumentId, settings: Settings) -> bool:
+    """Cut a READY document's stored pages again with the current chunk settings. Returns True when it moved the
+    document to EMBEDDING with new, unembedded chunks; the caller then queues jobs.index.
+
+    The pages are the parse output, so the file is not read again and pages, outline and insights stay. When the
+    new cut gives the chunks already stored (a document cut before chunking was recorded, with the same settings),
+    only chunking is written, so nothing is embedded again. The chunk swap, chunking and the move to EMBEDDING
+    commit together under the document's row lock: a chat sees the old chunks or none, a delete waits, and a
+    document no longer READY with outdated chunking is left alone. Old turns keep their citations, which are
+    snapshots of page and quote.
+    """
+    current = chunking(settings)
+    with conn.transaction():
+        doc = conn.execute("SELECT page_basis FROM documents WHERE id = %s AND status = %s"
+                           " AND chunking IS DISTINCT FROM %s FOR UPDATE",
+                           (doc_id, DocStatus.READY, current)).fetchone()
+        if doc is None:
+            return False
+        text = ExtractedText(PageBasis(doc["page_basis"]), tuple(
+            Page(row["number"], row["text"]) for row in conn.execute(
+                "SELECT number, text FROM pages WHERE document_id = %s ORDER BY number", (doc_id,))))
+        drafts = pages.chunk(text, max_chars=settings.chunk_max_chars, overlap_chars=settings.chunk_overlap_chars)
+        stored = [(row["text"], tuple(map(tuple, row["page_map"]))) for row in conn.execute(
+            "SELECT text, page_map FROM chunks WHERE document_id = %s ORDER BY ord", (doc_id,))]
+        if stored == [(draft.text, draft.page_map.starts) for draft in drafts]:
+            conn.execute("UPDATE documents SET chunking = %s WHERE id = %s", (current, doc_id))
+            return False
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM chunks WHERE document_id = %s", (doc_id,))
+            cur.executemany("INSERT INTO chunks (document_id, ord, text, page_map) VALUES (%s, %s, %s, %s)",
+                            [(doc_id, draft.ord, draft.text, Jsonb(draft.page_map.starts)) for draft in drafts])
+            cur.execute("UPDATE documents SET chunk_count = %s, chunking = %s WHERE id = %s",
+                        (len(drafts), current, doc_id))
+        return transition(conn, doc_id, DocStatus.EMBEDDING)
 
 
 def _embed_pending_chunks(ctx: Ctx, conn: Connection, doc_id: DocumentId, filename: str) -> None:
@@ -330,7 +375,11 @@ def reconcile(ctx: Ctx) -> int:
       2. READY documents with chunks from another embedding model (a reviewer
          adds a provider key after a fake run) -> EMBEDDING, jobs.index, which
          also queues analysis, so fake insights are written again by the model.
-      3. Parsed documents untouched for STALE_AFTER, with no insights row and
+      3. READY documents whose chunks were cut with other chunk settings (or
+         before chunking was recorded) -> rechunk, at most RECHUNK_BATCH per
+         tick; one that gets new chunks -> EMBEDDING, jobs.index. The
+         embedding cache keeps unchanged chunk texts free to embed again.
+      4. Parsed documents untouched for STALE_AFTER, with no insights row and
          no analyze step started within STALE_AFTER -> jobs.analyze, at most
          ANALYZE_BATCH per tick. Covers an enqueue lost after the parse
          checkpoint, and documents indexed before insights existed. A job still
@@ -350,6 +399,10 @@ def reconcile(ctx: Ctx) -> int:
             f" (SELECT 1 FROM chunks c WHERE c.document_id = d.id AND c.{_PENDING})",
             (DocStatus.READY, ctx.ai.embed_model))]
         to_index = stale + [doc_id for doc_id in outdated if transition(conn, doc_id, DocStatus.EMBEDDING)]
+        recut = [row["id"] for row in conn.execute(
+            "SELECT id FROM documents WHERE status = %s AND chunking IS DISTINCT FROM %s ORDER BY updated_at LIMIT %s",
+            (DocStatus.READY, chunking(ctx.settings), RECHUNK_BATCH))]
+        to_index += [doc_id for doc_id in recut if rechunk(conn, doc_id, ctx.settings)]
         to_analyze = [row["id"] for row in conn.execute(
             "SELECT id FROM documents d WHERE page_count IS NOT NULL AND updated_at < now() - %(stale)s"
             " AND NOT EXISTS (SELECT 1 FROM document_insights i WHERE i.document_id = d.id)"

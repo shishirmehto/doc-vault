@@ -274,6 +274,66 @@ def test_reconcile_re_embeds_a_ready_document_after_the_embedding_model_changes(
     assert steps(ctx, doc_id) == [("parse", "ok", None), ("embed", "ok", None), ("embed", "ok", None)]
 
 
+def chunk_rows(ctx, doc_id):
+    with ctx.db.connection() as conn:
+        return conn.execute("SELECT id, text, embedding_model FROM chunks WHERE document_id = %s ORDER BY ord",
+                            (doc_id,)).fetchall()
+
+
+def test_reconcile_cuts_a_ready_document_again_after_the_chunk_settings_change(ctx):
+    doc_id = upload(ctx, POLICY).document.id
+    documents.run_index(ctx, doc_id)
+    ctx.jobs.indexed.clear()
+    assert documents.reconcile(ctx) == 0
+    before = chunk_rows(ctx, doc_id)
+    with ctx.db.connection() as conn:
+        pages_before = conn.execute("SELECT number, text FROM pages WHERE document_id = %s ORDER BY number",
+                                    (doc_id,)).fetchall()
+
+    small = dataclasses.replace(ctx, settings=ctx.settings.model_copy(
+        update={"chunk_max_chars": 600, "chunk_overlap_chars": 100}))
+    assert documents.reconcile(small) == 1
+    assert ctx.jobs.indexed == [doc_id]
+    assert isinstance(documents.get(ctx.db, doc_id).lifecycle, Embedding)
+    after = chunk_rows(ctx, doc_id)
+    assert len(after) > len(before)
+    assert all(len(row["text"]) <= 600 and row["embedding_model"] is None for row in after)
+
+    documents.run_index(small, doc_id)
+    assert isinstance(documents.get(ctx.db, doc_id).lifecycle, Ready)
+    assert scalar(ctx.db, "SELECT chunk_count FROM documents WHERE id = %s", (doc_id,)) == len(after)
+    assert all(row["embedding_model"] is not None for row in chunk_rows(ctx, doc_id))
+    with ctx.db.connection() as conn:
+        assert conn.execute("SELECT number, text FROM pages WHERE document_id = %s ORDER BY number",
+                            (doc_id,)).fetchall() == pages_before
+    assert scalar(ctx.db, "SELECT chunking FROM documents WHERE id = %s", (doc_id,)) == documents.chunking(small.settings)
+    ctx.jobs.indexed.clear()
+    assert documents.reconcile(small) == 0
+
+
+def test_reconcile_stamps_a_document_cut_before_chunking_was_recorded_without_cutting_it_again(ctx):
+    doc_id = upload(ctx, QUOTE).document.id
+    documents.run_index(ctx, doc_id)
+    before = chunk_rows(ctx, doc_id)
+    with ctx.db.connection() as conn:
+        conn.execute("UPDATE documents SET chunking = NULL WHERE id = %s", (doc_id,))
+    ctx.jobs.indexed.clear()
+
+    assert documents.reconcile(ctx) == 0
+    assert ctx.jobs.indexed == []
+    assert isinstance(documents.get(ctx.db, doc_id).lifecycle, Ready)
+    assert chunk_rows(ctx, doc_id) == before
+    assert scalar(ctx.db, "SELECT chunking FROM documents WHERE id = %s", (doc_id,)) == documents.chunking(ctx.settings)
+
+
+def test_rechunk_leaves_a_document_that_is_not_ready(ctx):
+    doc_id = upload(ctx, QUOTE).document.id
+    small = ctx.settings.model_copy(update={"chunk_max_chars": 600, "chunk_overlap_chars": 100})
+    with ctx.db.connection() as conn:
+        assert documents.rechunk(conn, doc_id, small) is False
+    assert isinstance(documents.get(ctx.db, doc_id).lifecycle, Queued)
+
+
 def test_processing_time_is_the_first_indexing_and_a_later_re_embed_leaves_it(ctx):
     doc_id = upload(ctx, QUOTE).document.id
     documents.run_index(ctx, doc_id)

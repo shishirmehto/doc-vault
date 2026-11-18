@@ -25,6 +25,7 @@ from .domain import ChunkDraft, DocKind, ErrorCode, ExtractedText, OutlineEntry,
 PAGE_JOINER = "\n\n"   # placed between non-empty pages in the document text stream
 TABLE_CELL = " | "     # joins the cells of a DOCX table row on one line
 SYNTHETIC_PAGE_CHARS = 3000
+CHUNKER_VERSION = 1    # bump when chunk() cuts the same text differently; stored documents are then cut again
 SNIFF_BYTES = 8192
 MAX_DOCX_XML_BYTES = 200_000_000   # word/document.xml inflated; a zip bomb compresses far past this
 

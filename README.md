@@ -214,7 +214,6 @@ If you started the stack with another `DB_PORT`, point the tests at it with `TES
 - Page numbers are the PDF's own, counted from 1, not the labels printed on the pages. The crop insurance handbook's page 922 prints "898".
 - A section is found only through PDF bookmarks or Word Title and Heading styles. A document indexed before `05353fb` has no stored outline. To give it one, delete it and upload it again, because the same bytes uploaded again return the stored document.
 - A named page or section sends at most 2 passages, so with small chunks a long page is sent in part. At 4 passages and 600-character chunks, page 7 of the sample policy holds more chunks than that, and the employment exclusion on it is not sent.
-- Changing `chunk_max_chars` or `chunk_overlap_chars` does not re-chunk the documents already indexed.
 - The vault has one tenant. No table has an owner column.
 - An answer is kept when at least one of its quotes is found in its source. Each sentence cites the quote the model wrote for it, and a sentence whose quote is not found shows no number.
 - "Differs" in a comparison compares the text of two values, not their meaning, so two wordings of the same term are marked as different.

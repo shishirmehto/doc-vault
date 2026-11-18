@@ -88,10 +88,10 @@ stateDiagram-v2
 | Rule | In plain words | Status |
 |---|---|---|
 | `ReadyMeansSearchable` | A document shows Ready only when chat can search every one of its chunks. | Holds |
-| `ParsedOnce` | Pages and chunks are written once. A rerun never parses again. | Holds |
+| `ParsedOnce` | Pages and chunks are written once. A rerun never parses again. The code has one exception, which the model leaves out: `rechunk` replaces the chunks, never the pages, after the chunk settings change. | Holds |
 | `OneWorkerAtATime` | Only one worker works on a document at a time, including while it records a failure. | Holds |
 | `NotFailedWhileWorking` | A document never shows Failed while a worker is still processing it. | Holds since `3437628` (was finding F1) |
-| `ReadyStaysReady` | A ready document never goes back to another status. The code has one exception, which the model leaves out: re-embedding after the embedding model changes. | Holds |
+| `ReadyStaysReady` | A ready document never goes back to another status. The code has two exceptions, which the model leaves out: re-embedding after the embedding model changes, and cutting the chunks again after the chunk settings change. | Holds |
 | `FailedWaitsForYou` | A failed document changes only when you press retry. | Holds |
 | `AlwaysSettles` | Every document in flight ends Ready or Failed, whatever crashes or duplicate jobs happen. | Holds |
 

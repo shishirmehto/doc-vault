@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS documents (
   chunk_count   int,
   empty_pages   int[],                                -- pages with no extractable text
   outline       jsonb,                                -- [{title, level, page}], PDF bookmarks or Word headings; NULL if parsed before outlines
+  chunking      text,                                 -- the chunk settings its chunks were cut with (documents.chunking); NULL if cut before it was stored
   error_code    text,
   error_message text,
   error_retryable boolean,
@@ -65,6 +66,7 @@ CREATE INDEX IF NOT EXISTS documents_in_flight ON documents (updated_at) WHERE s
 CREATE UNIQUE INDEX IF NOT EXISTS documents_family_version ON documents (family_id, version);
 CREATE INDEX IF NOT EXISTS documents_filename ON documents (lower(filename));   -- an upload's family by its name
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS outline jsonb;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS chunking text;
 
 -- One row per page (or per labelled section when page_basis = 'synthetic').
 -- Feeds insights (page-tagged text), insight quote checks and GET /documents/{id}/pages/{n}.

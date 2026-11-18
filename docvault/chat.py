@@ -37,7 +37,7 @@ from .answer_text import AnswerField, MarkerFilter
 from .cache import Cache
 from .context import Ctx
 from .db import Db, decode_cursor, next_cursor
-from .documents import ready_documents
+from .documents import chunking, ready_documents
 from .domain import (
     Answer,
     Answered,
@@ -278,6 +278,7 @@ def answer_key(ctx: Ctx, documents: Mapping[DocumentId, bytes], question: str) -
         "chat_model": ctx.ai.chat.models["main"],
         "reasoning_effort": ctx.settings.openai_chat_reasoning_effort,
         "embed_model": ctx.ai.embed_model,
+        "chunking": chunking(ctx.settings),
         "retrieval_k": ctx.settings.retrieval_k,
         "retrieval_per_doc_min": ctx.settings.retrieval_per_doc_min,
         "min_similarity": ctx.ai.min_similarity,
