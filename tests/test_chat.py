@@ -10,6 +10,7 @@ import httpx2
 import pytest
 
 from docvault import chat, pages, prompts
+from docvault import documents as vault_documents
 from docvault.api import app
 from docvault.chat import Candidate, PageRequest, SectionRequest
 from docvault.domain import (
@@ -162,6 +163,27 @@ def test_a_chat_that_lost_a_document_keeps_its_history_and_takes_no_questions(cl
     assert client.get(f"/chats/{chat_id}/messages").json()["turns"] == [answered]
     assert client.get(f"/chats/{chat_id}").json()["documents"] == [
         {"id": str(policy), "filename": POLICY, "deleted": False}, {"id": str(quote), "filename": QUOTE, "deleted": True}]
+
+
+def test_a_chat_whose_document_is_being_cut_again_takes_no_questions_until_it_is_ready(client, ctx):
+    policy = ready(ctx, POLICY)
+    chat_id = client.post("/chats", json={"document_ids": [str(policy)]}).json()["id"]
+    small = dataclasses.replace(ctx, settings=ctx.settings.model_copy(
+        update={"chunk_max_chars": 600, "chunk_overlap_chars": 100}))
+    assert vault_documents.reconcile(small) == 1
+    calls = scalar(ctx.db, "SELECT count(*) FROM llm_calls")
+
+    refused = client.post(f"/chats/{chat_id}/messages", json={"question": "What is the each occurrence limit?"})
+
+    assert (refused.status_code, refused.json()) == (409, {"error": {
+        "code": "documents_not_ready", "retryable": False,
+        "message": "1 of 1 documents in this chat are being indexed. Ask again when indexing finishes.",
+        "details": {"not_ready": [{"id": str(policy), "filename": POLICY, "status": "embedding"}]}}})
+    assert scalar(ctx.db, "SELECT count(*) FROM llm_calls") == calls
+    assert scalar(ctx.db, "SELECT count(*) FROM chat_turns") == 0
+
+    vault_documents.run_index(small, policy)
+    assert ask(client, chat_id, "What is the each occurrence limit?")["status"] == "answered"
 
 
 def test_chats_read_back_one_at_a_time_and_newest_first_a_page_at_a_time(client, ctx):

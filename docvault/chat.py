@@ -47,6 +47,7 @@ from .domain import (
     ChunkId,
     Citation,
     DocRef,
+    DocStatus,
     DocumentId,
     ErrorCode,
     LoggedPassage,
@@ -428,11 +429,13 @@ def scope(conn: Connection, chat_id: ChatId) -> tuple[DocRef, *tuple[DocRef, ...
     Two versions of one file share its name, so each is then named "<filename> (version N)".
     Raises DOCUMENTS_DELETED when any of them was deleted after the chat started:
     answering from the rest would quietly change what the chat was asked about.
+    Raises DOCUMENTS_NOT_READY while any is indexed again (new chunk settings or embedding model), because its
+    chunks are then partly embedded, and an answer from them could also land in the answer cache.
     """
     rows = conn.execute(
         "SELECT cd.document_id, CASE WHEN count(*) OVER (PARTITION BY cd.filename) > 1 AND d.version IS NOT NULL"
         "   THEN cd.filename || ' (version ' || d.version || ')' ELSE cd.filename END AS filename, d.page_basis,"
-        " d.page_count, d.outline"
+        " d.page_count, d.outline, d.status"
         " FROM chat_documents cd LEFT JOIN documents d ON d.id = cd.document_id WHERE cd.chat_id = %s"
         " ORDER BY cd.filename, cd.document_id", (chat_id,)).fetchall()
     if deleted := [{"id": str(row["document_id"]), "filename": row["filename"], "status": "deleted"} for row in rows
@@ -440,6 +443,11 @@ def scope(conn: Connection, chat_id: ChatId) -> tuple[DocRef, *tuple[DocRef, ...
         raise VaultError(ErrorCode.DOCUMENTS_DELETED,
                          f"{len(deleted)} of {len(rows)} documents in this chat were deleted. "
                          "Start a new chat with the documents you want to ask about.", details={"deleted": deleted})
+    if not_ready := [{"id": str(row["document_id"]), "filename": row["filename"], "status": row["status"]}
+                     for row in rows if row["status"] != DocStatus.READY]:
+        raise VaultError(ErrorCode.DOCUMENTS_NOT_READY,
+                         f"{len(not_ready)} of {len(rows)} documents in this chat are being indexed. "
+                         "Ask again when indexing finishes.", details={"not_ready": not_ready})
     first, *rest = (DocRef(DocumentId(row["document_id"]), row["filename"], PageBasis(row["page_basis"]),
                            row["page_count"], tuple(OutlineEntry(entry["title"], entry["level"], entry["page"])
                                                     for entry in row["outline"] or ())) for row in rows)

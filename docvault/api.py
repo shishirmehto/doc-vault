@@ -315,7 +315,8 @@ def get_chat(chat_id: UUID, ctx: Deps) -> wire.ChatOut:
 
 
 @router.post("/chats/{chat_id}/messages", tags=["Chat"], response_model=wire.TurnOut, dependencies=[rate_limited("ask")],
-             responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED, ErrorCode.AI_UNAVAILABLE,
+             responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED, ErrorCode.DOCUMENTS_NOT_READY,
+                              ErrorCode.AI_UNAVAILABLE,
                               ErrorCode.AI_BAD_OUTPUT, ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED,
                               ErrorCode.QUOTA_EXCEEDED))
 def ask(chat_id: UUID, body: wire.AskIn, ctx: Deps) -> wire.TurnOut:
@@ -399,7 +400,7 @@ If the client disconnects, the answer still finishes and is stored, so `GET /cha
              description=STREAM_EVENTS,
              responses={200: {"description": "stage, delta, reset, then one turn or error event",
                               "content": {"text/event-stream": {"schema": {"type": "string"}}}},
-                        **json_errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED,
+                        **json_errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.DOCUMENTS_DELETED, ErrorCode.DOCUMENTS_NOT_READY,
                                       ErrorCode.INVALID_REQUEST, ErrorCode.RATE_LIMITED, ErrorCode.QUOTA_EXCEEDED)})
 def ask_stream(chat_id: UUID, body: wire.AskIn, ctx: Deps) -> EventStreamResponse:
     asking = AskInThread(ctx, ChatId(chat_id), body.question)

@@ -108,7 +108,7 @@ A document that is not ready returns 409 `documents_not_ready`, and `details.not
 curl -s "$API/chats?limit=10"
 ```
 
-`GET /chats/{id}` returns one chat and its documents. A document deleted since the chat started has `deleted: true`, and the chat then refuses new questions with 409 `documents_deleted`.
+`GET /chats/{id}` returns one chat and its documents. A document deleted since the chat started has `deleted: true`, and the chat then refuses new questions with 409 `documents_deleted`. While a chat's document is indexed again, after the chunk settings or the embedding model change, a question gets 409 `documents_not_ready` until it is ready.
 
 ```bash
 curl -s $API/chats/$CHAT

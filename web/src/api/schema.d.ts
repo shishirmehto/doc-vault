@@ -1718,7 +1718,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
-            /** @description documents_deleted */
+            /** @description documents_deleted, documents_not_ready */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1798,7 +1798,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
-            /** @description documents_deleted */
+            /** @description documents_deleted, documents_not_ready */
             409: {
                 headers: {
                     [name: string]: unknown;
