@@ -227,8 +227,8 @@ def test_a_run_over_the_samples_reports_hits_ranks_and_spend(tmp_path):
     assert "\n".join([
         "| Case file | n | hit@4 | hit@8 | hit@16 | MRR@50 fused | MRR@50 vector only | Gate passed |",
         "|---|---|---|---|---|---|---|---|",
-        "| cases.yaml | 7 | 3/7 (43%) | 5/7 (71%) | 6/7 (86%) | 0.402 | 0.458 | 6/7 (86%) |",
-        "| All | 7 | 3/7 (43%) | 5/7 (71%) | 6/7 (86%) | 0.402 | 0.458 | 6/7 (86%) |",
+        "| cases.yaml | 7 | 3/7 (43%) | 5/7 (71%) | 6/7 (86%) | 0.434 | 0.458 | 6/7 (86%) |",
+        "| All | 7 | 3/7 (43%) | 5/7 (71%) | 6/7 (86%) | 0.434 | 0.458 | 6/7 (86%) |",
         "",
         "Misses at 16:",
         "",
@@ -239,10 +239,10 @@ def test_a_run_over_the_samples_reports_hits_ranks_and_spend(tmp_path):
     retrieval_evals.write(result, "the command", path)
     by_id = {row["id"]: row for row in json.loads(path.with_suffix(".json").read_text())["questions"]}
     assert [(row["id"], row["fused_rank"], row["vector_rank"]) for row in by_id.values()] == [
-        ("roofing", 1, 1), ("cancellation", 1, 1), ("limits", 6, 6), ("policy", 7, 3), ("insured", 9, 8),
-        ("off-page", 17, 12), ("silica", 3, 2)]
+        ("roofing", 1, 1), ("cancellation", 1, 1), ("limits", 6, 6), ("policy", 5, 3), ("insured", 9, 8),
+        ("off-page", 17, 12), ("silica", 2, 2)]
     assert by_id["silica"] == {
         "case_file": "cases.yaml", "id": "silica", "doc": "sample-renewal-quote.pdf", "pages": [3],
-        "hit@4": True, "hit@8": True, "hit@16": True, "fused_rank": 3, "vector_rank": 2, "gate": False,
-        "top3": [{"doc": "sample-renewal-quote.pdf", "pages": [1]}, {"doc": "sample-cgl-policy.pdf", "pages": [6, 7]},
+        "hit@4": True, "hit@8": True, "hit@16": True, "fused_rank": 2, "vector_rank": 2, "gate": False,
+        "top3": [{"doc": "sample-renewal-quote.pdf", "pages": [1]}, {"doc": "sample-renewal-quote.pdf", "pages": [3]},
                  {"doc": "sample-renewal-quote.pdf", "pages": [3]}]}

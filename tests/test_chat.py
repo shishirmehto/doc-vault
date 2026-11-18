@@ -755,7 +755,7 @@ def test_how_a_document_ends_is_answered_from_its_last_page_within_k(ctx):
 
     _, tags, _ = asked(ctx, [policy], "How does the policy end?", k=2)
 
-    assert tags == [("S1", POLICY, "p. 7 of 7"), ("S2", POLICY, "p. 3-5 of 7"), ("S3", POLICY, "p. 1-2 of 7")]
+    assert tags == [("S1", POLICY, "p. 7 of 7"), ("S2", POLICY, "p. 5-7 of 7"), ("S3", POLICY, "p. 1-2 of 7")]
 
 
 # ------------------------------------------------------------------ questions that name a section

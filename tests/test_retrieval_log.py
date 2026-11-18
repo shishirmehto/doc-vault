@@ -54,20 +54,20 @@ def test_an_answered_turn_logs_every_retrieved_passage_and_the_label_each_was_se
     assert turn.answer.outcome is TurnOutcome.ANSWERED
     assert (log.query, log.matched, log.min_similarity, log.k, log.omitted) == (INSURED, True, 0.184, 16, 1)
     assert rows(ctx, log) == [
-        (RETRIEVED, 0, 1, 1, 0.3348, 0.0328, True, 1, "S1"), (RETRIEVED, 2, 2, 2, 0.2953, 0.032, True, 2, "S2"),
-        (RETRIEVED, 1, 1, 2, 0.2887, 0.032, True, 3, "S3")]
+        (RETRIEVED, 0, 1, 1, 0.3348, 0.0246, True, 1, "S1"), (RETRIEVED, 2, 2, 2, 0.2953, 0.0241, True, 2, "S2"),
+        (RETRIEVED, 1, 1, 2, 0.2887, 0.0239, True, 3, "S3")]
     assert {p.document_id for p in log.passages} == {endorsement}
     assert rebuilt(ctx, turn, log) == sent
 
 
 @pytest.mark.parametrize(("question", "outcome", "logged", "sent_pages"), [
     ("How does the endorsement end?", TurnOutcome.MODEL_DECLINED, [
-        (RETRIEVED, 0, 1, 1, 0.102, 0.0328, False, 1, "S3"), (RETRIEVED, 2, 2, 2, 0.0782, 0.0323, True, 2, None),
-        (RETRIEVED, 1, 1, 2, 0.0689, 0.0317, False, 3, "S4"), (PAGE, 1, 2, 2, 0.0689, 0.0, False, None, "S1"),
+        (RETRIEVED, 0, 1, 1, 0.102, 0.0246, False, 1, "S3"), (RETRIEVED, 2, 2, 2, 0.0782, 0.0242, True, 2, None),
+        (RETRIEVED, 1, 1, 2, 0.0689, 0.0238, False, 3, "S4"), (PAGE, 1, 2, 2, 0.0689, 0.0, False, None, "S1"),
         (PAGE, 2, 2, 2, 0.0782, 0.0, False, None, "S2")], [(2, 2), (2, 2), (1, 1), (1, 2)]),
     ("Who does Endorsement SM 40 03 add?", TurnOutcome.ANSWERED, [
-        (RETRIEVED, 0, 1, 1, 0.2019, 0.0328, False, 1, None), (RETRIEVED, 2, 2, 2, 0.1056, 0.0323, False, 2, "S3"),
-        (RETRIEVED, 1, 1, 2, 0.0487, 0.0317, False, 3, None), (SECTION, 0, 1, 1, 0.2019, 0.0, False, None, "S1"),
+        (RETRIEVED, 0, 1, 1, 0.2019, 0.0246, False, 1, None), (RETRIEVED, 2, 2, 2, 0.1056, 0.0242, False, 2, "S3"),
+        (RETRIEVED, 1, 1, 2, 0.0487, 0.0238, False, 3, None), (SECTION, 0, 1, 1, 0.2019, 0.0, False, None, "S1"),
         (SECTION, 1, 1, 2, 0.0487, 0.0, False, None, "S2")], [(1, 1), (1, 2), (2, 2)]),
 ])
 def test_a_named_page_or_section_logs_its_passages_first_in_the_prompt_and_rebuilds_as_sent(
@@ -89,8 +89,8 @@ def test_past_a_failed_gate_the_log_labels_the_opening_passage_the_answer_step_w
 
     assert (turn.answer.outcome, log.matched, log.omitted) == (TurnOutcome.ANSWERED, False, 0)
     assert rows(ctx, log) == [
-        (RETRIEVED, 0, 1, 1, 0.1641, 0.0325, False, 1, None), (RETRIEVED, 1, 1, 2, 0.1344, 0.0325, False, 2, None),
-        (RETRIEVED, 2, 2, 2, 0.0712, 0.0317, False, 3, None), (OPENING, 0, 1, 1, 0.1641, 0.0, False, None, "S1")]
+        (RETRIEVED, 0, 1, 1, 0.1641, 0.0245, False, 1, None), (RETRIEVED, 1, 1, 2, 0.1344, 0.0243, False, 2, None),
+        (RETRIEVED, 2, 2, 2, 0.0712, 0.0238, False, 3, None), (OPENING, 0, 1, 1, 0.1641, 0.0, False, None, "S1")]
     assert rebuilt(ctx, turn, log) == sent
 
 
@@ -145,7 +145,7 @@ def test_the_retrieval_route_returns_the_stored_log_and_404_for_an_unknown_chat_
         "query": INSURED, "matched": True, "min_similarity": 0.184, "k": 16, "omitted": 1}
     assert found.json()["passages"][0] == {
         "chunk_id": str(first_chunk), "document_id": str(endorsement), "kind": "retrieved", "first_page": 1,
-        "last_page": 1, "similarity": 0.3348196744918823, "rrf": 0.03278688524590164, "lexical_hit": True,
+        "last_page": 1, "similarity": 0.3348196744918823, "rrf": 1 / 61 + 0.5 / 61, "lexical_hit": True,
         "rank": 1, "label": "S1"}
     assert [(r.status_code, r.json()["error"]["code"], r.json()["error"]["message"]) for r in missing] == [
         (404, "chat_not_found", f"No chat has the id {nowhere}."),

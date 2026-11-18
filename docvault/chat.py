@@ -68,6 +68,10 @@ from .prompts import AnswerDraft, CondensedQuery
 type Stage = Literal["condensing", "searching", "answering"]
 
 RRF_K = 60
+# The full-text rank ORs every question word, so a long broker question matches loosely related passages; at
+# full weight it pulled the right passage below 16 on 4 of 53 public-document questions (evals/retrieval).
+# Half weight still lifts an exact identifier ("CG 21 47") and lost no sample fact at k = 16.
+LEXICAL_WEIGHT = 0.5
 CANDIDATES = 50
 MAX_SUGGESTIONS = 3
 MAX_SUGGESTION_CHARS = 160
@@ -521,7 +525,7 @@ WITH query AS (
   FROM scored
 )
 SELECT id, document_id, text, page_map, 1 - distance AS similarity, lexical_hit,
-       1.0 / (%(rrf_k)s + vec_rank) + CASE WHEN lex > 0 THEN 1.0 / (%(rrf_k)s + lex_rank) ELSE 0 END AS rrf
+       1.0 / (%(rrf_k)s + vec_rank) + CASE WHEN lex > 0 THEN %(lex_weight)s / (%(rrf_k)s + lex_rank) ELSE 0 END AS rrf
 FROM ranked
 WHERE vec_rank <= %(n)s OR (lex > 0 AND lex_rank <= %(n)s) OR doc_rank <= %(per_doc)s
 ORDER BY rrf DESC
@@ -546,7 +550,8 @@ def retrieve(conn: Connection, documents: Sequence[DocRef], q_vec: Vector, query
     """
     by_id = {doc.id: doc for doc in documents}
     rows = conn.execute(EXACT_SQL, {"qtext": query_text, "q": PgVector(q_vec), "doc_ids": list(by_id),
-                                    "model": embed_model, "rrf_k": RRF_K, "n": CANDIDATES, "per_doc": per_doc})
+                                    "model": embed_model, "rrf_k": RRF_K, "lex_weight": LEXICAL_WEIGHT, "n": CANDIDATES,
+                                    "per_doc": per_doc})
     return [Candidate(ChunkId(row["id"]), by_id[row["document_id"]], row["text"], _page_map(row["page_map"]),
                       row["similarity"], float(row["rrf"]), row["lexical_hit"]) for row in rows]
 
