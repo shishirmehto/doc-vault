@@ -50,7 +50,7 @@ curl --retry 10 --retry-all-errors --retry-delay 1 localhost:8000/health   # ret
 API_PORT=18000 DB_PORT=54339 WEB_PORT=13000 docker compose -p docvault-demo up --build -d
 ```
 
-[`.env.example`](.env.example) lists the common settings, with the default models, and [`docvault/config.py`](docvault/config.py) lists every setting. If your key cannot use a default model, set another one in `.env`. For a model that takes no reasoning effort, such as `gpt-4.1` or `gpt-4o`, also leave `OPENAI_CHAT_REASONING_EFFORT` and `OPENAI_SMALL_REASONING_EFFORT` empty. Cost tracking knows the prices of the default models only (`PRICES` in [`docvault/ai.py`](docvault/ai.py)), so calls to another model are logged without a cost. To cap AI spend, set `DAILY_AI_BUDGET_USD`, in US dollars per day.
+[`.env.example`](.env.example) lists the common settings, with the default models, and [`docvault/config.py`](docvault/config.py) lists every setting. If your key cannot use a default model, set another one in `.env`. For a model that takes no reasoning effort, such as `gpt-4.1` or `gpt-4o`, also leave `OPENAI_CHAT_REASONING_EFFORT` and `OPENAI_SMALL_REASONING_EFFORT` empty. Cost tracking knows the prices of the default models and a few others (`PRICES` in [`docvault/ai.py`](docvault/ai.py)), so calls to another model are logged without a cost. To cap AI spend, set `DAILY_AI_BUDGET_USD`, in US dollars per day.
 
 ## Try it
 

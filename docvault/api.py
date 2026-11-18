@@ -189,7 +189,8 @@ class RequestLog:
 async def refuse_oversized_uploads(request: Request,
                                    call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """413 for POST /documents before any of the body is read, when Content-Length already says the file is
-    too large. A body without Content-Length is stopped by BlobStore.put while it streams."""
+    too large. A body without Content-Length is read by the multipart parser into a temporary file first, and BlobStore.put
+    stops at the limit while it copies that file."""
     length = request.headers.get("content-length", "")
     if request.method == "POST" and request.url.path == "/documents" and length.isdigit():
         limit = get_ctx(request).settings.max_upload_bytes

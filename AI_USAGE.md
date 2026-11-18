@@ -63,7 +63,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 Four runs used the OpenAI key.
 
 The first, on 2026-11-12, sent eight passages to the answer step. It cost $3.17 on the ledger, $1.18 of it for the eval set. It covered:
-- **The eval set.** Retrieval found 34 of 34 expected facts, 30 of 34 were cited on the right page, and 15 of 16 out-of-scope questions were declined. The 2026-11-17 rerun gave the same three numbers, and [`docs/evals.md`](docs/evals.md) reports that rerun.
+- **The eval set.** Retrieval found 34 of 34 expected facts, 30 of 34 were cited on the right page, and 15 of 16 out-of-scope questions were declined. The 2026-11-17 rerun gave the same three numbers, and [`docs/evals.md`](docs/evals.md) lists it beside the current results.
 - **The 19 real documents.** Before any paid call, the lead agent wrote the expected answer and page for 31 broker questions from the documents' own text. Six of the questions have no answer in their document.
   - Of the 25 answerable questions, 21 were answered right.
   - 4 were partial:
@@ -87,7 +87,7 @@ The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and
 - The eval set again, for $1.08 on the ledger.
 - 23 real insurance documents, 3,263 pages, on a separate copy of the stack. 50 questions were asked 91 times, in chats of 1, 3 and 23 documents. Of the 80 asks with an answer in the documents, a script passed 71 with the expected value cited on an expected page, and a review of each miss passed 2 more. The other 7 were declined. Of the 11 asks with no answer, 8 came back `not_found` and 3 declined in words. [`docs/design.md`](docs/design.md) has the details, under Real documents.
 
-The third, on 2026-11-18, ran the eval set four times, $4.40 in all, while the answer prompt was changed to allow Markdown lists and bold and then to name each quote by its marker. [`docs/evals.md`](docs/evals.md) reports the last run, at `f2243ec`. Three more runs that day, $1.43 in all, scored the held-out extra cases, with 16 and with 4 passages, and the main set with 4 passages (`91c96fb`).
+The third, on 2026-11-18, ran the eval set four times, $4.40 in all, while the answer prompt was changed to allow Markdown lists and bold and then to name each quote by its marker. [`docs/evals.md`](docs/evals.md) gives the last run's numbers, at `f2243ec`, beside the current ones. Three more runs that day, $1.43 in all, scored the held-out extra cases, with 16 and with 4 passages, and the main set with 4 passages (`91c96fb`).
 
 The fourth, later on 2026-11-18, tested the changes for named pages and sections, the retrieval log, the retrieval benchmark and the half-weight full-text rank. About $1.4 went on experiments: the benchmark runs, the chunk-size sweep, the tests with and without the contents block and the section path, and live checks on the 922-page handbook. The final round at `703cca0` was seven runs for $2.32: the main, held-out and page sets at 16 passages and at 4 passages, and one benchmark run. [`docs/evals.md`](docs/evals.md) reports them, and its retrieval benchmark section has each experiment with its numbers.
 
