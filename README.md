@@ -193,7 +193,7 @@ If you started the stack with another `DB_PORT`, point the tests at it with `TES
 - The tests use canned HTTP responses for the OpenAI backends. The live API was run on 2026-11-12 and on 2026-11-17.
 - Insights read the first 240,000 characters of a document, so a longer document is covered only in part.
 - A chat sends 16 passages to the answer step. In a test on real documents of up to 922 pages, 4 of the 50 questions were declined in at least one chat scope, because the passage holding the answer ranked below those 16.
-- An answer is kept when at least one of its quotes is found in its source. A sentence whose quote is not found stays in the answer, without a citation number.
+- An answer is kept when at least one of its quotes is found in its source. A sentence whose quote is not found stays in the answer. It has no citation number when each sentence citing that source pairs clearly with its own quote, and otherwise it shows that source's other numbers.
 - "Differs" in a comparison compares the text of two values, not their meaning, so two wordings of the same term are marked as different.
 - A comparison and a summary each run inside the request, as one model call of at most 90 s.
 - The spending cap is checked before each call, not reserved, so the day's spend can pass the cap.
