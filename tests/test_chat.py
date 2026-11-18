@@ -316,6 +316,22 @@ def test_ground_rewrites_a_marker_naming_two_sources_and_cites_a_repeated_quote_
     assert [(c.filename, c.quote) for c in answer.citations] == [(POLICY, limit), (QUOTE, limit)]
 
 
+def test_ground_rewrites_the_markers_ending_markdown_list_items_and_keeps_the_list():
+    limit = FACTS["policy-each-occurrence-limit"]["text"]
+
+    answer = chat.ground(draft("The each occurrence limit is the same in both:\n\n"
+                               "- The policy: **$1,000,000** [S1]\n"
+                               "- The quote: **$1,000,000** [S2]\n"
+                               "- Defence costs reduce it [S9]",
+                               ("S1", limit), ("S2", limit)), limits())
+
+    assert answer.text == ("The each occurrence limit is the same in both:\n\n"
+                           "- The policy: **$1,000,000** [1]\n"
+                           "- The quote: **$1,000,000** [2]\n"
+                           "- Defence costs reduce it")
+    assert [(c.filename, c.quote) for c in answer.citations] == [(POLICY, limit), (QUOTE, limit)]
+
+
 def test_ground_gives_every_sentence_each_verified_quote_of_its_source_whatever_the_order_or_wording():
     text = "Item 1. General Aggregate Limit $2,000,000\nItem 2. Deductible $5,000 per claim"
     limits_page = source("S1", POLICY_DOC, text, PageMap(((0, 2),)), chunk=33)

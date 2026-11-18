@@ -112,7 +112,7 @@ curl -s "$API/chats?limit=10"
 curl -s $API/chats/$CHAT
 ```
 
-`POST /chats/{id}/messages` asks a question of at most 2,000 characters. The answer carries numbered citations (`[1]` matches `citations[0]`), `interpreted_as` shows how a follow-up was read, and `usage` lists the model calls, tokens and cost of the turn. A sentence whose quote was not found in its source stays in the answer without a number. A question the documents do not answer returns `status: not_found` with a `reason`. `suggestions` holds up to three follow-up questions that the documents can answer. When a question is refused with `no_evidence`, they come from the documents' key facts ("What is the Policy Number?").
+`POST /chats/{id}/messages` asks a question of at most 2,000 characters. The answer carries numbered citations (`[1]` matches `citations[0]`), `interpreted_as` shows how a follow-up was read, and `usage` lists the model calls, tokens and cost of the turn. An answered turn's `answer` may hold light Markdown: paragraphs, `- ` lists and `**bold**`. A sentence whose quote was not found in its source stays in the answer without a number. A question the documents do not answer returns `status: not_found` with a `reason`. `suggestions` holds up to three follow-up questions that the documents can answer. When a question is refused with `no_evidence`, they come from the documents' key facts ("What is the Policy Number?").
 
 ```bash
 curl -s $API/chats/$CHAT/messages -H 'content-type: application/json' \

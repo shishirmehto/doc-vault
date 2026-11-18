@@ -27,6 +27,14 @@ ESCAPED = (
     r'"evidence": [{"source": "S1", "quote": "\"insured\" means"}, {"source": "S2", "quote": "C:\\Claims"}], '
     r'"follow_ups": []}'
 )
+MARKDOWN_LIST = (
+    '{"supported": true, '
+    '"answer": "Three terms change:\\n\\n- The aggregate is **$3,000,000** [S1]\\n'
+    '- The deductible is **$5,000** [S1, S2]\\n- A silica exclusion is added [S2]", '
+    '"evidence": [{"source": "S1", "quote": "General Aggregate Limit $3,000,000"}, '
+    '{"source": "S2", "quote": "Form SM 30 11, Silica or Silica-Related Dust Exclusion, is added"}], '
+    '"follow_ups": []}'
+)
 
 
 def chunkings(text: str) -> list[list[str]]:
@@ -61,7 +69,12 @@ def filtered(chunks: list[str]) -> str:
      'The café clause defines "insured" [S1]. Claims go to C:\\Claims\\2026 [S2].\n'
      "Approved with a smile \U0001f600 [S1][S2]",
      'The café clause defines "insured". Claims go to C:\\Claims\\2026.\nApproved with a smile \U0001f600'),
-], ids=["one-document", "two-documents", "escapes"])
+    (MARKDOWN_LIST,
+     "Three terms change:\n\n- The aggregate is **$3,000,000** [S1]\n- The deductible is **$5,000** [S1, S2]\n"
+     "- A silica exclusion is added [S2]",
+     "Three terms change:\n\n- The aggregate is **$3,000,000**\n- The deductible is **$5,000**\n"
+     "- A silica exclusion is added"),
+], ids=["one-document", "two-documents", "escapes", "markdown-list"])
 def test_a_model_reply_streams_the_same_answer_and_display_text_at_every_split(raw, answer, display):
     assert json.loads(raw)["answer"] == answer
     for chunks in chunkings(raw):
@@ -207,6 +220,8 @@ def test_an_empty_answer_is_done_with_no_text():
     ("ends in spaces  ", "ends in spaces"),
     ("a [S1", "a [S1"),
     ("a [S1][S2", "a[S2"),
+    ("- **$1,000,000** [S1]\n- $2,500 [S2]", "- **$1,000,000**\n- $2,500"),
+    ("1. limit [S1]\n2. deductible [S2]\n", "1. limit\n2. deductible\n"),
 ])
 def test_markers_and_the_spaces_before_them_vanish_at_every_split(text, expected):
     for chunks in chunkings(text):
