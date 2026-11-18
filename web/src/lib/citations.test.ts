@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
-import { remarkCitations } from "./citations.ts";
+import { ANSWER_PLUGINS, remarkCitations } from "./citations.ts";
 
 function tree(markdown: string, rehype = false): unknown {
   const processor = rehype
@@ -85,5 +85,18 @@ test("a marker at the very start of a paragraph is a chip", () => {
   assert.deepEqual(tree("[1] The policy period is one year."), {
     type: "root",
     children: [{ type: "paragraph", children: [chip(1), text(" The policy period is one year.")] }],
+  });
+});
+
+test("an answer written one item per line keeps its line breaks, each line ending in its chip", () => {
+  const processor = unified().use(remarkParse).use(ANSWER_PLUGINS);
+  const out = JSON.parse(JSON.stringify(processor.runSync(processor.parse("Aggregate: $3,000,000. [1]\nDeductible: $5,000. [2]")),
+    (key, value) => (key === "position" ? undefined : value)));
+  assert.deepEqual(out, {
+    type: "root",
+    children: [{
+      type: "paragraph",
+      children: [text("Aggregate: $3,000,000."), chip(1), { type: "break" }, text("Deductible: $5,000."), chip(2)],
+    }],
   });
 });

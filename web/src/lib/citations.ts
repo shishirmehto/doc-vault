@@ -2,6 +2,7 @@
 // <button data-ref="n">. Markdown leaves "[1]" and "[1][2]" as text because an answer defines no link labels.
 
 import type { Node, Parent, Root, RootContent, Text } from "mdast";
+import remarkBreaks from "remark-breaks";
 
 export interface Cite extends Node {
   type: "cite";
@@ -14,6 +15,10 @@ declare module "mdast" {
 }
 
 const MARKER = /\[(\d+)\]/g;
+
+/** The remark plugins an answer is rendered with. remark-breaks keeps a single newline as a line break, as answers
+ * written before Markdown was allowed put one item per line. */
+export const ANSWER_PLUGINS = [remarkBreaks, remarkCitations];
 
 export function remarkCitations() {
   return (tree: Root) => split(tree);

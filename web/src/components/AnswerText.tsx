@@ -1,14 +1,13 @@
 import { createContext, useContext } from "react";
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
 import type { Citation } from "@/api/domain";
-import { remarkCitations } from "@/lib/citations";
+import { ANSWER_PLUGINS } from "@/lib/citations";
 
 type Cite = { citations: readonly Citation[]; active: number | null; onCite(citation: Citation): void };
 
 // The chip reads its citation from context, so COMPONENTS stays one object: a button component made per render
 // would be a new component type each time, and React would remount the chip that was just clicked and drop its focus.
 const Cited = createContext<Cite | null>(null);
-const PLUGINS = [remarkCitations];
 // An image has no children for unwrapDisallowed to keep, so it is allowed and drawn as its alt text, never an <img>.
 const ALLOWED = ["p", "ul", "ol", "li", "strong", "em", "br", "button", "img"];
 const COMPONENTS: Components = { button: Chip, img: ({ alt }) => alt ?? null };
@@ -21,7 +20,7 @@ const COMPONENTS: Components = { button: Chip, img: ({ alt }) => alt ?? null };
 export function AnswerText({ text, cite }: { text: string; cite?: Cite }) {
   return (
     <Cited value={cite ?? null}>
-      <Markdown remarkPlugins={PLUGINS} allowedElements={ALLOWED} unwrapDisallowed components={COMPONENTS}>
+      <Markdown remarkPlugins={ANSWER_PLUGINS} allowedElements={ALLOWED} unwrapDisallowed components={COMPONENTS}>
         {text}
       </Markdown>
     </Cited>
