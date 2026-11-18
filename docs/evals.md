@@ -256,6 +256,7 @@ Three more changes were tested at half weight, and one was not built. The first 
 - The full-text weight was chosen, and the chunk size kept, on the benchmark's 53 questions, so its `703cca0` numbers are in-sample.
 - The retrieval benchmark checks that a passage on an expected page reaches the answer step, not that an answer uses it.
 - The answer-text check is a string check. It confirms figures and catches a forbidden name, but it cannot judge a yes or no, or tell an answer that corrects a false premise from one that accepts it.
+- The answer cases are 60 questions on three short samples: 44 in the main set, 10 held out and 6 in the page set. On long documents, the current prompt was checked on 10 live handbook questions, and the 91 real-document asks ran on `answer-v2`.
 - Every number comes from one run. Four runs on 2026-11-18 moved two turns, so a difference of one or two facts between two runs is within the noise.
 
 ## Full output of the latest run
