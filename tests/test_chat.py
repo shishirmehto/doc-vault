@@ -341,6 +341,29 @@ def test_ground_leaves_a_sentence_whose_own_quote_was_not_found_without_a_number
     assert answer.text == "The aggregate is $3,000,000 [1]. Medical expense is $25,000."
 
 
+
+def test_ground_matches_each_marker_to_the_quote_that_shares_its_figures_whatever_the_evidence_order():
+    text = "General Aggregate Limit $2,000,000\nProperty Damage Deductible $5,000"
+    limits_page = source("S1", QUOTE_DOC, text, PageMap(((0, 2),)), chunk=33)
+
+    answer = chat.ground(draft("The aggregate is $2,000,000 [S1]. The deductible is $5,000 [S1].",
+                               ("S1", "Property Damage Deductible $5,000"), ("S1", "General Aggregate Limit $2,000,000")),
+                         [limits_page])
+
+    assert answer.text == "The aggregate is $2,000,000 [2]. The deductible is $5,000 [1]."
+
+
+def test_ground_gives_a_sentence_every_number_of_its_source_when_no_quote_matches_it_better():
+    text = "General Aggregate Limit $2,000,000\nProperty Damage Deductible $5,000"
+    limits_page = source("S1", QUOTE_DOC, text, PageMap(((0, 2),)), chunk=34)
+
+    answer = chat.ground(draft("Both apply to this policy [S1]. Neither is waived [S1].",
+                               ("S1", "General Aggregate Limit $2,000,000"), ("S1", "Property Damage Deductible $5,000")),
+                         [limits_page])
+
+    assert answer.text == "Both apply to this policy [1][2]. Neither is waived [1][2]."
+
+
 def test_ground_refuses_a_declined_draft_and_a_draft_with_nothing_verified():
     declined = chat.ground(draft("The documents do not mention flood cover [S1].", supported=False), limits())
     unverified = chat.ground(draft("The limit is one million [S1].", ("S1", "a limit of one million dollars")),

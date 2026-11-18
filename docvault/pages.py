@@ -9,6 +9,7 @@ insights step and chat all ask this module; none of them does offset math.
 from __future__ import annotations
 
 import codecs
+import os
 import re
 import zipfile
 from bisect import bisect_left, bisect_right
@@ -40,14 +41,15 @@ _TEXT_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0e-\x1f]")
 def sniff_kind(path: Path) -> DocKind:
     """Decide the format from the stored bytes, not the extension or Content-Type.
 
-    b"%PDF-" in the first 1,024 bytes, where PDF readers look for it -> PDF. A
+    b"%PDF-" at the start, or in the first 1,024 bytes (where PDF readers look
+    for it) of a file whose last 1,024 bytes hold b"%%EOF" -> PDF. A
     zip that contains word/document.xml -> DOCX. Text that decodes (see
     _decode) with no control characters -> TXT. Anything else raises
     VaultError(UNSUPPORTED_TYPE) naming what was detected.
     """
     with path.open("rb") as f:
         head = f.read(SNIFF_BYTES)
-    if b"%PDF-" in head[:1024]:
+    if head.startswith(b"%PDF-") or (b"%PDF-" in head[:1024] and b"%%EOF" in _tail(path, 1024)):
         return DocKind.PDF
     if head.startswith(b"PK\x03\x04"):
         if _is_docx(path):
@@ -59,6 +61,12 @@ def sniff_kind(path: Path) -> DocKind:
     if not _TEXT_CONTROL_CHARS.search(_decode(head)):
         return DocKind.TXT
     raise _unsupported("a binary file of an unknown type")
+
+
+def _tail(path: Path, size: int) -> bytes:
+    with path.open("rb") as f:
+        f.seek(max(0, f.seek(0, os.SEEK_END) - size))
+        return f.read()
 
 
 def _is_docx(path: Path) -> bool:
@@ -74,19 +82,22 @@ def _unsupported(detected: str) -> VaultError:
                       f"This looks like {detected}. Upload a PDF, a Word .docx file or a plain text file.")
 
 
-_UTF8_MULTIBYTE = re.compile(rb"[\xc2-\xf4][\x80-\xbf]")
+_UTF8_SEQUENCE = re.compile(rb"[\xc2-\xdf][\x80-\xbf]|[\xe0-\xef][\x80-\xbf]{2}|[\xf0-\xf4][\x80-\xbf]{3}")
 
 
 def _decode(raw: bytes) -> str:
-    """UTF-16 when it starts with its byte-order mark, then UTF-8. Bytes that are not valid UTF-8 are read
-    as cp1252, unless they hold UTF-8 sequences: then a stray byte becomes U+FFFD and the rest stays UTF-8."""
+    """UTF-16 when it starts with its byte-order mark, then UTF-8. Bytes that are not valid UTF-8 stay UTF-8,
+    each bad byte a U+FFFD, when complete UTF-8 sequences outnumber the bad bytes, and are read as cp1252
+    otherwise. In cp1252 an accented letter before a curly quote starts a UTF-8 sequence but rarely
+    completes one."""
     if raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
         return raw.decode("utf-16", errors="replace")
     try:
         return raw.decode("utf-8-sig")
     except UnicodeDecodeError:
-        if _UTF8_MULTIBYTE.search(raw):
-            return raw.decode("utf-8-sig", errors="replace")
+        text = raw.decode("utf-8-sig", errors="replace")
+        if len(_UTF8_SEQUENCE.findall(raw)) > text.count("\ufffd"):
+            return text
         return raw.decode("cp1252", errors="replace")
 
 
@@ -122,11 +133,14 @@ def _check_page_count(count: int, max_pages: int) -> None:
 
 
 def _check_size(doc: ExtractedText, max_pages: int) -> None:
-    """DOCX and TXT have no pages, so their limit is the same count of SYNTHETIC sections, told in characters."""
-    if doc.basis is PageBasis.PHYSICAL or len(doc.pages) <= max_pages:
+    """DOCX and TXT have no pages, so their limit is the characters of max_pages full SYNTHETIC sections.
+    Sections end at paragraph breaks, so a text under that limit can still have more than max_pages of them."""
+    if doc.basis is PageBasis.PHYSICAL:
         _check_page_count(len(doc.pages), max_pages)
         return
     chars = sum(len(page.text) for page in doc.pages)
+    if chars <= max_pages * SYNTHETIC_PAGE_CHARS:
+        return
     raise VaultError(ErrorCode.TOO_MANY_PAGES,
                      f"The text is {chars:,} characters long, more than one file can hold "
                      f"(about {max_pages * SYNTHETIC_PAGE_CHARS:,}). Split it and upload the parts.")
@@ -215,8 +229,10 @@ def _extract_docx(path: Path, max_pages: int) -> ExtractedText:
 def _table_lines(table: Table) -> list[str]:
     """One line per row, cells joined by TABLE_CELL. row.cells repeats a horizontally merged cell once per
     grid column, so a cell that is the same element as the one before it is skipped. A table nested in a
-    cell adds its own lines after its row."""
+    cell adds its own lines after the first row that holds the cell, so a vertically merged cell, which
+    every row it spans repeats, adds them once."""
     lines: list[str] = []
+    nested_read: set[object] = set()
     for row in table.rows:
         cells: list[str] = []
         nested: list[str] = []
@@ -228,9 +244,11 @@ def _table_lines(table: Table) -> list[str]:
             texts: list[str] = []
             for inner in cell.iter_inner_content():
                 if isinstance(inner, Table):
-                    nested += _table_lines(inner)
+                    if cell._tc not in nested_read:
+                        nested += _table_lines(inner)
                 else:
                     texts.append(inner.text)
+            nested_read.add(cell._tc)
             cells.append(_tidy("\n".join(texts)))
         lines.append(TABLE_CELL.join(cells))
         lines += nested

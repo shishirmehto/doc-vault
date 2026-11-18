@@ -281,6 +281,20 @@ def test_utf8_text_with_one_stray_byte_keeps_its_utf8_characters(tmp_path):
         "Prämie: 1.000 € � Selbstbehalt: 250 €")
 
 
+
+def test_cp1252_text_with_an_accent_before_a_curly_quote_reads_as_cp1252(tmp_path):
+    path = tmp_path / "avenant.txt"
+    path.write_bytes("Le «contrat» dit “Résilié”. Prime réglée en été.".encode("cp1252"))
+    assert pages.extract(pages.sniff_kind(path), path, max_pages=10).pages[0].text == (
+        "Le «contrat» dit “Résilié”. Prime réglée en été.")
+
+
+def test_a_text_file_that_mentions_the_pdf_header_is_text(tmp_path):
+    path = tmp_path / "formats.txt"
+    path.write_text("Notes on file formats.\nA file without a %PDF-1.4 header is not a PDF.\n")
+    assert pages.sniff_kind(path) is DocKind.TXT
+
+
 def test_text_file_becomes_sections_of_at_most_3000_characters(tmp_path):
     paragraphs = [f"Paragraph {n}. " + "word " * 180 for n in range(1, 8)]
     path = tmp_path / "notes.txt"
@@ -335,6 +349,24 @@ def test_a_docx_table_reads_a_merged_cell_once_and_keeps_a_table_nested_in_a_cel
         "Schedule\nGeneral Aggregate | $2,000,000\nDeductible | per claim | $2,500\nWaiting period | 30 days")
 
 
+def test_a_table_nested_in_a_vertically_merged_cell_is_read_once(tmp_path):
+    from docx import Document
+
+    word = Document()
+    table = word.add_table(rows=3, cols=2)
+    coverage = table.cell(0, 0).merge(table.cell(2, 0))
+    coverage.text = "Coverage A"
+    nested = coverage.add_table(rows=1, cols=2)
+    nested.cell(0, 0).text, nested.cell(0, 1).text = "Sublimit", "$50,000"
+    for row, limit in enumerate(["$1,000,000", "$2,000,000", "$3,000,000"]):
+        table.cell(row, 1).text = limit
+    path = tmp_path / "coverage.docx"
+    word.save(str(path))
+
+    assert pages.extract(DocKind.DOCX, path, max_pages=10).pages[0].text == (
+        "Coverage A | $1,000,000\nSublimit | $50,000\nCoverage A | $2,000,000\nCoverage A | $3,000,000")
+
+
 def test_a_text_file_over_the_limit_is_measured_in_characters_not_pages(tmp_path):
     path = tmp_path / "long.txt"
     path.write_text("\n\n".join("Paragraph. " + "word " * 500 for _ in range(4)))
@@ -343,3 +375,10 @@ def test_a_text_file_over_the_limit_is_measured_in_characters_not_pages(tmp_path
     assert raised.value.failure == Failure(
         ErrorCode.TOO_MANY_PAGES, "The text is 10,040 characters long, more than one file can hold (about 9,000). "
         "Split it and upload the parts.", retryable=False)
+
+
+def test_a_text_file_under_the_character_limit_is_kept_however_its_paragraphs_fall_into_sections(tmp_path):
+    path = tmp_path / "short-paragraphs.txt"
+    path.write_text("\n\n".join("x" * 1600 for _ in range(4)))
+    doc = pages.extract(DocKind.TXT, path, max_pages=3)
+    assert [len(page.text) for page in doc.pages] == [1600, 1600, 1600, 1600]
