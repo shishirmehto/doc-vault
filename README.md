@@ -32,9 +32,9 @@ The required backend was built first, in this order: upload and crash-safe index
 You need Docker.
 
 ```bash
-cp .env.example .env      # then set OPENAI_API_KEY in .env
+cp .env.example .env      # set OPENAI_API_KEY in .env for real answers
 docker compose up --build -d
-curl localhost:8000/health
+curl --retry 10 --retry-all-errors --retry-delay 1 localhost:8000/health   # retries while the API starts
 ```
 
 `GET /health` returns `"ai_mode": "live"` when `OPENAI_API_KEY` is set. With no key the stack still runs, on a deterministic fake provider, and `/health` returns `"ai_mode": "fake"`. The fake provider is for tests and offline runs, so judge answer quality with a key.
@@ -159,17 +159,18 @@ Retrieval is one SQL statement, `chat.EXACT_SQL`, that ranks the chat's chunks b
 
 ## Test it
 
-You need [uv](https://docs.astral.sh/uv/). The tests use the compose Postgres on host port 54329, in their own database (`vault_test`). They call no model provider.
+You need [uv](https://docs.astral.sh/uv/) for the backend and Node 22.18 or later for the web UI. The backend tests use the compose Postgres on host port 54329, in their own database (`vault_test`). No test calls a model provider.
 
 ```bash
 docker compose up -d db
 uv run pytest
 uv run ruff check
+(cd web && npm ci && npm test && npm run lint && npm run typecheck)
 ```
 
-`TEST_DATABASE_URL` points the tests at another database. The eval test also creates `<that name>_evals`.
+If you started the stack with another `DB_PORT`, point the tests at it with `TEST_DATABASE_URL=postgresql://vault:vault@localhost:<DB_PORT>/vault_test`. The eval test also creates `<that name>_evals`.
 
-`web/README.md` lists the web UI's own test commands.
+`web/README.md` describes the web UI's scripts.
 
 ## Known limits
 

@@ -55,7 +55,7 @@ The rewrite also compresses responses, and a compressed `text/event-stream` arri
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Unit tests on Node's built-in runner. Node strips the TypeScript types |
 | `npm run gen:api` | Regenerates `src/api/schema.d.ts` from the running API's `/openapi.json` |
-| `npm run check:api` | Runs `gen:api`, then fails if `schema.d.ts` changed |
+| `npm run check:api` | Runs `gen:api` against the running API, then fails if `schema.d.ts` changed |
 
 ## Where things live
 

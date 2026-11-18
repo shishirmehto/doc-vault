@@ -31,8 +31,14 @@ TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "postgresql://vault:vaul
 
 @pytest.fixture(scope="session")
 def database_url() -> str:
-    name = conninfo_to_dict(TEST_DATABASE_URL)["dbname"]
-    with psycopg.connect(make_conninfo(TEST_DATABASE_URL, dbname="postgres"), autocommit=True) as admin:
+    info = conninfo_to_dict(TEST_DATABASE_URL)
+    name = info["dbname"]
+    try:
+        admin = psycopg.connect(make_conninfo(TEST_DATABASE_URL, dbname="postgres"), autocommit=True)
+    except psycopg.OperationalError:
+        pytest.exit(f"Cannot reach the test Postgres at {info.get('host')}:{info.get('port')}. "
+                    "Start it with `docker compose up -d db`, or set TEST_DATABASE_URL.", returncode=1)
+    with admin:
         if not admin.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone():
             admin.execute(f'CREATE DATABASE "{name}"')
     dbmod.migrate(TEST_DATABASE_URL)
