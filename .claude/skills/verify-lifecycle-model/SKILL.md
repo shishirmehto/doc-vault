@@ -40,7 +40,9 @@ Run `git diff <sync commit> -- docvault/documents.py docvault/db.py docvault/tas
 
 Each model step is one atomic step in the code: one SQL statement, one transaction, or one lock call. `StartParse` and `ResumeEmbed` fold the row read into the compare-and-swap. That is sound because `parsed` changes only under the lease and the compare-and-swap re-checks `status`.
 
-**Sync commit:** `6d081bd`. The model was last confirmed against the code at this commit. Move it forward only after you have read every changed covered function and confirmed the model still describes it.
+**Sync commit:** `1c003f9`. The model was last confirmed against the code at this commit. Move it forward only after you have read every changed covered function and confirmed the model still describes it.
+
+It moved from `6d081bd` with `1c003f9`. Between the two, `_index` queues `jobs.analyze` when it moves a parsed document to EMBEDDING, so a re-embed after a provider change also rewrites insights by another model; the transitions are unchanged, and insights are not modelled. The `reconcile` docstring says so. `schema.sql` gained indexes and lost one-off migrations, none on `status`. `check.py` and `--mutants` both passed at `1c003f9`.
 
 It moved from `595bc6c` with the review fixes (`01dae1a`, `6d081bd`). Between the two, `documents.py` changed only `upload`, `_insert_version` and `_INSERT_VERSION_SQL`: an upload that loses every version race raises `VERSION_CONFLICT` and deletes its blob, and `replaces` is read inside the insert statement, so a target deleted during the upload is `DOCUMENT_NOT_FOUND`. Every covered symbol has the same AST as at `595bc6c`, `db.py`, `tasks.py` and `schema.sql` did not change, and `check.py` and `--mutants` both passed at both commits.
 
