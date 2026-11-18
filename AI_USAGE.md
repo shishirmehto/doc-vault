@@ -128,7 +128,6 @@ The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and
 - Adding all the bonus features, and the rule that everything in the UI must be visible: nothing clipped, hidden, or reachable only by URL.
 - No paid model calls until a key was provided. Everything ran on the fake provider until then.
 - Testing on real insurance documents as well as the generated samples. That run found the three parsing bugs above.
-- Reverting a late change that bound the compose ports to localhost only, because the case study does not ask for it.
 - Adding Up and Down recall of earlier questions, and answers that show in every open tab of a chat, after testing the UI in two tabs.
 - Reporting answer quality on the OpenAI models only. The fake provider's numbers say nothing about answers, so the docs leave them out.
 
