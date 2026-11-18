@@ -100,6 +100,7 @@ DATABASE_URL=postgresql://vault:vault@localhost:54329/vault uv run python -m doc
 - `--calibrate` prints, instead of the results, every turn's standalone query, best vector similarity and whether one chunk matched every query term, then the gate threshold that fits the set best.
 - The eval needs the dev dependencies (`pyyaml`), so it runs on the host with `uv run`. The Docker image installs `--no-dev` and holds neither [`evals/`](../evals/) nor [`samples/`](../samples/).
 - Without a key the eval runs on the fake provider. That run says nothing about answer quality. [`tests/test_evals.py`](../tests/test_evals.py) runs it in `<test database>_evals` and fails when a code change moves its numbers.
+- If you started the stack with another `DB_PORT`, point the tests at it with `TEST_DATABASE_URL=postgresql://vault:vault@localhost:<DB_PORT>/vault_test`. The eval test also creates `<that name>_evals`, and the retrieval eval test `<that name>_retrieval`.
 
 ## Calibrate the OpenAI gate
 
@@ -135,6 +136,8 @@ Each answerable turn names one or more expected facts. A comparison names one fa
 | Cost and latency | `metrics.processing_stats`, the reader behind `GET /metrics/processing`: `llm_calls` grouped by purpose and model (calls, failed calls, tokens, cost, p95 `latency_ms`), and p95 turn latency over `chat_turns.finished_at - started_at`. Every row in the eval database belongs to the run. |
 
 ## The case set
+
+`samples/` holds three fictitious documents for the same insured: a seven-page commercial general liability policy (PDF), a three-page renewal quote with changed figures (PDF), and a short endorsement (DOCX). [`samples/facts.yaml`](../samples/facts.yaml) lists the facts planted in them, each with its document, page and exact text. The tests and evals read that file as their expected values. To regenerate the samples, run `uv run python scripts/make_samples.py`.
 
 [`evals/cases.yaml`](../evals/cases.yaml) holds 36 cases with 44 turns: 28 answerable turns with 34 expected facts, and 16 out-of-scope turns. `evals.load_cases` checks it against [`samples/facts.yaml`](../samples/facts.yaml) before a run. Every fact id must exist and sit in the chat's scope. Every fact must be asked or listed under `not_asked` with a reason. Every `absent_topics` entry must appear in an out-of-scope question.
 

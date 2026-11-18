@@ -47,7 +47,7 @@ curl -s "$API/documents?latest=true&limit=100"
 curl -s $API/documents/$DOC/versions
 ```
 
-`GET /documents/{id}` returns one document. `status` is `queued`, `parsing`, `embedding`, `ready` or `failed`. `pages` is the stored page count once parsing has finished, in every status. A failed document has `error` and `failed_stage` (`parse` or `embed`). A file that cannot be parsed fails at `parse` with `unreadable_file`, `encrypted_pdf` (a PDF that needs a password to open), `no_extractable_text` (no page has text, as in a scanned PDF) or `too_many_pages` (more than 2,000 pages).
+`GET /documents/{id}` returns one document. `status` is `queued`, `parsing`, `embedding`, `ready` or `failed`. `pages` is the stored page count once parsing has finished, in every status. A failed document has `error` and `failed_stage` (`parse` or `embed`). A file that cannot be parsed fails at `parse` with `unreadable_file` (a Word file that would unpack to more than 200 MB gets it before it is opened), `encrypted_pdf` (a PDF that needs a password to open), `no_extractable_text` (no page has text, as in a scanned PDF) or `too_many_pages` (more than 2,000 pages).
 
 ```bash
 curl -s $API/documents/$DOC
