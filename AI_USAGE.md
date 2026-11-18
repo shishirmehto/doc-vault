@@ -106,6 +106,9 @@ The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and
 | The evals page opened with the fake provider's full results, so its $0 cost rows read as the main result | My reading of the published page. The eval docs now report the OpenAI run only | `7e598b1`, `53c4250` |
 | The docs said the OpenAI gate refuses off-topic questions, but on the eval set it let all 44 questions through, and the answer step declined the out-of-scope ones | An agent that re-read the live run's output while the evals page was rewritten | `7e598b1` |
 | The gate refused "What is this about?" on a 922-page handbook, because a question about a whole document scores as low as an off-topic one | My own test in the browser. When nothing matches, the answer step now gets each document's opening passage | `f9f69eb` |
+| To show one citation number per sentence, a change paired a source's markers with its quotes by position, but the model lists quotes in any order, so a sentence could cite another sentence's quote | An independent review agent reproduced it. Its second pass broke the first fix, matching by shared words, with common words and with two sentences that pick one quote. A sentence now takes a single number only when the pairing is unambiguous | `613dfb5`, `a6e39d7` |
+| A change to text decoding read cp1252 text with an accent next to a curly quote as broken UTF-8, so French accents became U+FFFD | The same review agent, with a reproduction | `613dfb5` |
+| The README gave the real-document scores after review only, while the run's own report treats the strict scores as the headline | A grader agent that scored the repo against the case study | `bbe6354` |
 
 ## AI inside the product
 
