@@ -316,74 +316,23 @@ def test_ground_rewrites_a_marker_naming_two_sources_and_cites_a_repeated_quote_
     assert [(c.filename, c.quote) for c in answer.citations] == [(POLICY, limit), (QUOTE, limit)]
 
 
-def test_ground_gives_each_marker_of_a_source_the_number_of_the_quote_written_for_it():
-    text = "Changes at renewal\nGeneral Aggregate Limit $3,000,000\nMedical Expense Limit $10,000\nSilica exclusion added."
-    changes = source("S1", QUOTE_DOC, text, PageMap(((0, 2),)), chunk=31)
+def test_ground_gives_every_sentence_each_verified_quote_of_its_source_whatever_the_order_or_wording():
+    text = "Item 1. General Aggregate Limit $2,000,000\nItem 2. Deductible $5,000 per claim"
+    limits_page = source("S1", POLICY_DOC, text, PageMap(((0, 2),)), chunk=33)
 
-    answer = chat.ground(draft("The aggregate rises to $3,000,000 [S1]. Medical expense rises to $10,000 [S1]. "
-                               "A silica exclusion is added [S1]. So the aggregate is $3,000,000 [S1].",
-                               ("S1", "General Aggregate Limit $3,000,000"), ("S1", "Medical Expense Limit $10,000"),
-                               ("S1", "Silica exclusion added."), ("S1", "General Aggregate Limit $3,000,000")),
-                         [changes])
-
-    assert answer.text == ("The aggregate rises to $3,000,000 [1]. Medical expense rises to $10,000 [2]. "
-                           "A silica exclusion is added [3]. So the aggregate is $3,000,000 [1].")
-
-
-def test_ground_leaves_a_sentence_whose_own_quote_was_not_found_without_a_number():
-    text = "General Aggregate Limit $3,000,000\nMedical Expense Limit $10,000"
-    limits_page = source("S1", QUOTE_DOC, text, PageMap(((0, 2),)), chunk=32)
-
-    answer = chat.ground(draft("The aggregate is $3,000,000 [S1]. Medical expense is $25,000 [S1].",
-                               ("S1", "General Aggregate Limit $3,000,000"), ("S1", "Medical Expense Limit $25,000")),
+    answer = chat.ground(draft("The aggregate is $2,000,000, separate from the $5,000 deductible per claim [S1]. "
+                               "The deductible is $5,000 per claim [S1]. The aggregate is $2m [S1].",
+                               ("S1", "Item 2. Deductible $5,000 per claim"),
+                               ("S1", "Item 1. General Aggregate Limit $2,000,000"),
+                               ("S1", "Item 1. General Aggregate Limit $2,000,000"),
+                               ("S1", "Deductible $25,000")),
                          [limits_page])
 
-    assert answer.text == "The aggregate is $3,000,000 [1]. Medical expense is $25,000."
+    assert answer.text == ("The aggregate is $2,000,000, separate from the $5,000 deductible per claim [1][2]. "
+                           "The deductible is $5,000 per claim [1][2]. The aggregate is $2m [1][2].")
+    assert [citation.quote for citation in answer.citations] == [
+        "Item 2. Deductible $5,000 per claim", "Item 1. General Aggregate Limit $2,000,000"]
 
-
-
-def test_ground_matches_each_marker_to_the_quote_that_shares_its_figures_whatever_the_evidence_order():
-    text = "General Aggregate Limit $2,000,000\nProperty Damage Deductible $5,000"
-    limits_page = source("S1", QUOTE_DOC, text, PageMap(((0, 2),)), chunk=33)
-
-    answer = chat.ground(draft("The aggregate is $2,000,000 [S1]. The deductible is $5,000 [S1].",
-                               ("S1", "Property Damage Deductible $5,000"), ("S1", "General Aggregate Limit $2,000,000")),
-                         [limits_page])
-
-    assert answer.text == "The aggregate is $2,000,000 [2]. The deductible is $5,000 [1]."
-
-
-def test_ground_gives_a_sentence_every_number_of_its_source_when_no_quote_matches_it_better():
-    text = "General Aggregate Limit $2,000,000\nProperty Damage Deductible $5,000"
-    limits_page = source("S1", QUOTE_DOC, text, PageMap(((0, 2),)), chunk=34)
-
-    answer = chat.ground(draft("Both apply to this policy [S1]. Neither is waived [S1].",
-                               ("S1", "General Aggregate Limit $2,000,000"), ("S1", "Property Damage Deductible $5,000")),
-                         [limits_page])
-
-    assert answer.text == "Both apply to this policy [1][2]. Neither is waived [1][2]."
-
-
-
-def test_ground_cites_every_quote_of_a_source_when_two_sentences_would_take_the_same_one():
-    cover = source("S1", POLICY_DOC, "Water damage from a burst pipe is covered under the policy.\n"
-                                     "Mold remediation is excluded.", PageMap(((0, 4),)), chunk=35)
-    limits_page = source("S1", POLICY_DOC, "General Aggregate Limit $2,000,000\nEach Occurrence Limit $1,000,000",
-                         PageMap(((0, 2),)), chunk=36)
-
-    mold = chat.ground(draft("Water damage from a burst pipe is covered [S1]. "
-                             "Under the policy, mold remediation is not covered [S1].",
-                             ("S1", "Water damage from a burst pipe is covered under the policy."),
-                             ("S1", "Mold remediation is excluded.")), [cover])
-    limits = chat.ground(draft("The aggregate is $2 million, twice the $1,000,000 occurrence limit [S1]. "
-                               "Each occurrence is capped at $1,000,000 [S1].",
-                               ("S1", "General Aggregate Limit $2,000,000"), ("S1", "Each Occurrence Limit $1,000,000")),
-                         [limits_page])
-
-    assert mold.text == ("Water damage from a burst pipe is covered [1][2]. "
-                         "Under the policy, mold remediation is not covered [1][2].")
-    assert limits.text == ("The aggregate is $2 million, twice the $1,000,000 occurrence limit [1][2]. "
-                           "Each occurrence is capped at $1,000,000 [1][2].")
 
 def test_ground_refuses_a_declined_draft_and_a_draft_with_nothing_verified():
     declined = chat.ground(draft("The documents do not mention flood cover [S1].", supported=False), limits())

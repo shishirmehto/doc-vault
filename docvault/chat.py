@@ -69,7 +69,7 @@ MAX_SUGGESTION_CHARS = 160
 UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify an answer against their text, "
                    "so I am not giving one.")
 OPENING_DOCS = 3            # a chat of up to this many documents sends each one's opening passage with its k sources
-ANSWER_CACHE_FORMAT = 7     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
+ANSWER_CACHE_FORMAT = 8     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
 
 
@@ -560,86 +560,36 @@ def ground(draft: AnswerDraft, sources: Sequence[Source]) -> Answer:
     dropped. A kept citation quotes the source span, not the model's copy, and
     takes the page where that span starts inside the chunk, so a chunk spanning
     pages 11-12 cites 12 when the quoted words are on 12. Citations are numbered
-    1..n in evidence order, a repeated quote keeps its first number, and each
-    [S#] marker becomes numbers as _rewrite_markers says. Nothing verified ->
-    UNVERIFIED.
+    1..n in evidence order, and each [S#] marker becomes the numbers of its
+    label's citations. Nothing verified -> UNVERIFIED.
     """
     if not draft.supported:
         return NotFound(TurnOutcome.MODEL_DECLINED, _rewrite_markers(draft.answer, {}))
     by_label = {source.label: source for source in sources}
     citations: list[Citation] = []
-    quotes: dict[str, list[tuple[int | None, str]]] = {}   # per label: each evidence item's number (None: not found), quote
-    seen: dict[tuple[str, int, int], int] = {}
+    refs: dict[str, list[int]] = {}
+    seen: set[tuple[str, int, int]] = set()
     for evidence in draft.evidence:
         source = by_label.get(evidence.source)
         span = None if source is None else pages.locate_quote(evidence.quote, source.text)
-        if span is not None and (evidence.source, *span) not in seen:
-            start, end = span
-            citations.append(Citation(source.doc.id, source.doc.filename, source.page_map.page_at(start),
-                                      source.doc.page_basis, pages.collapse_whitespace(source.text[start:end]),
-                                      source.chunk_id))
-            seen[(evidence.source, *span)] = len(citations)
-        quotes.setdefault(evidence.source, []).append(
-            (None if span is None else seen[(evidence.source, *span)], evidence.quote))
+        if span is None or (evidence.source, *span) in seen:
+            continue
+        seen.add((evidence.source, *span))
+        start, end = span
+        citations.append(Citation(source.doc.id, source.doc.filename, source.page_map.page_at(start),
+                                  source.doc.page_basis, pages.collapse_whitespace(source.text[start:end]),
+                                  source.chunk_id))
+        refs.setdefault(evidence.source, []).append(len(citations))
     if not citations:
         return NotFound(TurnOutcome.UNVERIFIED, UNVERIFIED_TEXT)
-    return Answered(_rewrite_markers(draft.answer, quotes), (citations[0], *citations[1:]))
+    return Answered(_rewrite_markers(draft.answer, refs), (citations[0], *citations[1:]))
 
 
-_FIGURE = re.compile(r"\d(?:[\d,./]*\d)?")
-_TERM = re.compile(r"[a-z]{3,}")
-
-
-def _rewrite_markers(text: str, quotes: Mapping[str, Sequence[tuple[int | None, str]]]) -> str:
-    """Replace each marker run with citation numbers, such as "[1][2]", as _pair_markers decides per label.
-
-    A run left with no number is removed with the spaces before it, so "limit [S9]." reads "limit." rather
-    than "limit .".
-    """
-    runs = list(_MARKERS.finditer(text))
-    sentences: dict[str, list[str]] = {}
-    for start, run in zip([0, *(run.end() for run in runs)], runs, strict=False):
-        for label in _LABEL.findall(run["run"]):
-            sentences.setdefault(label, []).append(text[start:run.start()])
-    refs = {label: iter(_pair_markers(said, quotes.get(label, ()))) for label, said in sentences.items()}
-
+def _rewrite_markers(text: str, refs: Mapping[str, Sequence[int]]) -> str:
+    """Each marker run becomes "[1][2]" for its labels' verified citations. A run with none is removed with the
+    spaces before it, so "limit [S9]." reads "limit." rather than "limit ."."""
     def replace(match: re.Match[str]) -> str:
-        cited = dict.fromkeys(ref for label in _LABEL.findall(match["run"]) for ref in next(refs[label]))
+        cited = dict.fromkeys(ref for label in _LABEL.findall(match["run"]) for ref in refs.get(label, ()))
         return match["pad"] + "".join(f"[{ref}]" for ref in cited) if cited else ""
 
     return _MARKERS.sub(replace, text).strip()
-
-
-def _pair_markers(sentences: Sequence[str], items: Sequence[tuple[int | None, str]]) -> list[list[int]]:
-    """The citation numbers for each marker of one label, given the text before each marker.
-
-    The model lists evidence in any order, so a marker is matched to a quote by content, and only when the
-    match is unambiguous: as many markers as evidence items, each marker has one quote that shares the most
-    figures, then words, with its text, and those picks use every quote exactly once. Then each marker gets
-    its pick's number, or none when that quote was not found. Otherwise every marker gets all of the label's
-    found numbers, because citing a sentence too widely is safer than citing the wrong quote.
-    """
-    found = [number for number, _ in items if number is not None]
-    if len(sentences) == len(items):
-        picks = [_best_quote(sentence, items) for sentence in sentences]
-        if Counter(picks) == Counter(number for number, _ in items):
-            return [[] if pick is None else [pick] for pick in picks]
-    return [found] * len(sentences)
-
-
-_NO_PICK = -1
-
-
-def _best_quote(sentence: str, items: Sequence[tuple[int | None, str]]) -> int | None:
-    """The number of the one quote that shares the most with the sentence (None: not found), or _NO_PICK."""
-    scored = [(_shared(sentence, quote), number) for number, quote in items]
-    best = max(score for score, _ in scored)
-    winners = {number for score, number in scored if score == best}
-    return winners.pop() if best > (0, 0) and len(winners) == 1 else _NO_PICK
-
-
-def _shared(sentence: str, quote: str) -> tuple[int, int]:
-    """How many distinct figures, then words of three or more letters, the sentence and the quote share."""
-    sentence, quote = sentence.lower(), quote.lower()
-    return (len(set(_FIGURE.findall(sentence)) & set(_FIGURE.findall(quote))),
-            len(set(_TERM.findall(sentence)) & set(_TERM.findall(quote))))

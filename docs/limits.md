@@ -13,7 +13,7 @@ The README lists the main ones. This is the full list, by area.
 - In chat, "Summarize this document" answers from the opening passage and the 16 passages nearest the question. On a 922-page handbook that covers a few sections, and the answer says so. `POST /documents/{id}/summaries` reads the first 240,000 characters instead.
 - With a key, a question that matches nothing still costs one answer call over the opening passages, about 1,200 input tokens and 3 to 4 s.
 - An answer is kept when at least one of its quotes is found. A sentence whose quote is not found stays in the answer text.
-- When the model quotes one source several times, a sentence cites only its own quote when every sentence has one clear best match, by shared figures and then words, and those matches use each quote once. A sentence whose own quote was not found then has no citation number. Otherwise each of those sentences cites every found quote from that source, because citing too widely is safer than citing the wrong quote.
+- A source marker shows the numbers of every quote found in that source. When one passage supports several sentences, each of them shows all of that passage's numbers, and a sentence whose own quote was not found still shows the others. The model does not say which quote belongs to which sentence, and matching them by shared figures or words cited the wrong quote in review, so the app cites too widely rather than wrongly.
 - A citation is checked only for its quote being in the source it names, not for the quote supporting the sentence.
 
 ## Insights
