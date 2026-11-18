@@ -69,7 +69,7 @@ MAX_SUGGESTION_CHARS = 160
 UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify an answer against their text, "
                    "so I am not giving one.")
 OPENING_DOCS = 3            # a chat of up to this many documents sends each one's opening passage with its k sources
-ANSWER_CACHE_FORMAT = 4     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
+ANSWER_CACHE_FORMAT = 5     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
 
 
@@ -101,8 +101,11 @@ def start(db: Db, document_ids: Sequence[DocumentId], *, title: str | None = Non
     with db.connection() as conn, conn.transaction():
         ready_documents(conn, wanted)
         chat_id = conn.execute("INSERT INTO chats (title) VALUES (%s) RETURNING id", (title,)).fetchone()["id"]
+        # Two versions of one file share its name, so each is named with its version, for the model and the user.
         conn.execute("INSERT INTO chat_documents (chat_id, document_id, filename)"
-                     " SELECT %s, id, filename FROM documents WHERE id = ANY(%s)", (chat_id, wanted))
+                     " SELECT %s, id, CASE WHEN count(*) OVER (PARTITION BY filename) > 1"
+                     "   THEN filename || ' (version ' || version || ')' ELSE filename END"
+                     " FROM documents WHERE id = ANY(%s)", (chat_id, wanted))
         return _row_to_chat(conn.execute(_CHAT_SQL + "WHERE c.id = %s GROUP BY c.id", (chat_id,)).fetchone())
 
 

@@ -276,3 +276,18 @@ def test_a_comparison_of_two_versions_names_each_version_and_marks_the_changed_f
     assert [(row["field"], [c["value"] for c in row["cells"]]) for row in body["rows"] if row["differs"]] == [
         ("Property Damage Deductible", ["$2,500 per occurrence", "$5,000 per occurrence"])]
     assert [d["version"] for d in older["documents"]] == [None, None]
+
+
+def test_a_chat_over_two_versions_of_one_file_names_each_version(client, ctx):
+    v1 = created(upload(ctx, TERMS.format("$2,500 per occurrence"), "terms.txt"))
+    v2 = created(upload(ctx, TERMS.format("$5,000 per occurrence"), "terms.txt"))
+    other = created(upload(ctx, "Broker notes. The client asked about flood cover.", "notes.txt"))
+    for doc in (v1, v2, other):
+        documents.run_index(ctx, doc.id)
+
+    chat = client.post("/chats", json={"document_ids": [str(v2.id), str(v1.id), str(other.id)]}).json()
+    turn = client.post(f"/chats/{chat['id']}/messages", json={"question": "What is the property damage deductible?"})
+
+    assert [d["filename"] for d in chat["documents"]] == ["notes.txt", "terms.txt (version 1)", "terms.txt (version 2)"]
+    assert {c["filename"] for c in turn.json()["citations"]} <= {"terms.txt (version 1)", "terms.txt (version 2)"}
+    assert turn.json()["citations"]
