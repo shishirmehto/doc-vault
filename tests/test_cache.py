@@ -26,7 +26,7 @@ from .test_ai import OWNER, ScriptedChat, gateway, rows
 from .test_ask_stream import LIMIT_QUESTION, events
 from .test_budget import NOW, capped, spent
 from .test_chat import ask, ledger, normalised, ready
-from .test_documents import FailingEmbedder, with_embedder
+from .test_documents import FailingEmbedder, RecordingEmbedder, with_embedder
 from .test_insights import post, with_chat
 from .test_versions import TERMS, created, upload
 
@@ -111,16 +111,6 @@ def float32(vector: list[float]) -> list[float]:
 
 def new_chat(client, *doc_ids) -> str:
     return client.post("/chats", json={"document_ids": [str(doc_id) for doc_id in doc_ids]}).json()["id"]
-
-
-class RecordingEmbedder(FakeEmbedder):
-    def __init__(self) -> None:
-        super().__init__()
-        self.batches: list[list[str]] = []
-
-    def embed(self, texts, *, timeout_s):
-        self.batches.append(list(texts))
-        return super().embed(texts, timeout_s=timeout_s)
 
 
 # ------------------------------------------------------------------ settings and the cache itself

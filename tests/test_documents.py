@@ -33,6 +33,7 @@ from docvault.fake_ai import FakeEmbedder
 
 from . import conftest
 from .conftest import SAMPLES, Crash, advisory_locks, scalar, step_rows
+from .test_pages import bookmarked_pdf
 
 POLICY = SAMPLES / conftest.POLICY
 QUOTE = SAMPLES / conftest.QUOTE
@@ -93,6 +94,36 @@ def test_upload_then_index_reaches_ready_with_every_chunk_embedded(ctx):
                               " FROM llm_calls").fetchall()
     assert ledger == [{"purpose": "embed_chunks", "provider": "fake", "document_id": doc.id, "ok": True,
                        "cost_usd": 0, "billed": True}] * 3   # 6 chunks in batches of 2
+
+
+class RecordingEmbedder(FakeEmbedder):
+    def __init__(self) -> None:
+        super().__init__()
+        self.batches: list[list[str]] = []
+
+    def embed(self, texts, *, timeout_s):
+        self.batches.append(list(texts))
+        return super().embed(texts, timeout_s=timeout_s)
+
+
+def test_parse_stores_the_outline_and_each_chunk_is_embedded_as_its_filename_and_text(ctx, tmp_path):
+    path = bookmarked_pdf(tmp_path, [["Contents of this manual."], ["Part 9: Options", "Option text one."],
+                                     ["903 Land Option", "Land text."]],
+                          [("Part 9: Options", 1, None), ("903 Land Option", 2, 0)])
+    embedder = RecordingEmbedder()
+    small = dataclasses.replace(with_embedder(ctx, embedder), settings=ctx.settings.model_copy(
+        update={"chunk_max_chars": 40, "chunk_overlap_chars": 0}))
+    doc_id = upload(small, path).document.id
+
+    documents.run_index(small, doc_id)
+
+    with ctx.db.connection() as conn:
+        outline = conn.execute("SELECT outline FROM documents WHERE id = %s", (doc_id,)).fetchone()["outline"]
+    assert outline == [{"title": "Part 9: Options", "level": 0, "page": 2},
+                       {"title": "903 Land Option", "level": 1, "page": 3}]
+    assert [text for batch in embedder.batches for text in batch] == [
+        "bookmarked.pdf\nContents of this manual.", "bookmarked.pdf\nPart 9: Options\nOption text one.",
+        "bookmarked.pdf\n903 Land Option\nLand text."]
 
 
 def test_same_bytes_twice_is_one_document(ctx):

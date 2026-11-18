@@ -275,9 +275,11 @@ def _parse(ctx: Ctx, conn: Connection, doc_id: DocumentId, kind: DocKind, sha: S
                         [(doc_id, page.number, page.text) for page in text.pages])
         cur.executemany("INSERT INTO chunks (document_id, ord, text, page_map) VALUES (%s, %s, %s, %s)",
                         [(doc_id, draft.ord, draft.text, Jsonb(draft.page_map.starts)) for draft in drafts])
-        cur.execute("UPDATE documents SET page_basis = %s, page_count = %s, chunk_count = %s, empty_pages = %s"
-                    " WHERE id = %s",
-                    (text.basis, len(text.pages), len(drafts), [p.number for p in text.pages if not p.text], doc_id))
+        cur.execute("UPDATE documents SET page_basis = %s, page_count = %s, chunk_count = %s, empty_pages = %s,"
+                    " outline = %s WHERE id = %s",
+                    (text.basis, len(text.pages), len(drafts), [p.number for p in text.pages if not p.text],
+                     Jsonb([{"title": entry.title, "level": entry.level, "page": entry.page} for entry in text.outline]),
+                     doc_id))
         transition(conn, doc_id, DocStatus.EMBEDDING)
 
 

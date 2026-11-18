@@ -288,9 +288,19 @@ class Page:
 
 
 @dataclass(frozen=True, slots=True)
+class OutlineEntry:
+    """A PDF bookmark or a Word heading. level 0 is the top; page is where the entry starts."""
+
+    title: str
+    level: int
+    page: int
+
+
+@dataclass(frozen=True, slots=True)
 class ExtractedText:
     basis: PageBasis
     pages: tuple[Page, ...]     # every page, numbered 1..n without gaps
+    outline: tuple[OutlineEntry, ...] = ()   # in document order; empty when the file has no bookmarks or headings
 
 
 @dataclass(frozen=True, slots=True)
@@ -336,6 +346,7 @@ class DocRef:
     filename: str
     page_basis: PageBasis
     page_count: int
+    outline: tuple[OutlineEntry, ...] = ()   # read only for chats; a document parsed before outlines existed has none
 
 
 @dataclass(frozen=True, slots=True)

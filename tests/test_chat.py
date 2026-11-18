@@ -11,7 +11,7 @@ import pytest
 
 from docvault import chat, pages, prompts
 from docvault.api import app
-from docvault.chat import Candidate, PageRequest
+from docvault.chat import Candidate, PageRequest, SectionRequest
 from docvault.domain import (
     Answered,
     ChunkId,
@@ -19,6 +19,7 @@ from docvault.domain import (
     DocRef,
     DocumentId,
     NotFound,
+    OutlineEntry,
     PageBasis,
     PageMap,
     Source,
@@ -27,10 +28,11 @@ from docvault.domain import (
 from docvault.fake_ai import FakeChat
 from docvault.prompts import AnswerDraft, EvidenceDraft
 
-from .conftest import FACTS, POLICY, QUOTE, SAMPLES, TRUTH, scalar
+from .conftest import ENDORSEMENT, FACTS, POLICY, QUOTE, SAMPLES, TRUTH, scalar
 from .test_ai import openai_chat, openai_client
 from .test_compare import completion
 from .test_insights import indexed, post, provider_down, with_chat
+from .test_pages import bookmarked_pdf
 
 
 def normalised(text: str) -> str:
@@ -465,25 +467,26 @@ def test_each_opening_passage_follows_the_k_sources_once_in_a_chat_of_up_to_thre
     ranked = [candidate(first, f"first {n}", 0.05 - n / 1000) for n in range(1, 4)]
     openings = [ranked[0], candidate(second, "second opening", 0.0), candidate(third, "third opening", 0.0)]
 
-    three = chat.select_sources(ranked, k=2, per_doc_min=2, ends=openings)
-    four = chat.select_sources(ranked, k=2, per_doc_min=2, ends=[*openings, candidate(fourth, "fourth opening", 0.0)])
+    three = chat.select_sources(ranked, k=2, per_doc_min=2, openings=openings)
+    four = chat.select_sources(ranked, k=2, per_doc_min=2,
+                               openings=[*openings, candidate(fourth, "fourth opening", 0.0)])
 
     assert [(s.label, s.text) for s in three] == [
         ("S1", "first 1"), ("S2", "first 2"), ("S3", "second opening"), ("S4", "third opening")]
     assert [s.text for s in four] == ["first 1", "first 2"]
 
 
-def test_page_passages_lead_and_only_a_chunk_they_hold_whole_is_not_sent_again():
+def test_page_passages_lead_within_k_and_only_a_chunk_they_hold_whole_is_not_sent_again():
     first, second = documents(2)
-    ranked = [candidate(first, f"first {n}", 0.05 - n / 1000) for n in range(1, 4)]
+    ranked = [candidate(first, f"first {n}", 0.05 - n / 1000) for n in range(1, 5)]
     cut = dataclasses.replace(ranked[0], text="first 1, cut to the page asked about")
-    ends = [candidate(second, "second opening", 0.0), candidate(second, "second closing", 0.0)]
+    openings = [ranked[1], candidate(second, "second opening", 0.0)]
 
-    sources = chat.select_sources(ranked, k=2, per_doc_min=2, on_pages=[cut, ranked[1]], ends=[ranked[1], *ends])
+    sources = chat.select_sources(ranked, k=4, per_doc_min=2, on_pages=[cut, ranked[1]], openings=openings)
 
     assert [(s.label, s.text) for s in sources] == [
         ("S1", "first 1, cut to the page asked about"), ("S2", "first 2"), ("S3", "first 1"), ("S4", "first 3"),
-        ("S5", "second opening"), ("S6", "second closing")]
+        ("S5", "second opening")]
 
 
 @pytest.mark.parametrize(("question", "expected"), [
@@ -508,7 +511,22 @@ def test_page_passages_lead_and_only_a_chunk_they_hold_whole_is_not_sent_again()
     ("Does the last page repeat page 2?", (PageRequest(-1, -1), PageRequest(2, 2))),
     ("Is the notice period 30 days?", ()),
     ("Is Form CG 21 47 attached?", ()),
-    ("How does this handbook end?", ()),
+    ("How does this handbook end?", (PageRequest(-1, -1),)),
+    ("How does the policy end?", (PageRequest(-1, -1),)),
+    ("How does the renewal quote end?", (PageRequest(-1, -1),)),
+    ("How does it end?", (PageRequest(-1, -1),)),
+    ("What's at the end of the handbook?", (PageRequest(-1, -1),)),
+    ("Summarise the end of the document.", (PageRequest(-1, -1),)),
+    ("What does the ending say?", (PageRequest(-1, -1),)),
+    ("When does the policy end?", ()),
+    ("What is the policy end date?", ()),
+    ("How does the policy end date compare?", ()),
+    ("What happens at the end of the policy period?", ()),
+    ("What is the ending date?", ()),
+    ("How does the coverage end?", ()),
+    ("How does the policy end coverage for roofing?", ()),
+    ("What is the ending balance?", ()),
+    ("What does the end of the policy say about notice?", (PageRequest(-1, -1),)),
     ("Which pages list exclusions?", ()),
     ("What does page 0 say?", ()),
 ])
@@ -707,18 +725,198 @@ def test_a_question_about_a_page_is_answered_from_that_page_when_the_gate_finds_
     assert (outcome, tags[0]) == (TurnOutcome.ANSWERED, ("S1", POLICY, "p. 6 of 7"))
 
 
-def test_a_page_the_document_does_not_have_sends_only_its_opening_and_closing_passages(ctx):
+def test_a_page_the_document_does_not_have_sends_only_its_opening_passage(ctx):
     policy = ready(ctx, POLICY)
 
     outcome, tags, _ = asked(ctx, [policy], "What does page 12 say?")
 
-    assert (outcome, tags) == (TurnOutcome.NO_EVIDENCE, [("S1", POLICY, "p. 1-2 of 7"), ("S2", POLICY, "p. 6-7 of 7")])
+    assert (outcome, tags) == (TurnOutcome.NO_EVIDENCE, [("S1", POLICY, "p. 1-2 of 7")])
 
 
-def test_a_two_document_chat_sends_each_documents_opening_then_closing_passage_after_the_k(ctx):
+def test_a_two_document_chat_sends_each_documents_opening_passage_after_the_k(ctx):
     policy, quote = ready(ctx, POLICY), ready(ctx, QUOTE)
 
     _, tags, _ = asked(ctx, [policy, quote], "Do defence costs reduce the limits?", k=1)
 
-    assert tags == [("S1", POLICY, "p. 4-6 of 7"), ("S2", POLICY, "p. 1-2 of 7"), ("S3", POLICY, "p. 6-7 of 7"),
-                    ("S4", QUOTE, "p. 1-3 of 3"), ("S5", QUOTE, "p. 2-3 of 3")]
+    assert tags == [("S1", POLICY, "p. 4-6 of 7"), ("S2", POLICY, "p. 1-2 of 7"), ("S3", QUOTE, "p. 1-3 of 3")]
+
+
+def test_how_a_word_document_ends_is_its_last_section_though_a_section_number_is_not_a_page(ctx):
+    endorsement = ready(ctx, ENDORSEMENT)
+
+    _, tags, _ = asked(ctx, [endorsement], "How does the endorsement end?")
+
+    assert tags[0] == ("S1", ENDORSEMENT, "section 2 of 2")
+    assert searched(ctx, [endorsement], "What does page 2 say?").on_pages == []
+
+
+def test_how_a_document_ends_is_answered_from_its_last_page_within_k(ctx):
+    policy = ready(ctx, POLICY)
+
+    _, tags, _ = asked(ctx, [policy], "How does the policy end?", k=2)
+
+    assert tags == [("S1", POLICY, "p. 7 of 7"), ("S2", POLICY, "p. 3-5 of 7"), ("S3", POLICY, "p. 1-2 of 7")]
+
+
+# ------------------------------------------------------------------ questions that name a section
+
+
+OUTLINE = tuple(OutlineEntry(*entry) for entry in [
+    ("PART 1: GENERAL INFORMATION", 0, 25),
+    ("Part 9: endorsements and options", 0, 30),
+    ("902 Catastrophic Risk Protection Endorsement", 1, 30),
+    ("903 High-Risk Land Exclusion Option", 1, 31),
+    ("A. General Information", 2, 31),
+    ("B. Application, Cancellation, and Transfers", 2, 32),
+    ("D. Additional Information for High-Risk Policy", 2, 33),
+    ("E. Reporting Acreage and Production", 2, 34),
+    ("904 Hail and Fire Exclusion Option", 1, 37),
+    ("A. Eligibility", 2, 37),
+    ("B. Application, Cancellation, and Transfers", 2, 37),
+    ("Part 10: Units", 0, 90),
+    ("Section 1: Basic Units", 1, 90),
+    ("1001 Availability", 2, 90),
+    ("Part 11: Underwriting Rules for Specific Practices", 0, 151),
+    ("Section 1: Written Agreements", 1, 151),
+    ("Exhibits", 0, 661),
+    ("Exhibit 2 Definitions", 1, 662),
+    ("Exhibit 21A Summary of Revenue History Completion Instructions", 1, 911),
+    ("Exhibit 23 Production Report and APH Database Flowchart", 1, 922),
+])
+EXHIBIT_23 = SectionRequest("Exhibit 23 Production Report and APH Database Flowchart", 922, 922)
+PARA_903D = SectionRequest("D. Additional Information for High-Risk Policy", 33, 34)
+PART_10 = SectionRequest("Part 10: Units", 90, 151)
+SECTION_903 = SectionRequest("903 High-Risk Land Exclusion Option", 31, 37)
+SECTION_904 = SectionRequest("904 Hail and Fire Exclusion Option", 37, 90)
+
+
+@pytest.mark.parametrize(("question", "expected"), [
+    ("What is Exhibit 23?", (EXHIBIT_23,)),
+    ("Summarize Para. 903D(1).", (PARA_903D,)),
+    ("What is in Part 10?", (PART_10,)),
+    ("What does section 903 say about high-risk land?", (SECTION_903,)),
+    ("What is the per-occurrence limit?", ()),
+    ("What does \u00a7 904 cover?", (SECTION_904,)),
+    ("What does sec. 903E require?", (SectionRequest("E. Reporting Acreage and Production", 34, 37),)),
+    ("Is PART 1 about general information?", (SectionRequest("PART 1: GENERAL INFORMATION", 25, 30),)),
+    ("What does exhibit 2 define?", (SectionRequest("Exhibit 2 Definitions", 662, 911),)),
+    ("What does paragraph 1001 say?", (SectionRequest("1001 Availability", 90, 151),)),
+    ("What do Exhibit 23 and Part 10 say?", (EXHIBIT_23, PART_10)),
+    ("What is in Exhibit 21?", ()),
+    ("What is in Exhibit 24?", ()),
+    ("What is in Part 12?", ()),
+    ("What is in part 903?", ()),
+    ("What does section 1 say?", ()),
+    ("What is in section A?", ()),
+    ("Is the notice period 30 days?", ()),
+    ("What does the High-Risk Land Exclusion Option cover?", (SECTION_903,)),
+    ("Compare the high risk land exclusion option with the Hail and Fire Exclusion Option.", (SECTION_903, SECTION_904)),
+    ("What does Additional Information for High-Risk Policy require?", (PARA_903D,)),
+    ("Section 903 High-Risk Land Exclusion Option: what is it?", (SECTION_903,)),
+    ("What are the Application, Cancellation, and Transfers rules?", ()),
+    ("What is the General Information?", ()),
+])
+def test_a_question_names_a_section_by_its_number_or_its_title_and_an_ambiguous_one_names_none(question, expected):
+    assert chat.section_requests(question, OUTLINE, 922) == expected
+
+
+def test_a_section_reference_matches_a_title_that_carries_the_whole_identifier_or_a_form_number():
+    numbered = (OutlineEntry("903D(1) Separate unit structures", 2, 33), OutlineEntry("903D(2) Coverage levels", 2, 34))
+    endorsement = (OutlineEntry("ENDORSEMENT SM 40 03", 0, 1),
+                   OutlineEntry("ADDITIONAL INSURED - OWNERS, LESSEES OR CONTRACTORS", 1, 1),
+                   OutlineEntry("CG 21 47 Employment-Related Practices Exclusion", 0, 2))
+
+    assert chat.section_requests("Summarize Para. 903D(1).", numbered, 40) == (
+        SectionRequest("903D(1) Separate unit structures", 33, 34),)
+    assert [chat.section_requests(question, endorsement, 3) for question in (
+        "What does Endorsement SM 40 03 change?", "Who is an additional insured - owners, lessees or contractors?",
+        "Is form CG 21 47 attached?", "What does Part 10 say?")] == [
+        (SectionRequest("ENDORSEMENT SM 40 03", 1, 2),),
+        (SectionRequest("ADDITIONAL INSURED - OWNERS, LESSEES OR CONTRACTORS", 1, 2),),
+        (SectionRequest("CG 21 47 Employment-Related Practices Exclusion", 2, 3),), ()]
+    assert chat.section_requests("What is Exhibit 23?", (), 922) == ()
+
+
+def test_of_two_entries_that_match_alike_the_one_under_the_other_wins_and_two_unrelated_ones_name_nothing():
+    outline = (OutlineEntry("903 High-Risk Land Exclusion Option", 1, 31), OutlineEntry("922 Written Agreements", 1, 70),
+               OutlineEntry("C. High-Risk Land Exclusion Option", 2, 78), OutlineEntry("Exhibit 23", 1, 921),
+               OutlineEntry("Exhibit 23 Production Report Flowchart", 2, 922))
+
+    assert [chat.section_requests(question, outline, 922) for question in (
+        "What is Exhibit 23?", "What does the High-Risk Land Exclusion Option cover?")] == [
+        (SectionRequest("Exhibit 23 Production Report Flowchart", 922, 922),), ()]
+
+
+def test_page_and_section_passages_take_their_places_in_k():
+    [doc] = documents(1)
+    ranked = [candidate(doc, f"retrieved {n}", 0.05 - n / 1000) for n in range(1, 4)]
+
+    sources = chat.select_sources(ranked, k=3, per_doc_min=2, on_pages=[candidate(doc, "page 2", 0.0)],
+                                  in_sections=[candidate(doc, "Part 10", 0.0)])
+
+    assert [(s.label, s.text) for s in sources] == [("S1", "page 2"), ("S2", "Part 10"), ("S3", "retrieved 1")]
+
+
+HANDBOOK_PAGES = [
+    ["Crop Handbook", "Contents: Part 9 on page 2, Part 10 on page 6, Exhibits on page 7."],
+    ["PART 9: ENDORSEMENTS AND OPTIONS", "902 Catastrophic Risk Protection Endorsement",
+     "The CAT endorsement pays 55 percent of the price election.", "It covers 50 percent of the approved yield."],
+    ["902 Catastrophic Risk Protection Endorsement (Continued)", "CAT coverage is available for most crops.",
+     "Administrative fees apply to each crop.", "903 High-Risk Land Exclusion Option", "A. General Information",
+     "Insureds may exclude high-risk land from the base policy."],
+    ["903 High-Risk Land Exclusion Option (Continued)", "D. Additional Information for High-Risk Policy",
+     "A high-risk policy covers only high-risk land.", "Unit structure is a separate choice for each policy."],
+    ["E. Reporting Acreage and Production", "Report high-risk acreage separately."],
+    ["PART 10: UNITS", "Section 1: Basic Units", "A basic unit is all insurable acreage in the county."],
+    ["Exhibit 23 Production Report and APH Database Flowchart", "See the flowchart."],
+]
+HANDBOOK_BOOKMARKS = [
+    ("Part 9:  endorsements and options", 1, None), ("902 Catastrophic Risk Protection Endorsement", 1, 0),
+    ("903 High-Risk Land Exclusion Option", 2, 0), ("A. General Information", 2, 2),
+    ("D. Additional Information for High-Risk Policy", 3, 2), ("E. Reporting Acreage and Production", 4, 2),
+    ("Part 10:  Units", 5, None), ("Section 1:  Basic Units", 5, 6),
+    ("Exhibits", 6, None), ("Exhibit 23 Production Report and APH Database Flowchart", 6, 8)]
+
+
+def handbook(ctx, tmp_path) -> DocumentId:
+    """A 7-page PDF shaped like the crop insurance handbook, cut into chunks of at most 160 characters."""
+    small = dataclasses.replace(ctx, settings=ctx.settings.model_copy(
+        update={"chunk_max_chars": 160, "chunk_overlap_chars": 40}))
+    path = bookmarked_pdf(tmp_path, HANDBOOK_PAGES, HANDBOOK_BOOKMARKS)
+    return indexed(small, path.rename(path.with_name("handbook.pdf")))
+
+
+def test_a_question_naming_a_section_gets_the_chunk_holding_its_title_first_even_when_nothing_else_matches(ctx, tmp_path):
+    book = handbook(ctx, tmp_path)
+    question = "Summarize Para. 903D(1)."
+
+    found = searched(ctx, [book], question)
+    _, tags, sources = asked(ctx, [book], question)
+
+    assert (chat.gate(found.retrieved, ctx.ai.min_similarity), found.matched(ctx.ai.min_similarity)) == (False, True)
+    assert found.on_pages == []
+    assert tags[:2] == [("S1", "handbook.pdf", "p. 4 of 7"), ("S2", "handbook.pdf", "p. 4 of 7")]
+    assert "D. Additional Information for High-Risk Policy" in sources[0].text
+
+
+def test_section_903_leads_with_its_heading_rather_than_the_end_of_902_on_the_same_page(ctx, tmp_path):
+    book = handbook(ctx, tmp_path)
+
+    _, tags, sources = asked(ctx, [book], "What does section 903 say?")
+    with ctx.db.connection() as conn:
+        chunks = conn.execute("SELECT id, text, page_map FROM chunks WHERE document_id = %s ORDER BY ord", (book,))
+        first_on_page_3 = next(row for row in chunks if any(page == 3 for _, page in row["page_map"]))
+
+    assert "903 High-Risk Land Exclusion Option" not in first_on_page_3["text"]
+    assert sources[0].chunk_id != first_on_page_3["id"]
+    assert "903 High-Risk Land Exclusion Option\nA. General Information" in sources[0].text
+    assert tags[0] == ("S1", "handbook.pdf", "p. 3 of 7")
+
+
+def test_section_passages_come_out_of_k(ctx, tmp_path):
+    book = handbook(ctx, tmp_path)
+
+    _, tags, _ = asked(ctx, [book], "What does section 903 say?", k=2)
+
+    assert tags == [("S1", "handbook.pdf", "p. 3 of 7"), ("S2", "handbook.pdf", "p. 4 of 7"),
+                    ("S3", "handbook.pdf", "p. 1 of 7")]

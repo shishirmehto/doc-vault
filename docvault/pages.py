@@ -20,7 +20,7 @@ from docx import Document as open_docx
 from docx.table import Table
 from pypdf import PdfReader
 
-from .domain import ChunkDraft, DocKind, ErrorCode, ExtractedText, Page, PageBasis, PageMap, VaultError
+from .domain import ChunkDraft, DocKind, ErrorCode, ExtractedText, OutlineEntry, Page, PageBasis, PageMap, VaultError
 
 PAGE_JOINER = "\n\n"   # placed between non-empty pages in the document text stream
 TABLE_CELL = " | "     # joins the cells of a DOCX table row on one line
@@ -156,7 +156,29 @@ def _extract_pdf(path: Path, max_pages: int) -> ExtractedText:
                          "This PDF is password-protected. Remove the password and upload it again.")
     _check_page_count(len(reader.pages), max_pages)   # before extraction, which is the slow part
     texts = _join_line_end_hyphens([_undouble(_tidy(page.extract_text())) for page in reader.pages])
-    return ExtractedText(PageBasis.PHYSICAL, tuple(Page(number, text) for number, text in enumerate(texts, start=1)))
+    return ExtractedText(PageBasis.PHYSICAL, tuple(Page(number, text) for number, text in enumerate(texts, start=1)),
+                         _pdf_outline(reader))
+
+
+def _pdf_outline(reader: PdfReader) -> tuple[OutlineEntry, ...]:
+    """The bookmarks in document order, each at the 1-based page it opens, its depth as its level. A bookmark with no
+    title or no page of this file is left out, and an outline that cannot be read is empty: the text is already read,
+    and a broken bookmark tree is no reason to refuse it."""
+    entries: list[OutlineEntry] = []
+
+    def walk(items: list, level: int) -> None:
+        for item in items:
+            if isinstance(item, list):
+                walk(item, level + 1)
+            elif (title := collapse_whitespace(str(item.title or ""))) and (
+                    index := reader.get_destination_page_number(item)) is not None:
+                entries.append(OutlineEntry(title, level, index + 1))
+
+    try:
+        walk(reader.outline, 0)
+    except Exception:
+        return ()
+    return tuple(entries)
 
 
 _TOKEN = re.compile(r"\S{4,}")
@@ -220,12 +242,26 @@ def _extract_docx(path: Path, max_pages: int) -> ExtractedText:
                          f"The Word file's text would expand to more than {MAX_DOCX_XML_BYTES // 1_000_000} MB. "
                          "Split the document and upload the parts.")
     paragraphs: list[str] = []
+    headings: list[tuple[int, int]] = []
+    levels: dict[str | None, int | None] = {}   # by style id: python-docx looks a style's name up slowly
     for item in open_docx(str(path)).iter_inner_content():
         if isinstance(item, Table):
             paragraphs += _table_lines(item)
-        else:
-            paragraphs.append(_tidy(item.text))
-    return _sections(paragraphs, joiner="\n")
+            continue
+        if (style := item._p.style) not in levels:
+            levels[style] = _heading_level(item.style.name or "")
+        if levels[style] is not None:
+            headings.append((len(paragraphs), levels[style]))
+        paragraphs.append(_tidy(item.text))
+    return _sections(paragraphs, joiner="\n", headings=headings)
+
+
+def _heading_level(style: str) -> int | None:
+    """Title and Heading 1 are level 0 and Heading 2 is level 1, so the top of a Word outline is level 0, as a PDF's is."""
+    if style == "Title":
+        return 0
+    found = re.fullmatch(r"Heading ([1-9])", style)
+    return int(found[1]) - 1 if found else None
 
 
 def _table_lines(table: Table) -> list[str]:
@@ -263,23 +299,29 @@ def _extract_txt(path: Path, max_pages: int) -> ExtractedText:
     return _sections([_tidy(p) for p in re.split(r"\n[ \t]*\n", text)], joiner="\n\n")
 
 
-def _sections(paragraphs: Sequence[str], *, joiner: str) -> ExtractedText:
+def _sections(paragraphs: Sequence[str], *, joiner: str, headings: Sequence[tuple[int, int]] = ()) -> ExtractedText:
     """Pack paragraphs into sections of at most SYNTHETIC_PAGE_CHARS.
 
     A paragraph longer than a section is first split at line ends, then at
     spaces, so a file with no blank lines still gets sections of bounded size.
+    headings are (paragraph index, level); each one with text is an outline
+    entry on the section its text lands in.
     """
-    pieces = [piece for p in paragraphs if p for piece in _split_long(p, SYNTHETIC_PAGE_CHARS)]
+    pieces = [(at, piece) for at, p in enumerate(paragraphs) if p for piece in _split_long(p, SYNTHETIC_PAGE_CHARS)]
     sections: list[list[str]] = [[]]
+    section_of: dict[int, int] = {}
     size = 0
-    for piece in pieces:
+    for at, piece in pieces:
         if sections[-1] and size + len(joiner) + len(piece) > SYNTHETIC_PAGE_CHARS:
             sections.append([])
             size = 0
         size += len(piece) + (len(joiner) if sections[-1] else 0)
         sections[-1].append(piece)
-    return ExtractedText(PageBasis.SYNTHETIC, tuple(
-        Page(number, joiner.join(parts)) for number, parts in enumerate(sections, start=1)))
+        section_of.setdefault(at, len(sections))
+    return ExtractedText(
+        PageBasis.SYNTHETIC, tuple(Page(number, joiner.join(parts)) for number, parts in enumerate(sections, start=1)),
+        tuple(OutlineEntry(collapse_whitespace(paragraphs[at]), level, section_of[at])
+              for at, level in headings if at in section_of))
 
 
 def _split_long(text: str, limit: int) -> list[str]:
@@ -423,6 +465,13 @@ def locate_quote(quote: str, text: str) -> tuple[int, int] | None:
     if at < 0:
         return None
     return origin[at], origin[at + len(needle) - 1] + 1
+
+
+def has_title(title: str, text: str) -> bool:
+    """Whether `text` holds `title`, ignoring case, spacing, typographic quotes and dashes. Every space is dropped,
+    not only runs of them: pypdf reads some headings as "903 H igh -Risk Land"."""
+    needle, haystack = (_normalise(part)[0].replace(" ", "") for part in (title, text))
+    return bool(needle) and needle in haystack
 
 
 def part_on_pages(text: str, page_map: PageMap, first: int, last: int) -> tuple[str, PageMap] | None:

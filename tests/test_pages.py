@@ -11,7 +11,17 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen.canvas import Canvas
 
 from docvault import pages
-from docvault.domain import DocKind, ErrorCode, ExtractedText, Failure, Page, PageBasis, PageMap, VaultError
+from docvault.domain import (
+    DocKind,
+    ErrorCode,
+    ExtractedText,
+    Failure,
+    OutlineEntry,
+    Page,
+    PageBasis,
+    PageMap,
+    VaultError,
+)
 
 from .conftest import ENDORSEMENT, FACTS, POLICY, QUOTE, SAMPLES, TRUTH
 
@@ -118,6 +128,72 @@ def test_the_part_of_a_chunk_on_some_pages_is_a_substring_with_its_page_map_coun
     assert pages.part_on_pages(text, page_map, 4, 5) == ("End of five.", PageMap(((0, 5),)))
     assert pages.part_on_pages(text, PageMap(((0, 5), (27, 7))), 6, 6) is None
     assert pages.part_on_pages(text, page_map, 8, 9) is None
+
+
+def test_the_word_samples_headings_are_its_outline_and_the_pdf_samples_have_none():
+    assert {name: extracted(name).outline for name in TRUTH["documents"]} == {
+        POLICY: (), QUOTE: (),
+        ENDORSEMENT: (OutlineEntry("ENDORSEMENT SM 40 03", 0, 1),
+                      OutlineEntry("ADDITIONAL INSURED - OWNERS, LESSEES OR CONTRACTORS", 1, 1))}
+
+
+def bookmarked_pdf(tmp_path, pages_of_lines, bookmarks):
+    """bookmarks: (title, page index or None for no destination, index of the parent bookmark or None)."""
+    writer = PdfWriter(clone_from=PdfReader(text_pdf(tmp_path / "plain.pdf", *pages_of_lines)))
+    made = []
+    for title, page, parent in bookmarks:
+        made.append(writer.add_outline_item(title, page, parent=None if parent is None else made[parent]))
+    path = tmp_path / "bookmarked.pdf"
+    writer.write(path)
+    return path
+
+
+def test_a_pdf_outline_gives_each_bookmark_its_title_depth_and_page_and_skips_one_that_goes_nowhere(tmp_path):
+    path = bookmarked_pdf(tmp_path, [["Contents"], ["Part 9"], ["903 High-Risk Land"]], [
+        ("  Part 9:  Endorsements and\nOptions ", 1, None), ("903 High-Risk Land Exclusion Option", 2, 0),
+        ("Ghost", None, None), ("Exhibits", 2, None)])
+
+    assert pages.extract(DocKind.PDF, path, max_pages=10).outline == (
+        OutlineEntry("Part 9: Endorsements and Options", 0, 2), OutlineEntry("903 High-Risk Land Exclusion Option", 1, 3),
+        OutlineEntry("Exhibits", 0, 3))
+
+
+def test_a_pdf_whose_outline_cannot_be_read_keeps_its_text_and_has_no_outline(tmp_path, monkeypatch):
+    path = bookmarked_pdf(tmp_path, [["Contents"], ["Part 9"]], [("Part 9", 1, None)])
+    monkeypatch.setattr(PdfReader, "outline", property(lambda reader: 1 / 0))
+
+    doc = pages.extract(DocKind.PDF, path, max_pages=10)
+
+    assert ([page.text for page in doc.pages], doc.outline) == (["Contents", "Part 9"], ())
+
+
+def test_word_headings_are_the_outline_each_on_the_section_its_text_lands_in(tmp_path):
+    from docx import Document
+
+    word = Document()
+    word.add_heading("Commercial Lines Manual", 0)
+    word.add_heading("Part 1  General Rules", 1)
+    word.add_paragraph("x" * 2960)
+    word.add_heading("Rule 5 Premium Determination", 2)
+    word.add_heading("", 1)
+    word.add_paragraph("Premium is determined per location.")
+    path = tmp_path / "manual.docx"
+    word.save(str(path))
+
+    doc = pages.extract(DocKind.DOCX, path, max_pages=10)
+
+    assert [page.text[:30] for page in doc.pages] == [
+        "Commercial Lines Manual\nPart 1", "x" * 30, "Premium is determined per loca"]
+    assert doc.outline == (OutlineEntry("Commercial Lines Manual", 0, 1), OutlineEntry("Part 1 General Rules", 0, 1),
+                           OutlineEntry("Rule 5 Premium Determination", 1, 2))
+
+
+def test_a_title_is_found_whatever_its_case_spacing_and_typographic_dashes():
+    text = "902 Catastrophic Risk Protection (Continued)\n903 H igh -Risk Land Exclusion Option\nA. General Information"
+
+    assert [pages.has_title(title, text) for title in (
+        "903 High-Risk Land Exclusion Option", "903 high–risk land exclusion option", "a. general information",
+        "904 Hail and Fire Exclusion Option", "")] == [True, True, True, False, False]
 
 
 def test_locate_quote_ignores_case_whitespace_and_typographic_quotes_and_dashes():

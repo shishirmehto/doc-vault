@@ -129,10 +129,10 @@ def test_processing_metrics_over_a_day_and_a_week(client, seeded):
                         "duration_ms": {"p50": 5000, "p95": 5000}, "failures_by_code": {"ai_unavailable": 1}},
         },
         "ai": {
-            "calls": 16, "errors": 2, "input_tokens": 9032, "output_tokens": 164, "cost_usd": 0.013768,
+            "calls": 16, "errors": 2, "input_tokens": 9028, "output_tokens": 164, "cost_usd": 0.01376,
             "unpriced_calls": 0,
             "by_purpose_and_model": [
-                usage("answer", "gpt-6.1-sol", 2, 0, 4405, 41, 0.00922, p50=15, p95=20),
+                usage("answer", "gpt-6.1-sol", 2, 0, 4401, 41, 0.009212, p50=15, p95=20),
                 usage("condense", "gpt-6-luna", 2, 0, 213, 5, 0.000024, p50=15, p95=20),
                 usage("embed_chunks", "fake-hash", 7, 1, 2731, 0, 0.0, p50=40, p95=67),
                 usage("embed_query", "fake-hash", 3, 0, 11, 0, 0.0, p50=20, p95=29),

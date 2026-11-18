@@ -37,7 +37,7 @@ from .pages import page_label
 type Tier = Literal["main", "small"]
 
 CONDENSE_VERSION = "condense-v1"
-ANSWER_VERSION = "answer-v5"
+ANSWER_VERSION = "answer-v6"
 INSIGHTS_VERSION = "insights-v1"
 COMPARE_VERSION = "compare-v1"
 SUMMARY_VERSION = "summary-v1"
@@ -199,7 +199,8 @@ def _conversation(history: Sequence[Turn]) -> str:
 # - Answer the part the sources cover and name the part they do not, so a missing deductible does not hide the limit.
 # - supported: false instead of a guess: a refusal costs the user a follow-up question, a guess can cost a claim.
 # - Page numbers: "the last page" means nothing without the page count, so each source's pages attribute ends in
-#   "of N". A model that cannot find the page asked about would otherwise describe a nearby page as that one.
+#   "of N". A model that cannot find the page asked about would otherwise describe a nearby page as that one. A
+#   section ("Part 10", "Exhibit 23") is the document's own, so rule 8 is about page numbers only.
 # - A question about a whole document answered from some of its pages names those pages: retrieval sends a few
 #   passages of a long document, and an answer that does not say so reads as a summary of all of it.
 # - The conversation only says what the user means. An earlier answer is not a source, so facts come from <source>.
@@ -228,9 +229,9 @@ total them unless asked; if you calculate, show the calculation.
 the documents do not address.
 7. If the sources do not answer the question, set supported to false, write one sentence in answer saying what the \
 documents do not cover, and leave evidence empty. Do not guess.
-8. A page or section number in a question refers to the pages attribute of the <source> tags, where "of N" is the \
-document's page count, so its last page is page N. If no source includes the page asked about, say so instead of \
-guessing what it says.
+8. A page number in a question refers to the pages attribute of the <source> tags, where "of N" is the document's \
+page count, so its last page is page N. If no source includes the page asked about, say so instead of guessing \
+what it says.
 9. When the question is about a document as a whole (what is notable, a summary, what to keep in mind) and the \
 sources cover only some of its pages, say which pages the answer draws on, such as "From pages 2 to 28 of 922", so \
 the reader does not take part of the document for all of it.

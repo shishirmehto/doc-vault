@@ -2,6 +2,8 @@
 -- start when its hash is not yet in schema_version (the one table db.py creates
 -- itself). Every CREATE is IF NOT EXISTS, so an edited file adds new tables
 -- and indexes to an existing database but does not alter a table that exists.
+-- A column added to a table that exists is also added by an ADD COLUMN IF NOT
+-- EXISTS beside its table, for databases created before it.
 --
 -- Ownership: each table has one writing module. step_runs and llm_calls are
 -- append-only logs; every metric is an aggregate over one table, never a
@@ -37,6 +39,7 @@ CREATE TABLE IF NOT EXISTS documents (
   page_count    int,
   chunk_count   int,
   empty_pages   int[],                                -- pages with no extractable text
+  outline       jsonb,                                -- [{title, level, page}], PDF bookmarks or Word headings; NULL if parsed before outlines
   error_code    text,
   error_message text,
   error_retryable boolean,
@@ -61,6 +64,7 @@ CREATE INDEX IF NOT EXISTS documents_listing   ON documents (created_at DESC, id
 CREATE INDEX IF NOT EXISTS documents_in_flight ON documents (updated_at) WHERE status IN ('queued', 'parsing', 'embedding');
 CREATE UNIQUE INDEX IF NOT EXISTS documents_family_version ON documents (family_id, version);
 CREATE INDEX IF NOT EXISTS documents_filename ON documents (lower(filename));   -- an upload's family by its name
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS outline jsonb;
 
 -- One row per page (or per labelled section when page_basis = 'synthetic').
 -- Feeds insights (page-tagged text), insight quote checks and GET /documents/{id}/pages/{n}.

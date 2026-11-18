@@ -88,7 +88,7 @@ def test_the_page_case_set_loads_and_runs_on_the_fake_provider():
         ("policy-page-3", TurnOutcome.ANSWERED), ("policy-page-5-roofing", TurnOutcome.ANSWERED),
         ("quote-last-page", TurnOutcome.ANSWERED), ("policy-page-out-of-range", TurnOutcome.NO_EVIDENCE)]
     assert [(turn.case, turn.named_page, turn.passes(report.threshold)) for turn in report.turns] == [
-        ("policy-last-page", True, True), ("policy-how-it-ends", False, True), ("policy-page-3", True, True),
+        ("policy-last-page", True, True), ("policy-how-it-ends", True, True), ("policy-page-3", True, True),
         ("policy-page-5-roofing", True, True), ("quote-last-page", True, True),
         ("policy-page-out-of-range", False, False)]
 
@@ -137,6 +137,35 @@ def test_the_run_scores_the_answer_text_that_chat_ask_returned(tmp_path):
 
     assert [(turn.case, turn.outcome, turn.text_misses) for turn in report.turns] == [
         ("answered", TurnOutcome.ANSWERED, ()), ("refused", TurnOutcome.NO_EVIDENCE, ("says could not find",))]
+
+
+SECTIONED = """\
+partial: checks that a turn naming a section counts as named, as one naming a page does
+documents:
+  policy: sample-cgl-policy.pdf
+  quote: sample-renewal-quote.pdf
+  endorsement: sample-endorsement-additional-insured.docx
+cases:
+- id: by-section
+  scope: [endorsement]
+  turns:
+  - ask: Who does Endorsement SM 40 03 add?
+    expect: [endorsement-additional-insured]
+- id: by-meaning
+  scope: [endorsement]
+  turns:
+  - ask: Who is added as an insured?
+    expect: [endorsement-additional-insured]
+"""
+
+
+def test_a_turn_that_names_a_section_counts_as_named(tmp_path):
+    (tmp_path / "cases.yaml").write_text(SECTIONED)
+    settings = Settings(_env_file=None, database_url=TEST_DATABASE_URL, chat_provider="fake", embed_provider="fake")
+
+    report = evals.run(settings, evals.load_cases(tmp_path / "cases.yaml"))
+
+    assert [(turn.case, turn.named_page) for turn in report.turns] == [("by-section", True), ("by-meaning", False)]
 
 
 def test_the_answer_text_must_hold_each_value_and_no_forbidden_string_ignoring_case_dollars_commas_and_bold():

@@ -3,8 +3,8 @@
 Owns chats, chat_documents and chat_turns. ask() is the whole RAG path in
 one function a reader can follow top to bottom:
 
-  question -> condense with history -> search (hybrid retrieval with a per-document quota, the pages the
-           question names, each document's opening and closing passages)
+  question -> condense with history -> search (hybrid retrieval with a per-document quota, the pages and
+           sections the question names, each document's opening passage)
            -> gate -> answer prompt -> ground (verify quotes, resolve pages) -> suggest -> persist turn
 
 A chat's first question is looked up in the answer cache before any of that.
@@ -50,6 +50,7 @@ from .domain import (
     DocumentId,
     ErrorCode,
     NotFound,
+    OutlineEntry,
     PageBasis,
     PageMap,
     Purpose,
@@ -69,11 +70,12 @@ MAX_SUGGESTIONS = 3
 MAX_SUGGESTION_CHARS = 160
 UNVERIFIED_TEXT = ("I found passages that look related, but I could not verify an answer against their text, "
                    "so I am not giving one.")
-OPENING_DOCS = 3            # a chat of up to this many documents sends each one's opening and closing passages with its k sources
-PAGE_PASSAGES_PER_REQUEST = 2   # chunks sent for each page or range a question names, per document
-PAGE_PASSAGES_PER_DOC = 4   # chunks sent for the pages a question names, per document
+OPENING_DOCS = 3            # a chat of up to this many documents sends each one's opening passage with its k sources
+PAGE_PASSAGES_PER_REQUEST = 2   # chunks sent for each page, range or section a question names, per document
+PAGE_PASSAGES_PER_DOC = 4   # chunks sent for the pages and sections a question names, per document
 MAX_PAGE_SPAN = 10          # "pages 1-500" asks for the first 10
-ANSWER_CACHE_FORMAT = 9     # part of every answer key: a change to the cached value's shape or to select_sources bumps it
+TITLE_LOOKAHEAD = 3         # chunks read past a section's first ones to find the one holding its title
+ANSWER_CACHE_FORMAT = 11    # part of every answer key: a change to the cached value's shape or to select_sources bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
 
 
@@ -105,16 +107,27 @@ class PageRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class SectionRequest:
+    """An outline entry a question names, and the pages its section spans, first..last inclusive."""
+
+    title: str
+    first: int
+    last: int
+
+
+@dataclass(frozen=True, slots=True)
 class Found:
     """Every passage one question's search found, before the gate and select_sources choose from them."""
 
-    retrieved: list[Candidate]  # hybrid retrieval: what the gate scores
-    on_pages: list[Candidate]   # the parts of chunks on the pages the question names
-    ends: list[Candidate]       # each document's opening passage and, in a small chat, its closing passage
+    retrieved: list[Candidate]      # hybrid retrieval: what the gate scores
+    on_pages: list[Candidate]       # the parts of chunks on the pages the question names by number
+    in_sections: list[Candidate]    # the parts of chunks that open the sections the question names
+    openings: list[Candidate]       # each document's opening passage
 
     def matched(self, min_similarity: float) -> bool:
-        """The gate passes, or the question names a page the documents have: that page is what the user asked for."""
-        return gate(self.retrieved, min_similarity) or bool(self.on_pages)
+        """The gate passes, or the question names a page or a section the documents have: that is what the user
+        asked for."""
+        return gate(self.retrieved, min_similarity) or bool(self.on_pages) or bool(self.in_sections)
 
 
 # ------------------------------------------------------------------ commands
@@ -176,12 +189,11 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
     Over today's AI spending cap it raises VaultError(QUOTA_EXCEEDED) (HTTP 429) before
     any model call. A cache hit still answers.
 
-    A question that names a page of a PDF (page_requests) counts as matched when the PDF has that page, and the
-    parts of chunks on it lead the sources. When nothing matches, the answer step sees only each document's
-    opening passage, and in a chat of up to OPENING_DOCS documents its closing passage, if the backend declines
-    what its sources do not answer. That answers a question about the document as a whole or about how it ends;
-    anything else is refused with NO_EVIDENCE, and that call's text is not streamed, so a decline never shows
-    before the refusal replaces it.
+    A question that names a page of a PDF (page_requests) or a section in a document's outline (section_requests)
+    counts as matched when the document has it, and the parts of chunks on it lead the sources. When nothing matches,
+    the answer step sees only each document's opening passage, if the backend declines what its sources do not
+    answer. That answers a question about the document as a whole; anything else is refused with NO_EVIDENCE, and
+    that call's text is not streamed, so a decline never shows before the refusal replaces it.
 
     The optional sinks report progress. on_stage hears each step as it starts, after the
     chat, its scope, the cache and the spending cap are checked, so a missing chat, a deleted document
@@ -215,9 +227,10 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
         found = search(conn, documents, q_vec, standalone, ctx.ai.embed_model,
                        per_doc=ctx.settings.retrieval_per_doc_min, k=ctx.settings.retrieval_k)
     matched = found.matched(ctx.ai.min_similarity)
-    fallback = found.ends[:ctx.settings.retrieval_k] if ctx.ai.chat.declines_unanswerable else []
+    fallback = found.openings[:ctx.settings.retrieval_k] if ctx.ai.chat.declines_unanswerable else []
     sources = select_sources(found.retrieved, k=ctx.settings.retrieval_k, per_doc_min=ctx.settings.retrieval_per_doc_min,
-                             on_pages=found.on_pages, ends=found.ends) if matched else _labelled(fallback)
+                             on_pages=found.on_pages, in_sections=found.in_sections,
+                             openings=found.openings) if matched else _labelled(fallback)
 
     answer: Answer | None = None
     suggested: tuple[str, ...] = ()
@@ -228,7 +241,7 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
                                 stream=provisional)
         answer = ground(draft, sources)
         suggested = suggestions(draft.follow_ups, question)
-    # Past a failed gate the model saw only opening and closing passages, and only an answer drawn from them stands.
+    # Past a failed gate the model saw only opening passages, and only an answer drawn from them stands.
     if answer is None or (not matched and not isinstance(answer, Answered)):
         answer = NotFound(TurnOutcome.NO_EVIDENCE, prompts.no_evidence_text(documents))
         with ctx.db.connection() as conn:
@@ -367,7 +380,7 @@ def scope(conn: Connection, chat_id: ChatId) -> tuple[DocRef, *tuple[DocRef, ...
     rows = conn.execute(
         "SELECT cd.document_id, CASE WHEN count(*) OVER (PARTITION BY cd.filename) > 1 AND d.version IS NOT NULL"
         "   THEN cd.filename || ' (version ' || d.version || ')' ELSE cd.filename END AS filename, d.page_basis,"
-        " d.page_count"
+        " d.page_count, d.outline"
         " FROM chat_documents cd LEFT JOIN documents d ON d.id = cd.document_id WHERE cd.chat_id = %s"
         " ORDER BY cd.filename, cd.document_id", (chat_id,)).fetchall()
     if deleted := [{"id": str(row["document_id"]), "filename": row["filename"], "status": "deleted"} for row in rows
@@ -376,7 +389,8 @@ def scope(conn: Connection, chat_id: ChatId) -> tuple[DocRef, *tuple[DocRef, ...
                          f"{len(deleted)} of {len(rows)} documents in this chat were deleted. "
                          "Start a new chat with the documents you want to ask about.", details={"deleted": deleted})
     first, *rest = (DocRef(DocumentId(row["document_id"]), row["filename"], PageBasis(row["page_basis"]),
-                           row["page_count"]) for row in rows)
+                           row["page_count"], tuple(OutlineEntry(entry["title"], entry["level"], entry["page"])
+                                                    for entry in row["outline"] or ())) for row in rows)
     return first, *rest
 
 
@@ -456,10 +470,11 @@ ORDER BY rrf DESC
 
 def search(conn: Connection, documents: Sequence[DocRef], q_vec: Vector, query_text: str, embed_model: str, *,
            per_doc: int, k: int) -> Found:
-    """Every passage a question can be answered from: retrieve, page_passages and ends, at most one statement each."""
+    """Every passage a question can be answered from: retrieve, page_passages and openings, at most one statement
+    each."""
     return Found(retrieve(conn, documents, q_vec, query_text, embed_model, per_doc=per_doc),
-                 page_passages(conn, documents, page_requests(query_text), q_vec, embed_model, k=k),
-                 ends(conn, documents, q_vec, embed_model))
+                 *page_passages(conn, documents, query_text, q_vec, embed_model, k=k),
+                 openings(conn, documents, q_vec, embed_model))
 
 
 def retrieve(conn: Connection, documents: Sequence[DocRef], q_vec: Vector, query_text: str,
@@ -494,8 +509,15 @@ def gate(candidates: Sequence[Candidate], min_similarity: float) -> bool:
     return any(candidate.lexical_hit or candidate.similarity >= min_similarity for candidate in candidates)
 
 
+_DOCUMENT = (r"(?:the|this|that)\s+(?:\w+\s+)?"
+             r"(?:document|policy|handbook|manual|guide|quote|endorsement|contract|agreement|report|file)")
+# The end of a clause, or a verb of saying: "the end of the policy period", "the policy end date" and "the ending
+# balance" are not the end of the document.
+_CLAUSE_END = r"(?=\s*(?:[?.!,;:]|$|(?:say|says|read|reads|cover|covers|contain|contains|mention|mentions)\b))"
 _PAGE_REFERENCE = re.compile(
     r"\b(?:(?P<first>first|cover|opening)|(?P<last>last|final|closing))\s+page\b"
+    rf"|(?P<ending>\bhow\s+does\s+(?:it|{_DOCUMENT})\s+end\b|\bend\s+of\s+{_DOCUMENT}\b|\bthe\s+ending\b)"
+    rf"{_CLAUSE_END}"
     r"|\b(?:pages?|pp?\.|pg\.?)\s*(?P<number>[1-9]\d*)"
     r"(?:\s*(?:(?P<through>-|\u2013|to|through)|and)\s*(?P<other>[1-9]\d*))?",
     re.IGNORECASE)
@@ -505,13 +527,16 @@ def page_requests(question: str) -> tuple[PageRequest, ...]:
     """The pages a question names, each once, in the order it names them. Pure.
 
     "first page", "cover page" and "opening page" are page 1; "last page", "final page" and "closing page" are
-    page -1. "page 45", "p. 45" and "pg 45" name one page, "pages 10 and 11" two, and "pages 10-12", "pages 10 to
-    12", "pages 10 through 12" and "pp. 10-12" a range of at most MAX_PAGE_SPAN pages. Nothing else names a page,
-    so "30 days" and "Form CG 21 47" name none.
+    page -1, and so is the end of the document: "How does the policy end?", "the end of the handbook", "the
+    ending", each ending its clause or followed by a verb such as "say". "When does the policy end?", "the policy
+    end date" and "the end of the policy period" are dates.
+    "page 45", "p. 45" and "pg 45" name one page, "pages 10 and 11" two, and "pages 10-12", "pages 10 to 12",
+    "pages 10 through 12" and "pp. 10-12" a range of at most MAX_PAGE_SPAN pages. Nothing else names a page, so
+    "30 days" and "Form CG 21 47" name none.
     """
     found: list[PageRequest] = []
     for match in _PAGE_REFERENCE.finditer(question):
-        if match["first"] or match["last"]:
+        if match["first"] or match["last"] or match["ending"]:
             end = 1 if match["first"] else -1
             found.append(PageRequest(end, end))
             continue
@@ -524,12 +549,147 @@ def page_requests(question: str) -> tuple[PageRequest, ...]:
     return tuple(dict.fromkeys(found))
 
 
+_LABEL = (r"(?:\u00a7|(?:sec|para)\.|(?:paragraph|para|section|part|exhibit|appendix|article|schedule|form|chapter"
+          r"|clause|endorsement)\b)")
+_FORM_NUMBER = r"[A-Z]{1,4}(?:[ -]?\d{2,4})+"                         # "CG 21 47"
+_NUMBER = r"\d+(?:\.\d+)*[A-Za-z]{0,2}(?:\([0-9A-Za-z]{1,4}\))*"     # "10", "903D(1)", "9.4.2", "21A"
+_IDENTIFIER = rf"(?:{_FORM_NUMBER}|{_NUMBER}|[A-Z]{{1,4}})"           # the last: "IV", "A"
+_SECTION_REFERENCE = re.compile(rf"(?<![\w\u00a7])(?i:(?P<label>{_LABEL}))\s*(?P<id>{_IDENTIFIER})(?![\w(])")
+_LIST_MARKER = re.compile(r"\(?(?P<id>[0-9A-Za-z]{1,4})[.)](?!\S)")  # "D.", "(1)", "a)"
+_BARE_NUMBER = re.compile(rf"(?P<id>{_FORM_NUMBER}|{_NUMBER})(?![\w(])")  # "903 High-Risk Land", "CG 21 47 ..."
+_WORDS = re.compile(r"[^\W_]+")
+_CANONICAL_LABEL = {"\u00a7": "section", "sec.": "section", "para.": "paragraph", "para": "paragraph"}
+_BARE_LABELS = frozenset({"section", "paragraph", "clause"})   # labels a numbered title leaves out: "903 High-Risk Land"
+MIN_TITLE_WORDS = 3         # a title written out in a question names its section from this many words
+
+
+@dataclass(frozen=True, slots=True)
+class _Title:
+    """An outline title read as the identifier it starts with and the words after it."""
+
+    label: str | None           # "part" for "Part 10: Units"; None for "903 High-Risk Land" or "D. ..."
+    parts: tuple[str, ...]      # ("903", "d", "1") for "903D(1)"; a form number is one part
+    marker: bool                # "D." or "(1)": names its section only under its parent ("903D")
+    words: tuple[str, ...]      # the title after its identifier, as words, compared without case
+
+
+def _read_title(title: str) -> _Title:
+    if found := _SECTION_REFERENCE.match(title):
+        return _Title(_label(found["label"]), _parts(found["id"]), False, _words(title[found.end():]))
+    for pattern, marker in ((_LIST_MARKER, True), (_BARE_NUMBER, False)):
+        if found := pattern.match(title):
+            return _Title(None, _parts(found["id"]), marker, _words(title[found.end():]))
+    return _Title(None, (), False, _words(title))
+
+
+def _label(text: str) -> str:
+    return _CANONICAL_LABEL.get(text.lower(), text.lower())
+
+
+def _parts(identifier: str) -> tuple[str, ...]:
+    if re.fullmatch(_FORM_NUMBER, identifier):
+        return (" ".join(_WORDS.findall(identifier)).casefold(),)
+    return tuple(part.casefold() for part in re.findall(r"\d+|[A-Za-z]+", identifier))
+
+
+def _words(text: str) -> tuple[str, ...]:
+    return tuple(word.casefold() for word in _WORDS.findall(text))
+
+
+def section_requests(question: str, outline: Sequence[OutlineEntry], page_count: int) -> tuple[SectionRequest, ...]:
+    """The sections of one document a question names, each once, in the order it names them. Pure.
+
+    A section is named by a label and an identifier ("Exhibit 23", "Part 10", "section 903", "Para. 903D(1)",
+    "Form CG 21 47") or by writing out a title of at least MIN_TITLE_WORDS words after its identifier ("the High-Risk
+    Land Exclusion Option"). A labelled identifier matches a title that starts with the same label, or, for section,
+    paragraph, clause and form numbers, with the identifier alone ("903 High-Risk Land ..."). Its later parts then walk
+    down the outline: "903D(1)" is the "D." under "903 ..." when there is no "(1)" under that. The match that uses the
+    most of the reference wins, then a labelled title, then an entry over one it sits under. A reference that matches
+    nothing, or two unrelated entries equally well ("section 1" in a document with a Section 1 in every Part), names
+    nothing: the answer would be a guess.
+
+    A section runs from its entry's page to the page where the next entry at its level or above starts, which is
+    often the page the section ends on, or to the last page.
+    """
+    if not outline:
+        return ()
+    titles = [_read_title(entry.title) for entry in outline]
+    named = [(found.start(), index) for found in _SECTION_REFERENCE.finditer(question)
+             if (index := _numbered(found, outline, titles)) is not None]
+    named += _written_out(question, outline, titles)
+    return tuple(dict.fromkeys(_section(outline, index, page_count) for _, index in sorted(named)))
+
+
+def _numbered(reference: re.Match[str], outline: Sequence[OutlineEntry], titles: Sequence[_Title]) -> int | None:
+    label, parts = _label(reference["label"]), _parts(reference["id"])
+    bare = label in _BARE_LABELS or bool(re.fullmatch(_FORM_NUMBER, reference["id"]))
+    scores: dict[int, tuple[int, bool]] = {}
+    for index, title in enumerate(titles):
+        allowed = title.label == label if title.label is not None else bare
+        if title.marker or not title.parts or parts[:len(title.parts)] != title.parts or not allowed:
+            continue
+        node, used = index, len(title.parts)
+        while used < len(parts) and (child := _child(outline, titles, node, parts[used])) is not None:
+            node, used = child, used + 1
+        scores[node] = max(scores.get(node, (0, False)), (used, title.label is not None))
+    return _best(scores, outline)
+
+
+def _child(outline: Sequence[OutlineEntry], titles: Sequence[_Title], parent: int, part: str) -> int | None:
+    """The one entry directly under outline[parent] whose title starts with `part` alone ("D." under "903 ...")."""
+    level = outline[parent].level
+    below = list(itertools.takewhile(lambda at: outline[at].level > level, range(parent + 1, len(outline))))
+    top = min((outline[at].level for at in below), default=level)
+    found = [at for at in below if outline[at].level == top and titles[at].label is None and titles[at].parts == (part,)]
+    return found[0] if len(found) == 1 else None
+
+
+def _written_out(question: str, outline: Sequence[OutlineEntry], titles: Sequence[_Title]) -> list[tuple[int, int]]:
+    """(where in the question, outline index) of each title the question writes out. A longer title wins the words
+    it shares with a shorter one; one written out for several entries names none of them."""
+    found = [(word.start(), word.group().casefold()) for word in _WORDS.finditer(question)]
+    words = [word for _, word in found]
+    spans: dict[tuple[int, int], dict[int, int]] = {}   # (first word, words) -> {outline index: score}
+    for index, title in enumerate(titles):
+        size = len(title.words)
+        if size >= MIN_TITLE_WORDS:
+            for start in range(len(words) - size + 1):
+                if tuple(words[start:start + size]) == title.words:
+                    spans.setdefault((start, size), {})[index] = 0
+    taken: set[int] = set()
+    named: list[tuple[int, int]] = []
+    for start, size in sorted(spans, key=lambda span: (-span[1], span[0])):
+        if taken.isdisjoint(range(start, start + size)):
+            taken.update(range(start, start + size))
+            if (index := _best(spans[start, size], outline)) is not None:
+                named.append((found[start][0], index))
+    return named
+
+
+def _best(scores: Mapping[int, Any], outline: Sequence[OutlineEntry]) -> int | None:
+    """The outline index with the highest score, or None when there is none or entries in different branches tie.
+    Of an entry and one under it, the one under it wins."""
+    top = [index for index, score in scores.items() if score == max(scores.values())]
+    best = [index for index in top if not any(_under(outline, other, index) for other in top)]
+    return best[0] if len(best) == 1 else None
+
+
+def _under(outline: Sequence[OutlineEntry], child: int, parent: int) -> bool:
+    return parent < child and all(entry.level > outline[parent].level for entry in outline[parent + 1:child + 1])
+
+
+def _section(outline: Sequence[OutlineEntry], index: int, page_count: int) -> SectionRequest:
+    entry = outline[index]
+    end = next((later.page for later in outline[index + 1:] if later.level <= entry.level), page_count)
+    return SectionRequest(entry.title, entry.page, max(entry.page, end))
+
+
 PAGES_SQL = """
 WITH wanted AS (
-  SELECT * FROM unnest(%(doc_ids)s::uuid[], %(firsts)s::int[], %(lasts)s::int[])
-    WITH ORDINALITY AS w(document_id, first_page, last_page, at)
+  SELECT * FROM unnest(%(doc_ids)s::uuid[], %(firsts)s::int[], %(lasts)s::int[], %(takes)s::int[])
+    WITH ORDINALITY AS w(document_id, first_page, last_page, take, at)
 ), hits AS (
-  SELECT w.at, c.id, c.ord, row_number() OVER (PARTITION BY w.at ORDER BY c.ord) AS n
+  SELECT w.at, w.take, c.id, c.ord, row_number() OVER (PARTITION BY w.at ORDER BY c.ord) AS n
   FROM wanted w JOIN chunks c ON c.document_id = w.document_id
   WHERE c.embedding_model = %(model)s
     AND EXISTS (SELECT 1 FROM jsonb_array_elements(c.page_map) AS s(start)
@@ -537,99 +697,105 @@ WITH wanted AS (
 )
 SELECT hits.at, c.id, c.text, c.page_map, 1 - (c.embedding <=> %(q)s) AS similarity
 FROM hits JOIN chunks c USING (id)
-WHERE hits.n <= %(per_request)s
+WHERE hits.n <= hits.take
 ORDER BY hits.at, c.ord
 """
 
 
-def page_passages(conn: Connection, documents: Sequence[DocRef], requests: Sequence[PageRequest], q_vec: Vector,
-                  embed_model: str, *, k: int) -> list[Candidate]:
-    """The parts of chunks on the pages the question names, in scope order, then in the order the question names
-    the pages, then in reading order.
+def page_passages(conn: Connection, documents: Sequence[DocRef], question: str, q_vec: Vector, embed_model: str, *,
+                  k: int) -> tuple[list[Candidate], list[Candidate]]:
+    """The parts of chunks on the pages the question names by number, and the parts that open the sections it names,
+    each in scope order, then in the order the question names them, then in reading order.
 
     Each request gets the first PAGE_PASSAGES_PER_REQUEST chunks holding its pages, so "page 2 and the last page"
     sends both; a document sends at most PAGE_PASSAGES_PER_DOC, and the chat at most k in all. Each part is cut to
     its request's pages (pages.part_on_pages) and keeps its chunk's id, so the model reads "p. 7 of 7" rather than
     a chunk that starts on page 5. Neighbouring chunks overlap, so a part whose text another part of the same
-    document holds whole is dropped. Only PDFs count: the sections of a Word or text document are cut by length,
-    so "page 3" names nothing in one. A page past a document's last page names nothing in it.
+    document holds whole is dropped. Only PDFs have numbered pages: the sections of a Word or text document are cut
+    by length, so "page 3" names nothing in one, though its last section is still how it ends. A page past a
+    document's last page names nothing in it.
+
+    A section's parts start with the chunk that holds its title (pages.has_title), found among the first
+    TITLE_LOOKAHEAD more: a section often starts mid-page, after the end of the one before. Word headings name
+    sections too.
     """
-    wanted = [(doc, span) for doc in documents if doc.page_basis is PageBasis.PHYSICAL
-              for request in requests if (span := request.resolve(doc.page_count)) is not None]
+    numbered = page_requests(question)
+    wanted: list[tuple[DocRef, int, int, str | None]] = []
+    for doc in documents:
+        wanted += [(doc, *span, None) for request in numbered
+                   if (doc.page_basis is PageBasis.PHYSICAL or request.first < 0)
+                   and (span := request.resolve(doc.page_count))]
+        wanted += [(doc, section.first, section.last, section.title)
+                   for section in section_requests(question, doc.outline, doc.page_count)]
     if not wanted:
-        return []
-    rows = conn.execute(PAGES_SQL, {"q": PgVector(q_vec), "doc_ids": [doc.id for doc, _ in wanted],
-                                    "firsts": [first for _, (first, _) in wanted],
-                                    "lasts": [last for _, (_, last) in wanted],
-                                    "model": embed_model, "per_request": PAGE_PASSAGES_PER_REQUEST})
-    parts: list[Candidate] = []
-    for row in rows:
-        doc, (first, last) = wanted[row["at"] - 1]
-        if part := pages.part_on_pages(row["text"], _page_map(row["page_map"]), first, last):
-            parts.append(Candidate(ChunkId(row["id"]), doc, *part, row["similarity"], 0.0, False))
+        return [], []
+    rows = conn.execute(PAGES_SQL, {"q": PgVector(q_vec), "doc_ids": [doc.id for doc, *_ in wanted],
+                                    "firsts": [first for _, first, _, _ in wanted],
+                                    "lasts": [last for _, _, last, _ in wanted],
+                                    "takes": [PAGE_PASSAGES_PER_REQUEST + (0 if title is None else TITLE_LOOKAHEAD)
+                                              for *_, title in wanted],
+                                    "model": embed_model})
+    parts: list[tuple[Candidate, bool]] = []
+    for at, group in itertools.groupby(rows, key=lambda row: row["at"]):
+        doc, first, last, title = wanted[at - 1]
+        cut = [Candidate(ChunkId(row["id"]), doc, *part, row["similarity"], 0.0, False) for row in group
+               if (part := pages.part_on_pages(row["text"], _page_map(row["page_map"]), first, last))]
+        if title is not None:
+            cut = cut[next((n for n, part in enumerate(cut) if pages.has_title(title, part.text)), 0):]
+        parts += [(part, title is not None) for part in cut[:PAGE_PASSAGES_PER_REQUEST]]
     taken: Counter[DocumentId] = Counter()
-    passages: list[Candidate] = []
-    for part in _uncontained(parts):
-        if taken[part.doc.id] < PAGE_PASSAGES_PER_DOC:
+    on_pages: list[Candidate] = []
+    in_sections: list[Candidate] = []
+    for (part, in_section), held in zip(parts, _held([part for part, _ in parts]), strict=True):
+        if not held and taken[part.doc.id] < PAGE_PASSAGES_PER_DOC and taken.total() < k:
             taken[part.doc.id] += 1
-            passages.append(part)
-    return passages[:k]
+            (in_sections if in_section else on_pages).append(part)
+    return on_pages, in_sections
 
 
-def _uncontained(passages: Sequence[Candidate]) -> list[Candidate]:
-    """The passages whose text no other passage of the same document holds; of passages with equal text, the first."""
-    def held(at: int, passage: Candidate) -> bool:
-        return any(other.doc.id == passage.doc.id and passage.text in other.text
-                   and (len(other.text) > len(passage.text) or there < at)
-                   for there, other in enumerate(passages) if there != at)
+def _held(passages: Sequence[Candidate]) -> list[bool]:
+    """For each passage, whether another passage of the same document holds its text; of equal texts, all but the
+    first are held."""
+    return [any(other.doc.id == passage.doc.id and passage.text in other.text
+                and (len(other.text) > len(passage.text) or there < at)
+                for there, other in enumerate(passages) if there != at)
+            for at, passage in enumerate(passages)]
 
-    return [passage for at, passage in enumerate(passages) if not held(at, passage)]
 
-
-# Two index lookups per document on (document_id, ord), so no other chunk is read, sorted or scored.
-ENDS_SQL = """
-SELECT c.id, c.document_id, c.text, c.page_map, 1 - (c.embedding <=> %(q)s) AS similarity, c.closing
+# One index lookup per document on (document_id, ord), so no other chunk is read, sorted or scored.
+OPENINGS_SQL = """
+SELECT c.id, c.document_id, c.text, c.page_map, 1 - (c.embedding <=> %(q)s) AS similarity
 FROM unnest(%(doc_ids)s::uuid[]) AS d(id)
-CROSS JOIN LATERAL (
-  (SELECT id, document_id, text, page_map, embedding, false AS closing FROM chunks
-   WHERE document_id = d.id AND embedding_model = %(model)s ORDER BY ord LIMIT 1)
-  UNION ALL
-  (SELECT id, document_id, text, page_map, embedding, true FROM chunks
-   WHERE document_id = d.id AND embedding_model = %(model)s AND %(closings)s ORDER BY ord DESC LIMIT 1)
-) c
+CROSS JOIN LATERAL (SELECT id, document_id, text, page_map, embedding FROM chunks
+                    WHERE document_id = d.id AND embedding_model = %(model)s ORDER BY ord LIMIT 1) c
 """
 
 
-def ends(conn: Connection, documents: Sequence[DocRef], q_vec: Vector, embed_model: str) -> list[Candidate]:
-    """Each document's opening passage, its first chunk, and in a chat of up to OPENING_DOCS documents its closing
-    passage, its last chunk, in scope order. A document of one chunk gives it once.
+def openings(conn: Connection, documents: Sequence[DocRef], q_vec: Vector, embed_model: str) -> list[Candidate]:
+    """Each document's opening passage, its first chunk, in scope order.
 
-    The opening holds the title, cover or declarations page, which say what the document is, and the closing
-    says how it ends. A question about the document as a whole ("What is this about?", "How does it end?")
-    scores as low against them as an off-topic question does, so retrieval does not find them, and the answer
-    step gets them from here instead.
+    The opening holds the title, cover or declarations page, which say what the document is. A question about
+    the document as a whole ("What is this about?") scores as low against it as an off-topic question does,
+    so retrieval does not find it, and the answer step gets it from here instead. A question about how a document
+    ends names its last page (page_requests).
     """
-    rows = {(row["document_id"], row["closing"]): row for row in conn.execute(ENDS_SQL, {
-        "q": PgVector(q_vec), "doc_ids": [doc.id for doc in documents], "model": embed_model,
-        "closings": len(documents) <= OPENING_DOCS})}
-    found: dict[ChunkId, Candidate] = {}
-    for doc in documents:
-        for row in (rows.get((doc.id, closing)) for closing in (False, True)):
-            if row is not None:
-                end = Candidate(ChunkId(row["id"]), doc, row["text"], _page_map(row["page_map"]), row["similarity"],
-                                0.0, False)
-                found.setdefault(end.chunk_id, end)
-    return list(found.values())
+    rows = conn.execute(OPENINGS_SQL, {"q": PgVector(q_vec), "doc_ids": [doc.id for doc in documents],
+                                       "model": embed_model})
+    by_doc = {row["document_id"]: row for row in rows}
+    return [Candidate(ChunkId(row["id"]), doc, row["text"], _page_map(row["page_map"]), row["similarity"], 0.0, False)
+            for doc in documents if (row := by_doc.get(doc.id)) is not None]
 
 
-def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int,
-                   on_pages: Sequence[Candidate] = (), ends: Sequence[Candidate] = ()) -> list[Source]:
+def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int, on_pages: Sequence[Candidate] = (),
+                   in_sections: Sequence[Candidate] = (), openings: Sequence[Candidate] = ()) -> list[Source]:
     """Choose the sources the model sees, labelled S1, S2, ... in this order: the passages on the pages the
-    question names, then k retrieved candidates in fused (rrf) order, then the opening and closing passages.
+    question names, the passages opening the sections it names, then retrieved candidates in fused (rrf) order up
+    to k in all, then the opening passages.
 
-    The page passages are what the user asked for, so they lead. A chunk a page passage holds whole is not sent
-    again; one cut to the pages asked about still is, so its other pages stay in the prompt. Of the other
-    candidates, each document is first guaranteed its best chunks by rrf, up to per_doc_min,
+    The page and section passages are what the user asked for, so they lead, and each takes the place of a
+    retrieved one, so naming a page or a section never makes the prompt bigger. A chunk a page or section passage
+    holds whole is not sent again; one cut to the pages asked about still is, so its other pages stay in the
+    prompt. Of the other candidates, each document is first guaranteed its best chunks by rrf, up to per_doc_min,
     then the rest fill to k by rrf. "Compare the deductibles in these three
     quotes" then sees all three quotes even when one dominates the scores. The
     guarantees take at most half of the k slots, so each document gets fewer as
@@ -638,24 +804,25 @@ def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int,
     first ones. With one document this is the top k. An exact rrf tie goes to
     the higher similarity.
 
-    In a chat of up to OPENING_DOCS documents, each opening and closing passage
-    not already chosen follows the k, so a question about a document as a whole
-    sees its title page and its end. A bigger chat sends none: one per document
-    would outgrow the k.
+    In a chat of up to OPENING_DOCS documents, each opening passage not already
+    chosen follows the k, so a question about a document as a whole sees its
+    title page. A bigger chat sends none: one per document would outgrow the k.
     """
-    whole = {(passage.chunk_id, passage.text) for passage in on_pages}
+    named = [*on_pages, *in_sections]
+    whole = {(passage.chunk_id, passage.text) for passage in named}
     ranked = sorted((candidate for candidate in candidates if (candidate.chunk_id, candidate.text) not in whole),
                     key=lambda candidate: (candidate.rrf, candidate.similarity), reverse=True)
-    quota = min(per_doc_min, k // 2 // max(1, len({candidate.doc.id for candidate in ranked})))
+    room = max(k - len(named), 0)
+    quota = min(per_doc_min, room // 2 // max(1, len({candidate.doc.id for candidate in ranked})))
     taken: Counter[DocumentId] = Counter()
     rounds: list[tuple[int, int]] = []
     for at, candidate in enumerate(ranked):
         rounds.append((min(taken[candidate.doc.id], quota), at))
         taken[candidate.doc.id] += 1
-    picked = [*on_pages, *(ranked[at] for at in sorted(at for _, at in sorted(rounds)[:k]))]
-    if len({end.doc.id for end in ends}) <= OPENING_DOCS:
+    picked = [*named, *(ranked[at] for at in sorted(at for _, at in sorted(rounds)[:room]))]
+    if len(openings) <= OPENING_DOCS:
         held = {(candidate.chunk_id, candidate.text) for candidate in picked}
-        picked += [end for end in ends if (end.chunk_id, end.text) not in held]
+        picked += [opening for opening in openings if (opening.chunk_id, opening.text) not in held]
     return _labelled(picked)
 
 
