@@ -288,6 +288,6 @@ def test_a_chat_over_two_versions_of_one_file_names_each_version(client, ctx):
     chat = client.post("/chats", json={"document_ids": [str(v2.id), str(v1.id), str(other.id)]}).json()
     turn = client.post(f"/chats/{chat['id']}/messages", json={"question": "What is the property damage deductible?"})
 
-    assert [d["filename"] for d in chat["documents"]] == ["notes.txt", "terms.txt (version 1)", "terms.txt (version 2)"]
+    assert [d["filename"] for d in chat["documents"]] == ["notes.txt", "terms.txt", "terms.txt"]   # the UI adds versions
     assert {c["filename"] for c in turn.json()["citations"]} <= {"terms.txt (version 1)", "terms.txt (version 2)"}
     assert turn.json()["citations"]

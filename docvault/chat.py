@@ -101,11 +101,8 @@ def start(db: Db, document_ids: Sequence[DocumentId], *, title: str | None = Non
     with db.connection() as conn, conn.transaction():
         ready_documents(conn, wanted)
         chat_id = conn.execute("INSERT INTO chats (title) VALUES (%s) RETURNING id", (title,)).fetchone()["id"]
-        # Two versions of one file share its name, so each is named with its version, for the model and the user.
         conn.execute("INSERT INTO chat_documents (chat_id, document_id, filename)"
-                     " SELECT %s, id, CASE WHEN count(*) OVER (PARTITION BY filename) > 1"
-                     "   THEN filename || ' (version ' || version || ')' ELSE filename END"
-                     " FROM documents WHERE id = ANY(%s)", (chat_id, wanted))
+                     " SELECT %s, id, filename FROM documents WHERE id = ANY(%s)", (chat_id, wanted))
         return _row_to_chat(conn.execute(_CHAT_SQL + "WHERE c.id = %s GROUP BY c.id", (chat_id,)).fetchone())
 
 
@@ -329,15 +326,17 @@ def _require_chat(conn: Connection, chat_id: ChatId) -> None:
 
 
 def _scope(conn: Connection, chat_id: ChatId) -> tuple[DocRef, *tuple[DocRef, ...]]:
-    """The chat's documents in one fixed order, for the API body and the refusal text.
+    """The chat's documents in one fixed order, as the model, the citations and the refusal text name them.
 
+    Two versions of one file share its name, so each is then named "<filename> (version N)".
     Raises DOCUMENTS_DELETED when any of them was deleted after the chat started:
     answering from the rest would quietly change what the chat was asked about.
     """
     rows = conn.execute(
-        "SELECT cd.document_id, cd.filename, d.page_basis FROM chat_documents cd"
-        " LEFT JOIN documents d ON d.id = cd.document_id WHERE cd.chat_id = %s ORDER BY cd.filename, cd.document_id",
-        (chat_id,)).fetchall()
+        "SELECT cd.document_id, CASE WHEN count(*) OVER (PARTITION BY cd.filename) > 1 AND d.version IS NOT NULL"
+        "   THEN cd.filename || ' (version ' || d.version || ')' ELSE cd.filename END AS filename, d.page_basis"
+        " FROM chat_documents cd LEFT JOIN documents d ON d.id = cd.document_id WHERE cd.chat_id = %s"
+        " ORDER BY cd.filename, cd.document_id", (chat_id,)).fetchall()
     if deleted := [{"id": str(row["document_id"]), "filename": row["filename"], "status": "deleted"} for row in rows
                    if row["page_basis"] is None]:
         raise VaultError(ErrorCode.DOCUMENTS_DELETED,
