@@ -108,7 +108,7 @@ A document that is not ready returns 409 `documents_not_ready`, and `details.not
 curl -s "$API/chats?limit=10"
 ```
 
-`GET /chats/{id}` returns one chat and its documents. A document deleted since the chat started has `deleted: true`, and the chat then refuses new questions with 409 `documents_deleted`. After the chunk settings or the embedding model change, `reconcile` indexes each document again within a minute or so. From then until the document is ready, a question in a chat on it gets 409 `documents_not_ready`, and if that indexing fails, the message says to retry the document.
+`GET /chats/{id}` returns one chat and its documents. A document deleted since the chat started has `deleted: true`, and the chat then refuses new questions with 409 `documents_deleted`. After the chunk settings or the embedding model change, `reconcile`, which runs once a minute, indexes each document again. After a chunk-settings change it re-cuts at most 10 documents a minute. From then until the document is ready, a question in a chat on it gets 409 `documents_not_ready`, and if that indexing fails, the message says to retry the document.
 
 ```bash
 curl -s $API/chats/$CHAT
