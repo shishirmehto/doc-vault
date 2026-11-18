@@ -42,6 +42,7 @@ from .domain import (
     Failure,
     SummaryOptions,
     Turn,
+    TurnId,
     VaultError,
 )
 from .ratelimit import Action
@@ -57,6 +58,7 @@ ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.DOCUMENT_NOT_FOUND: 404,
     ErrorCode.PAGE_NOT_FOUND: 404,
     ErrorCode.CHAT_NOT_FOUND: 404,
+    ErrorCode.TURN_NOT_FOUND: 404,
     ErrorCode.COMPARISON_NOT_FOUND: 404,
     ErrorCode.DOCUMENTS_NOT_READY: 409,
     ErrorCode.DOCUMENTS_DELETED: 409,
@@ -464,6 +466,13 @@ async def document_events(request: Request) -> FeedResponse:
 def history(chat_id: UUID, ctx: Deps, limit: Annotated[int, Query(ge=1, le=200)] = 50) -> wire.HistoryOut:
     return wire.HistoryOut(chat_id=chat_id,
                            turns=[wire.turn_out(turn) for turn in chat.history(ctx.db, ChatId(chat_id), limit=limit)])
+
+
+@router.get("/chats/{chat_id}/messages/{turn_id}/retrieval", response_model=wire.RetrievalOut,
+            responses=errors(ErrorCode.CHAT_NOT_FOUND, ErrorCode.TURN_NOT_FOUND, ErrorCode.INVALID_REQUEST))
+def turn_retrieval(chat_id: UUID, turn_id: UUID, ctx: Deps) -> wire.RetrievalOut:
+    """What the turn's search found, with scores, and which passages its answer step was sent."""
+    return wire.retrieval_out(chat.turn_retrieval(ctx.db, ChatId(chat_id), TurnId(turn_id)))
 
 
 @router.post("/comparisons", status_code=201, response_model=wire.ComparisonOut, dependencies=[rate_limited("ask")],

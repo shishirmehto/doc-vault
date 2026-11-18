@@ -36,9 +36,11 @@ from .domain import (
     Page,
     PageBasis,
     Parsing,
+    PassageKind,
     Purpose,
     Queued,
     Ready,
+    RetrievalLog,
     Step,
     Summary,
     SummaryLength,
@@ -247,6 +249,28 @@ class TurnOut(BaseModel):
 class HistoryOut(BaseModel):
     chat_id: UUID
     turns: list[TurnOut]
+
+
+class LoggedPassageOut(BaseModel):
+    chunk_id: UUID
+    document_id: UUID
+    kind: PassageKind
+    first_page: int                    # of the passage's page map: the cut part's for a page or section passage
+    last_page: int
+    similarity: float
+    rrf: float
+    lexical_hit: bool
+    rank: int | None                   # 1-based place in fused order, retrieved passages only
+    label: str | None                  # "S3" when the answer step was sent it
+
+
+class RetrievalOut(BaseModel):
+    query: str                         # the standalone query
+    matched: bool                      # the gate passed, or the question named a page or section the documents have
+    min_similarity: float
+    k: int
+    passages: list[LoggedPassageOut]
+    omitted: int                       # passages search found that the log leaves out
 
 
 def _distinct(ids: list[UUID]) -> list[UUID]:
@@ -518,6 +542,10 @@ def turn_out(turn: Turn) -> TurnOut:
         usage=UsageOut.model_validate(turn.usage, from_attributes=True),
         latency_ms=round((turn.finished_at - turn.started_at).total_seconds() * 1000), created_at=turn.started_at,
         cached=turn.cached)
+
+
+def retrieval_out(log: RetrievalLog) -> RetrievalOut:
+    return RetrievalOut.model_validate(dataclasses.asdict(log))
 
 
 def comparison_out(comparison: Comparison) -> ComparisonOut:

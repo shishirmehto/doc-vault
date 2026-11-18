@@ -175,6 +175,12 @@ data: {"id": "...", "status": "answered", "answer": "Property Damage Deductible 
 curl -s "$API/chats/$CHAT/messages?limit=50"
 ```
 
+`GET /chats/{id}/messages/{turn_id}/retrieval` returns what one turn's search found and what its answer step was sent, so a wrong or missing answer can be traced to its passages. `query` is the text searched (the standalone question), `matched` says whether the relevance gate passed at `min_similarity`, and `k` is the number of retrieved passages the answer step could take. Each entry in `passages` has its `chunk_id`, `document_id`, `first_page` and `last_page`, its `similarity`, fused `rrf` score and `lexical_hit`, its `kind` (`retrieved`, `page`, `section` or `opening`), its `rank` in fused order (retrieved passages only) and its `label` (`S3`) when it was sent. The log keeps every sent passage, the top `2 × k` retrieved ones and the two the gate decided on. `omitted` counts the rest. A cached answer returns the log of the turn that first produced it. A turn from before the log existed returns 404 `turn_not_found`.
+
+```bash
+curl -s $API/chats/$CHAT/messages/$TURN/retrieval
+```
+
 ## Comparisons
 
 `POST /comparisons` compares 2 to 5 ready documents field by field and returns 201 with the stored comparison. `focus`, at most 200 characters, narrows the fields ("deductibles"). Without it the model lines up the fields a broker compares: insured, insurer, period, limits, deductibles, premium, exclusions and endorsements. A comparison spends from the same per-client budget as asks.
@@ -270,7 +276,7 @@ curl -s $API/health
 | Status | Codes |
 |---|---|
 | 400 | `invalid_cursor` |
-| 404 | `document_not_found`, `page_not_found`, `chat_not_found`, `comparison_not_found` |
+| 404 | `document_not_found`, `page_not_found`, `chat_not_found`, `turn_not_found`, `comparison_not_found` |
 | 409 | `documents_not_ready`, `documents_deleted`, `nothing_to_retry`, `version_conflict` |
 | 413 | `file_too_large` |
 | 415 | `unsupported_type` |

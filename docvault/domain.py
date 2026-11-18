@@ -112,6 +112,7 @@ class ErrorCode(StrEnum):
     DOCUMENT_NOT_FOUND = "document_not_found"
     PAGE_NOT_FOUND = "page_not_found"
     CHAT_NOT_FOUND = "chat_not_found"
+    TURN_NOT_FOUND = "turn_not_found"
     COMPARISON_NOT_FOUND = "comparison_not_found"
     DOCUMENTS_NOT_READY = "documents_not_ready"
     DOCUMENTS_DELETED = "documents_deleted"
@@ -434,6 +435,41 @@ class Turn:
     usage: Usage                # aggregated from llm_calls WHERE turn_id = id
     suggestions: tuple[str, ...]
     cached: bool                # served from the answer cache: no model call, usage all zero
+
+
+class PassageKind(StrEnum):
+    """Which of chat.Found's lists a logged passage came from."""
+
+    RETRIEVED = "retrieved"     # hybrid retrieval (Found.retrieved)
+    PAGE = "page"               # Found.on_pages
+    SECTION = "section"         # Found.in_sections
+    OPENING = "opening"         # Found.openings
+
+
+@dataclass(frozen=True, slots=True)
+class LoggedPassage:
+    chunk_id: ChunkId
+    document_id: DocumentId
+    kind: PassageKind
+    first_page: int             # of the passage's page map: the cut part's for a page or section passage
+    last_page: int
+    similarity: float
+    rrf: float
+    lexical_hit: bool
+    rank: int | None            # 1-based place in fused order, retrieved passages only
+    label: str | None           # "S3" when the answer step was sent it
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalLog:
+    """What one turn's search found, with scores, and which passages its answer step was sent (chat.retrieval_log)."""
+
+    query: str                  # the standalone query
+    matched: bool               # Found.matched at min_similarity: what ask decided on
+    min_similarity: float
+    k: int
+    passages: tuple[LoggedPassage, ...]
+    omitted: int                # passages search found that the log leaves out
 
 
 @dataclass(frozen=True, slots=True)

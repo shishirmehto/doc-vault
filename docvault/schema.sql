@@ -165,6 +165,7 @@ CREATE TABLE IF NOT EXISTS chat_turns (
   citations        jsonb NOT NULL DEFAULT '[]',
   suggestions      jsonb NOT NULL DEFAULT '[]',     -- follow-up questions offered under the answer, at most 3
   cached           boolean NOT NULL DEFAULT false,  -- served from the answer cache, with no model call
+  retrieval        jsonb,                           -- what search found and what the answer step was sent (chat.py retrieval_log); NULL for a turn from before the log
   started_at       timestamptz NOT NULL,
   finished_at      timestamptz NOT NULL,
   CONSTRAINT chat_turns_outcome_values CHECK (outcome IN ('answered', 'no_evidence', 'model_declined', 'unverified')),
@@ -172,6 +173,7 @@ CREATE TABLE IF NOT EXISTS chat_turns (
 );
 CREATE INDEX IF NOT EXISTS chat_turns_history ON chat_turns (chat_id, started_at, id);
 CREATE INDEX IF NOT EXISTS chat_turns_window  ON chat_turns (started_at);
+ALTER TABLE chat_turns ADD COLUMN IF NOT EXISTS retrieval jsonb;
 
 -- One row per comparison, written once after the model call; a provider failure writes none. documents is a
 -- snapshot in column order (id, filename, page_basis, pages_read, page_count), so labels and coverage survive a

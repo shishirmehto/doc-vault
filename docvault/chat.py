@@ -21,8 +21,8 @@ import itertools
 import json
 import re
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -49,11 +49,14 @@ from .domain import (
     DocRef,
     DocumentId,
     ErrorCode,
+    LoggedPassage,
     NotFound,
     OutlineEntry,
     PageBasis,
     PageMap,
+    PassageKind,
     Purpose,
+    RetrievalLog,
     Source,
     Turn,
     TurnId,
@@ -75,7 +78,7 @@ PAGE_PASSAGES_PER_REQUEST = 2   # chunks sent for each page, range or section a 
 PAGE_PASSAGES_PER_DOC = 4   # chunks sent for the pages and sections a question names, per document
 MAX_PAGE_SPAN = 10          # "pages 1-500" asks for the first 10
 TITLE_LOOKAHEAD = 3         # chunks read past a section's first ones to find the one holding its title
-ANSWER_CACHE_FORMAT = 11    # part of every answer key: a change to the cached value's shape or to select_sources bumps it
+ANSWER_CACHE_FORMAT = 12    # part of every answer key: a change to the cached value's shape or to select_sources bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
 
 
@@ -182,9 +185,10 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
 
     A chat's first question is looked up in the answer cache under answer_key. A hit makes
     no model call of any kind, sends no stage, sends its text once to on_text, and stores a
-    turn marked cached. Only answered turns go into the cache: a refusal asked again should
-    get a fresh attempt from a live model, and a cached refusal would pin it until the prompt
-    version changes. A follow-up depends on the turns before it, so it is never looked up or stored.
+    turn marked cached with the retrieval log of the turn that answered first. Only answered
+    turns go into the cache: a refusal asked again should get a fresh attempt from a live model,
+    and a cached refusal would pin it until the prompt version changes. A follow-up depends on
+    the turns before it, so it is never looked up or stored.
 
     Over today's AI spending cap it raises VaultError(QUOTA_EXCEEDED) (HTTP 429) before
     any model call. A cache hit still answers.
@@ -211,10 +215,11 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
         past = _turns(conn, chat_id, limit=ctx.settings.history_turns)
         key = None if past else answer_key(ctx, _hashes(conn, documents), question)
     if key is not None and (hit := _cached_answer(ctx.cache, key)) is not None:
-        answer, suggested = hit
+        answer, suggested, logged = hit
         if on_text is not None:
             on_text(prompts.REF_MARKER.sub("", answer.text))
-        return _store_turn(ctx, turn_id, chat_id, question, question, answer, suggested, started, cached=True)
+        return _store_turn(ctx, turn_id, chat_id, question, question, answer, suggested, started, logged,
+                           cached=True)
     ctx.ai.check_budget(Purpose.ANSWER)
 
     if past:
@@ -228,9 +233,12 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
                        per_doc=ctx.settings.retrieval_per_doc_min, k=ctx.settings.retrieval_k)
     matched = found.matched(ctx.ai.min_similarity)
     fallback = found.openings[:ctx.settings.retrieval_k] if ctx.ai.chat.declines_unanswerable else []
-    sources = select_sources(found.retrieved, k=ctx.settings.retrieval_k, per_doc_min=ctx.settings.retrieval_per_doc_min,
-                             on_pages=found.on_pages, in_sections=found.in_sections,
-                             openings=found.openings) if matched else _labelled(fallback)
+    picked = _pick(found.retrieved, k=ctx.settings.retrieval_k, per_doc_min=ctx.settings.retrieval_per_doc_min,
+                   on_pages=found.on_pages, in_sections=found.in_sections,
+                   openings=found.openings) if matched else fallback
+    sources = _labelled(picked)
+    logged = _log_json(retrieval_log(standalone, found, picked, min_similarity=ctx.ai.min_similarity,
+                                     k=ctx.settings.retrieval_k))
 
     answer: Answer | None = None
     suggested: tuple[str, ...] = ()
@@ -248,9 +256,10 @@ def ask(ctx: Ctx, chat_id: ChatId, question: str, *, on_stage: Callable[[Stage],
             facts = insights.ready_key_facts(conn, [doc.id for doc in documents])
         suggested = fact_suggestions([[fact.label for fact in facts.get(doc.id, ())] for doc in documents], question)
 
-    turn = _store_turn(ctx, turn_id, chat_id, question, standalone, answer, suggested, started, cached=False)
+    turn = _store_turn(ctx, turn_id, chat_id, question, standalone, answer, suggested, started, logged,
+                       cached=False)
     if key is not None and isinstance(answer, Answered):
-        _cache_answer(ctx.cache, key, answer, suggested)
+        _cache_answer(ctx.cache, key, answer, suggested, logged)
     return turn
 
 
@@ -277,30 +286,32 @@ def _hashes(conn: Connection, documents: Sequence[DocRef]) -> dict[DocumentId, b
     return {DocumentId(row["id"]): bytes(row["sha256"]) for row in rows}
 
 
-def _cached_answer(cache: Cache, key: str) -> tuple[Answered, tuple[str, ...]] | None:
-    """The stored answer and suggestions, counting one hit or one miss."""
+def _cached_answer(cache: Cache, key: str) -> tuple[Answered, tuple[str, ...], dict[str, Any]] | None:
+    """The stored answer, suggestions and retrieval log (as _log_json wrote it), counting one hit or one miss."""
     [value] = cache.get_many([key])
     cache.count("answer", hits=int(value is not None), misses=int(value is None))
     if value is None:
         return None
     stored = json.loads(value)
-    return _answered(stored["text"], stored["citations"]), tuple(stored["suggestions"])
+    return _answered(stored["text"], stored["citations"]), tuple(stored["suggestions"]), stored["retrieval"]
 
 
-def _cache_answer(cache: Cache, key: str, answer: Answered, suggested: Sequence[str]) -> None:
+def _cache_answer(cache: Cache, key: str, answer: Answered, suggested: Sequence[str], logged: dict[str, Any]) -> None:
     cache.set_many({key: json.dumps({"text": answer.text, "citations": [_snapshot(c) for c in answer.citations],
-                                     "suggestions": list(suggested)}).encode()}, ANSWER_TTL_S)
+                                     "suggestions": list(suggested), "retrieval": logged}).encode()},
+                   ANSWER_TTL_S)
 
 
 def _store_turn(ctx: Ctx, turn_id: TurnId, chat_id: ChatId, question: str, standalone: str, answer: Answer,
-                suggested: Sequence[str], started: datetime, *, cached: bool) -> Turn:
+                suggested: Sequence[str], started: datetime, logged: dict[str, Any], *, cached: bool) -> Turn:
     with ctx.db.connection() as conn:
         conn.execute(
             "INSERT INTO chat_turns (id, chat_id, question, standalone_query, outcome, answer, citations,"
-            " suggestions, cached, started_at, finished_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            " suggestions, cached, retrieval, started_at, finished_at)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (turn_id, chat_id, question, standalone, answer.outcome, answer.text,
-             Jsonb([_snapshot(citation) for citation in answer.citations]), Jsonb(list(suggested)), cached, started,
-             datetime.now(UTC)))
+             Jsonb([_snapshot(citation) for citation in answer.citations]), Jsonb(list(suggested)), cached,
+             Jsonb(logged), started, datetime.now(UTC)))
         return _row_to_turn(conn.execute(_TURN_SQL + "WHERE t.id = %s GROUP BY t.id", (turn_id,)).fetchone())
 
 
@@ -333,6 +344,41 @@ def history(db: Db, chat_id: ChatId, *, limit: int = 50) -> list[Turn]:
     with db.connection() as conn:
         _require_chat(conn, chat_id)
         return _turns(conn, chat_id, limit=limit)
+
+
+def turn_retrieval(db: Db, chat_id: ChatId, turn_id: TurnId) -> RetrievalLog:
+    """What one turn's search found, with scores, and which passages its answer step was sent. Raises
+    CHAT_NOT_FOUND, and TURN_NOT_FOUND for a turn of another chat or one asked before turns kept a log."""
+    with db.connection() as conn:
+        _require_chat(conn, chat_id)
+        row = conn.execute("SELECT retrieval FROM chat_turns WHERE id = %s AND chat_id = %s",
+                           (turn_id, chat_id)).fetchone()
+    if row is None:
+        raise VaultError(ErrorCode.TURN_NOT_FOUND, f"Chat {chat_id} has no turn with the id {turn_id}.")
+    if row["retrieval"] is None:
+        raise VaultError(ErrorCode.TURN_NOT_FOUND,
+                         f"Turn {turn_id} has no retrieval log: it was asked before turns kept one.")
+    return _log_of(row["retrieval"])
+
+
+def sent_sources(conn: Connection, documents: Sequence[DocRef], log: RetrievalLog) -> list[Source]:
+    """The sources a turn's answer step was sent, S1 first, rebuilt from its retrieval log and the chunks it names.
+
+    A page or section passage is cut again to its own pages with pages.part_on_pages: page numbers strictly increase
+    in a chunk, so that gives back the same part. Any other passage is its whole chunk. A chunk sent both cut and whole
+    comes back as both.
+    """
+    sent = sorted((p for p in log.passages if p.label is not None), key=lambda p: int(p.label[1:]))
+    rows = {row["id"]: row for row in conn.execute("SELECT id, text, page_map FROM chunks WHERE id = ANY(%s)",
+                                                     ([p.chunk_id for p in sent],))}
+    by_id = {doc.id: doc for doc in documents}
+    sources: list[Source] = []
+    for p in sent:
+        text, page_map = rows[p.chunk_id]["text"], _page_map(rows[p.chunk_id]["page_map"])
+        if p.kind in (PassageKind.PAGE, PassageKind.SECTION):
+            text, page_map = pages.part_on_pages(text, page_map, p.first_page, p.last_page)
+        sources.append(Source(p.label, p.chunk_id, by_id[p.document_id], text, page_map, p.similarity, p.rrf))
+    return sources
 
 
 # ------------------------------------------------------------------ rows
@@ -431,6 +477,20 @@ def _citation(snapshot: Mapping[str, Any]) -> Citation:
                     PageBasis(snapshot["page_basis"]), snapshot["quote"], ChunkId(UUID(snapshot["chunk_id"])))
 
 
+def _log_json(log: RetrievalLog) -> dict[str, Any]:
+    """The one JSON form of a retrieval log, in chat_turns.retrieval and in a cached answer. Floats are kept as they
+    are: jsonb numeric gives Python's repr back exactly, and the eval's gate fit needs the exact similarities."""
+    return {**asdict(log), "passages": [
+        {**asdict(p), "chunk_id": str(p.chunk_id), "document_id": str(p.document_id)}
+        for p in log.passages]}
+
+
+def _log_of(stored: Mapping[str, Any]) -> RetrievalLog:
+    return RetrievalLog(**{**stored, "passages": tuple(
+        LoggedPassage(**{**p, "chunk_id": ChunkId(UUID(p["chunk_id"])), "document_id": DocumentId(UUID(p["document_id"])),
+                         "kind": PassageKind(p["kind"])}) for p in stored["passages"])})
+
+
 # ------------------------------------------------------------------ retrieval
 
 # A chat's scope is small (a few documents, a few thousand chunks), so every
@@ -495,7 +555,7 @@ def _page_map(starts: Sequence[Sequence[int]]) -> PageMap:
     return PageMap(tuple((offset, page) for offset, page in starts))
 
 
-def gate(candidates: Sequence[Candidate], min_similarity: float) -> bool:
+def gate(candidates: Sequence[Candidate | LoggedPassage], min_similarity: float) -> bool:
     """Is there anything worth sending to the answer model?
 
     True when the best vector similarity reaches min_similarity, or when any
@@ -808,10 +868,15 @@ def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int,
     chosen follows the k, so a question about a document as a whole sees its
     title page. A bigger chat sends none: one per document would outgrow the k.
     """
+    return _labelled(_pick(candidates, k=k, per_doc_min=per_doc_min, on_pages=on_pages, in_sections=in_sections,
+                           openings=openings))
+
+
+def _pick(candidates: Sequence[Candidate], *, k: int, per_doc_min: int, on_pages: Sequence[Candidate] = (),
+          in_sections: Sequence[Candidate] = (), openings: Sequence[Candidate] = ()) -> list[Candidate]:
     named = [*on_pages, *in_sections]
     whole = {(passage.chunk_id, passage.text) for passage in named}
-    ranked = sorted((candidate for candidate in candidates if (candidate.chunk_id, candidate.text) not in whole),
-                    key=lambda candidate: (candidate.rrf, candidate.similarity), reverse=True)
+    ranked = _fused(candidate for candidate in candidates if (candidate.chunk_id, candidate.text) not in whole)
     room = max(k - len(named), 0)
     quota = min(per_doc_min, room // 2 // max(1, len({candidate.doc.id for candidate in ranked})))
     taken: Counter[DocumentId] = Counter()
@@ -823,12 +888,43 @@ def select_sources(candidates: Sequence[Candidate], *, k: int, per_doc_min: int,
     if len(openings) <= OPENING_DOCS:
         held = {(candidate.chunk_id, candidate.text) for candidate in picked}
         picked += [opening for opening in openings if (opening.chunk_id, opening.text) not in held]
-    return _labelled(picked)
+    return picked
+
+
+def _fused(candidates: Iterable[Candidate]) -> list[Candidate]:
+    """Best first by fused score; an exact rrf tie goes to the higher similarity."""
+    return sorted(candidates, key=lambda candidate: (candidate.rrf, candidate.similarity), reverse=True)
 
 
 def _labelled(candidates: Sequence[Candidate]) -> list[Source]:
     return [Source(f"S{n}", c.chunk_id, c.doc, c.text, c.page_map, c.similarity, c.rrf)
             for n, c in enumerate(candidates, start=1)]
+
+
+def retrieval_log(query: str, found: Found, picked: Sequence[Candidate], *, min_similarity: float,
+                  k: int) -> RetrievalLog:
+    """What one question's search found and which passages its answer step was sent, picked[n - 1] as S{n}. Pure.
+
+    The log keeps every sent passage, the top 2k retrieved in fused order (_fused, as select_sources ranks
+    them), and the passages the gate decided on: the retrieved passage with the highest similarity and the best-ranked
+    one that matches every query term, so the gate says the same over the logged passages as over all of them.
+    Everything else, an opening that was not sent included, is only counted in omitted. Retrieved passages come first in
+    rank order, then the page, section and opening passages in the order search found them.
+    """
+    # By identity: a page part and an opening can be equal by value while only one of them was sent.
+    labels = {id(passage): f"S{n}" for n, passage in enumerate(picked, start=1)}
+    ranked = _fused(found.retrieved)
+    gate_evidence = [max(ranked, key=lambda candidate: candidate.similarity)] if ranked else []
+    gate_evidence += [candidate for candidate in ranked if candidate.lexical_hit][:1]
+    kept = {*labels, *(id(candidate) for candidate in [*ranked[:2 * k], *gate_evidence])}
+    groups = ((PassageKind.RETRIEVED, ranked), (PassageKind.PAGE, found.on_pages),
+              (PassageKind.SECTION, found.in_sections), (PassageKind.OPENING, found.openings))
+    passages = tuple(
+        LoggedPassage(c.chunk_id, c.doc.id, kind, c.page_map.first_page, c.page_map.last_page, c.similarity, c.rrf,
+                      c.lexical_hit, rank if kind is PassageKind.RETRIEVED else None, labels.get(id(c)))
+        for kind, group in groups for rank, c in enumerate(group, start=1) if id(c) in kept)
+    return RetrievalLog(query, found.matched(min_similarity), min_similarity, k, passages,
+                        sum(len(group) for _, group in groups) - len(passages))
 
 
 def suggestions(follow_ups: Sequence[str], question: str) -> tuple[str, ...]:

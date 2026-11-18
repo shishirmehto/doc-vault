@@ -37,7 +37,6 @@ writes them between the results markers of a Markdown file.
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import itertools
 import re
 import shlex
@@ -57,10 +56,8 @@ import psycopg
 import yaml
 from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
-from pydantic import BaseModel
 
 from . import ai, chat, compare, db, documents, insights, metrics, summaries
-from .ai import ChatBackend, EmbedBackend, RawCompletion, Tokens, Vector
 from .config import Settings, load_settings
 from .context import BlobStore, Ctx
 from .domain import (
@@ -68,6 +65,8 @@ from .domain import (
     Citation,
     DocumentId,
     InsightsReady,
+    LoggedPassage,
+    PassageKind,
     Row,
     Source,
     SummaryLength,
@@ -76,7 +75,6 @@ from .domain import (
     TurnOutcome,
 )
 from .pages import collapse_whitespace, locate_quote
-from .prompts import Prompt
 
 ROOT = Path(__file__).resolve().parent.parent
 CASES = ROOT / "evals" / "cases.yaml"
@@ -217,7 +215,7 @@ class TurnResult:
     standalone: str
     outcome: TurnOutcome
     scored: tuple[Scored, ...]  # one per expected fact; empty for an out-of-scope question
-    candidates: tuple[chat.Candidate, ...]  # what the gate saw
+    candidates: tuple[LoggedPassage, ...]   # the retrieved passages the turn logged: what the gate saw
     named_page: bool                        # the question named a page or section the documents have, as chat.Found.matched sees it
     text_misses: tuple[str, ...] | None     # None: the question has no values and no forbid
 
@@ -237,8 +235,8 @@ class TurnResult:
         return self.named_page or chat.gate(self.candidates, threshold)
 
 
-def retrieval_miss(fact: Fact, sources: Sequence[Source] | None, *, matched: bool) -> Miss | None:
-    pages = [source.page_map.page_at(span[0]) for source in sources or ()
+def retrieval_miss(fact: Fact, sources: Sequence[Source], *, matched: bool) -> Miss | None:
+    pages = [source.page_map.page_at(span[0]) for source in sources
              if source.doc.filename == fact.document and (span := locate_quote(fact.text, source.text))]
     return None if fact.page in pages else Miss.GATE if not matched else Miss.PAGE if pages else Miss.TEXT
 
@@ -414,35 +412,6 @@ class _Queue:
             job(ctx, doc_id)
 
 
-class _SourceTap:
-    """A ChatBackend that keeps the sources of the last answer prompt and passes every call through."""
-
-    def __init__(self, inner: ChatBackend) -> None:
-        self.inner = inner
-        self.provider, self.models, self.declines_unanswerable = inner.provider, inner.models, inner.declines_unanswerable
-        self.sources: tuple[Source, ...] | None = None
-
-    def complete_json(self, prompt: Prompt, output: type[BaseModel], *, timeout_s: float,
-                      on_text: Callable[[str], None] | None = None) -> tuple[RawCompletion, Tokens]:
-        if prompt.name == "answer":
-            self.sources = prompt.inputs["sources"]
-        return self.inner.complete_json(prompt, output, timeout_s=timeout_s, on_text=on_text)
-
-
-class _QueryTap:
-    """An EmbedBackend that keeps the vectors it last returned, so the eval reruns retrieval without a call."""
-
-    def __init__(self, inner: EmbedBackend) -> None:
-        self.inner = inner
-        self.provider, self.model, self.dimensions = inner.provider, inner.model, inner.dimensions
-        self.min_similarity = inner.min_similarity
-        self.vectors: list[Vector] = []
-
-    def embed(self, texts: Sequence[str], *, timeout_s: float) -> tuple[list[Vector], Tokens]:
-        self.vectors, tokens = self.inner.embed(texts, timeout_s=timeout_s)
-        return self.vectors, tokens
-
-
 @contextmanager
 def _fresh_database(base_url: str) -> Iterator[db.Db]:
     """<name>_evals on base_url's server: dropped, recreated, migrated and pooled. base_url's own database is
@@ -472,35 +441,25 @@ def run(settings: Settings, case_set: CaseSet) -> Report:
                 ids[name] = documents.upload(ctx, stream, name).document.id
         queue.drain(ctx)
 
-        answers, queries = _SourceTap(ctx.ai.chat), _QueryTap(ctx.ai.embedder)
-        asking = dataclasses.replace(ctx, ai=dataclasses.replace(ctx.ai, chat=answers, embedder=queries))
         turns, suggested = [], []
         for case in case_set.cases:
             started = chat.start(pool, [ids[name] for name in case.scope], title=case.id)
             for question in case.questions:
-                answers.sources = None
-                turn = chat.ask(asking, started.id, question.ask)
-                [q_vec] = queries.vectors
+                turn = chat.ask(ctx, started.id, question.ask)
+                log = chat.turn_retrieval(pool, started.id, turn.id)
                 with pool.connection() as conn:
-                    found = chat.search(conn, chat.scope(conn, started.id), q_vec, turn.standalone_query,
-                                        ctx.ai.embed_model, per_doc=settings.retrieval_per_doc_min,
-                                        k=settings.retrieval_k)
-                matched = found.matched(ctx.ai.min_similarity)
-                shown = None if answers.sources is None else [source.chunk_id for source in answers.sources]
-                only_openings = [opening.chunk_id for opening in found.openings[:settings.retrieval_k]
-                                 if answers.declines_unanswerable]
-                if (matched and shown is None) or (not matched and (shown or []) != only_openings):
-                    raise RuntimeError(f"{case.id}: the rerun retrieval disagrees with the gate in chat.ask")
+                    sent = chat.sent_sources(conn, chat.scope(conn, started.id), log)
                 turns.append(TurnResult(
                     case.id, question.ask, turn.standalone_query, turn.answer.outcome,
-                    tuple(Scored(fact, retrieval_miss(fact, answers.sources, matched=matched),
+                    tuple(Scored(fact, retrieval_miss(fact, sent, matched=log.matched),
                                  is_cited(fact, turn.answer.citations))
                           for fact in question.expected),
-                    tuple(found.retrieved), bool(found.on_pages or found.in_sections),
+                    tuple(p for p in log.passages if p.kind is PassageKind.RETRIEVED),
+                    any(p.kind in (PassageKind.PAGE, PassageKind.SECTION) for p in log.passages),
                     answer_text_misses(turn.answer.text, question.values, question.forbid)
                     if question.values or question.forbid else None))
             # Asked after the case's own turns, so they change no condense call the case is scored on.
-            suggested += [Suggested(case.id, ask, chat.ask(asking, started.id, ask).answer.outcome)
+            suggested += [Suggested(case.id, ask, chat.ask(ctx, started.id, ask).answer.outcome)
                           for ask in turn.suggestions]
 
         compared = compare.create(ctx, [ids[name] for name in case_set.comparison.documents], None)

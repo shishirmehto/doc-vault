@@ -231,6 +231,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/chats/{chat_id}/messages/{turn_id}/retrieval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Turn Retrieval
+         * @description What the turn's search found, with scores, and which passages its answer step was sent.
+         */
+        get: operations["turn_retrieval_chats__chat_id__messages__turn_id__retrieval_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/comparisons": {
         parameters: {
             query?: never;
@@ -808,6 +828,34 @@ export interface components {
             /** Page Url */
             page_url: string;
         };
+        /** LoggedPassageOut */
+        LoggedPassageOut: {
+            /**
+             * Chunk Id
+             * Format: uuid
+             */
+            chunk_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            kind: components["schemas"]["PassageKind"];
+            /** First Page */
+            first_page: number;
+            /** Last Page */
+            last_page: number;
+            /** Similarity */
+            similarity: number;
+            /** Rrf */
+            rrf: number;
+            /** Lexical Hit */
+            lexical_hit: boolean;
+            /** Rank */
+            rank: number | null;
+            /** Label */
+            label: string | null;
+        };
         /**
          * PageBasis
          * @description What a page number means for this document.
@@ -833,6 +881,12 @@ export interface components {
             /** Text */
             text: string;
         };
+        /**
+         * PassageKind
+         * @description Which of chat.Found's lists a logged passage came from.
+         * @enum {string}
+         */
+        PassageKind: "retrieved" | "page" | "section" | "opening";
         /** PercentilesOut */
         PercentilesOut: {
             /** P50 */
@@ -875,6 +929,21 @@ export interface components {
          * @enum {string}
          */
         Purpose: "embed_chunks" | "embed_query" | "insights" | "condense" | "answer" | "compare" | "summary";
+        /** RetrievalOut */
+        RetrievalOut: {
+            /** Query */
+            query: string;
+            /** Matched */
+            matched: boolean;
+            /** Min Similarity */
+            min_similarity: number;
+            /** K */
+            k: number;
+            /** Passages */
+            passages: components["schemas"]["LoggedPassageOut"][];
+            /** Omitted */
+            omitted: number;
+        };
         /** RowOut */
         RowOut: {
             /** Field */
@@ -1778,6 +1847,47 @@ export interface operations {
             };
             /** @description too_many_streams */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    turn_retrieval_chats__chat_id__messages__turn_id__retrieval_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chat_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetrievalOut"];
+                };
+            };
+            /** @description chat_not_found, turn_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description invalid_request */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
