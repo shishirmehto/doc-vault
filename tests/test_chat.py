@@ -33,7 +33,7 @@ from .conftest import ENDORSEMENT, FACTS, POLICY, QUOTE, SAMPLES, TRUTH, scalar
 from .test_ai import openai_chat, openai_client
 from .test_compare import completion
 from .test_insights import indexed, post, provider_down, with_chat
-from .test_pages import bookmarked_pdf
+from .test_pages import bookmarked_pdf, text_pdf
 
 
 def normalised(text: str) -> str:
@@ -734,6 +734,18 @@ def test_page_passages_across_a_chat_stop_at_k_in_scope_order(ctx):
 
     assert {k: [(p.doc.filename, p.page_map.first_page, p.page_map.last_page) for p in passages]
             for k, passages in found.items()} == {16: [(POLICY, 7, 7), (QUOTE, 3, 3)], 1: [(POLICY, 7, 7)]}
+
+
+def test_the_end_of_a_long_last_page_is_sent_for_how_a_document_ends_and_its_start_for_a_page_number(ctx, tmp_path):
+    body = [f"Line {n:02d} of the general conditions sets out how the insurer and the insured share each duty, "
+            "and when either of them may give notice, cancel or ask for an appraisal of the loss." for n in range(34)]
+    closing = "The closing clause: this policy is signed for the insurer by its secretary and its president."
+    doc = indexed(ctx, text_pdf(tmp_path / "long-end.pdf", ["Declarations page."], [*body, closing]))
+
+    ends = {question: " ".join(p.text for p in searched(ctx, [doc], question).on_pages)
+            for question in ("How does this policy end?", "What does page 2 say?")}
+
+    assert [(closing in text, body[0] in text) for text in ends.values()] == [(True, False), (False, True)]
 
 
 def test_a_question_about_a_page_is_answered_from_that_page_when_the_gate_finds_nothing(ctx):

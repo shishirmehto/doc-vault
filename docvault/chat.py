@@ -761,10 +761,12 @@ def _section(outline: Sequence[OutlineEntry], index: int, page_count: int) -> Se
 
 PAGES_SQL = """
 WITH wanted AS (
-  SELECT * FROM unnest(%(doc_ids)s::uuid[], %(firsts)s::int[], %(lasts)s::int[], %(takes)s::int[])
-    WITH ORDINALITY AS w(document_id, first_page, last_page, take, at)
+  SELECT * FROM unnest(%(doc_ids)s::uuid[], %(firsts)s::int[], %(lasts)s::int[], %(takes)s::int[],
+                       %(from_end)s::bool[])
+    WITH ORDINALITY AS w(document_id, first_page, last_page, take, from_end, at)
 ), hits AS (
-  SELECT w.at, w.take, c.id, c.ord, row_number() OVER (PARTITION BY w.at ORDER BY c.ord) AS n
+  SELECT w.at, w.take, c.id, c.ord,
+         row_number() OVER (PARTITION BY w.at ORDER BY CASE WHEN w.from_end THEN -c.ord ELSE c.ord END) AS n
   FROM wanted w JOIN chunks c ON c.document_id = w.document_id
   WHERE c.embedding_model = %(model)s
     AND EXISTS (SELECT 1 FROM jsonb_array_elements(c.page_map) AS s(start)
@@ -783,7 +785,8 @@ def page_passages(conn: Connection, documents: Sequence[DocRef], question: str, 
     each in scope order, then in the order the question names them, then in reading order.
 
     Each request gets the first PAGE_PASSAGES_PER_REQUEST chunks holding its pages, so "page 2 and the last page"
-    sends both; a document sends at most PAGE_PASSAGES_PER_DOC, and the chat at most k in all. Each part is cut to
+    sends both; a request counted from the end ("the last page", "How does it end?") gets the last ones, so a long
+    last page sends its closing text; a document sends at most PAGE_PASSAGES_PER_DOC, and the chat at most k in all. Each part is cut to
     its request's pages (pages.part_on_pages) and keeps its chunk's id, so the model reads "p. 7 of 7" rather than
     a chunk that starts on page 5. Neighbouring chunks overlap, so a part whose text another part of the same
     document holds whole is dropped. Only PDFs have numbered pages: the sections of a Word or text document are cut
@@ -795,24 +798,25 @@ def page_passages(conn: Connection, documents: Sequence[DocRef], question: str, 
     sections too.
     """
     numbered = page_requests(question)
-    wanted: list[tuple[DocRef, int, int, str | None]] = []
+    wanted: list[tuple[DocRef, int, int, str | None, bool]] = []
     for doc in documents:
-        wanted += [(doc, *span, None) for request in numbered
+        wanted += [(doc, *span, None, request.first < 0) for request in numbered
                    if (doc.page_basis is PageBasis.PHYSICAL or request.first < 0)
                    and (span := request.resolve(doc.page_count))]
-        wanted += [(doc, section.first, section.last, section.title)
+        wanted += [(doc, section.first, section.last, section.title, False)
                    for section in section_requests(question, doc.outline, doc.page_count)]
     if not wanted:
         return [], []
     rows = conn.execute(PAGES_SQL, {"q": PgVector(q_vec), "doc_ids": [doc.id for doc, *_ in wanted],
-                                    "firsts": [first for _, first, _, _ in wanted],
-                                    "lasts": [last for _, _, last, _ in wanted],
+                                    "firsts": [first for _, first, _, _, _ in wanted],
+                                    "lasts": [last for _, _, last, _, _ in wanted],
                                     "takes": [PAGE_PASSAGES_PER_REQUEST + (0 if title is None else TITLE_LOOKAHEAD)
-                                              for *_, title in wanted],
+                                              for *_, title, _ in wanted],
+                                    "from_end": [from_end for *_, from_end in wanted],
                                     "model": embed_model})
     parts: list[tuple[Candidate, bool]] = []
     for at, group in itertools.groupby(rows, key=lambda row: row["at"]):
-        doc, first, last, title = wanted[at - 1]
+        doc, first, last, title, _ = wanted[at - 1]
         cut = [Candidate(ChunkId(row["id"]), doc, *part, row["similarity"], 0.0, False) for row in group
                if (part := pages.part_on_pages(row["text"], _page_map(row["page_map"]), first, last))]
         if title is not None:
