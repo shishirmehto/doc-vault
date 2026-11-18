@@ -4,7 +4,7 @@ Each follows the wire shape in `docvault/wire.py` and the error envelope.
 - `insights-failed.json` and `error-503-ai-unavailable.json` (pass 1). Their messages are copied from `docvault/ai.py`.
 - `turn-answered-zero-citations.json` (pass 2). The captured `turn-answered-one-citation.json` with its citations
   removed. The backend never sends this (an answered turn always has a citation), but the parser must not throw on it.
-- `turn-answered-markdown.json`. An answered turn written as the Markdown list `answer-v3` allows: a lead
+- `turn-answered-markdown.json`. An answered turn written as the Markdown list the answer prompt allows since `answer-v3`: a lead
   sentence, then three items, two with a bold figure, each ending in its marker. Built from the captured
   `turn-answered-two-documents.json`: its renewal-quote citation is kept, and two more cite the quote's
   `quote-deductible` and `quote-new-exclusion` passages from `samples/facts.yaml`. The page-3 chunk id, the turn
