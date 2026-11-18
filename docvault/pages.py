@@ -251,7 +251,8 @@ def _extract_docx(path: Path, max_pages: int) -> ExtractedText:
             paragraphs += _table_lines(item)
             continue
         if (style := item._p.style) not in levels:
-            levels[style] = _heading_level(item.style.name or "")
+            # A paragraph with no style id has the default paragraph style, and a styles.xml may define none.
+            levels[style] = _heading_level(item.style.name or "" if item.style is not None else "")
         if levels[style] is not None:
             headings.append((len(paragraphs), levels[style]))
         paragraphs.append(_tidy(item.text))

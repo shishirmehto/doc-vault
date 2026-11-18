@@ -447,6 +447,25 @@ def test_a_docx_table_reads_a_merged_cell_once_and_keeps_a_table_nested_in_a_cel
         "Schedule\nGeneral Aggregate | $2,000,000\nDeductible | per claim | $2,500\nWaiting period | 30 days")
 
 
+def test_a_docx_with_no_default_paragraph_style_is_read(tmp_path):
+    from docx import Document
+
+    word = Document()
+    word.add_heading("Coverage", level=1)
+    word.add_paragraph("Each Occurrence Limit: $1,000,000")
+    made = tmp_path / "made.docx"
+    word.save(str(made))
+    path = tmp_path / "no-default-style.docx"
+    with zipfile.ZipFile(made) as source, zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as target:
+        for item in source.infolist():
+            data = source.read(item)
+            target.writestr(item, data.replace(b' w:default="1"', b"") if item.filename == "word/styles.xml" else data)
+
+    doc = pages.extract(DocKind.DOCX, path, max_pages=10)
+    assert ([p.text for p in doc.pages], [(e.title, e.level) for e in doc.outline]) == (
+        ["Coverage\nEach Occurrence Limit: $1,000,000"], [("Coverage", 0)])
+
+
 def test_a_table_nested_in_a_vertically_merged_cell_is_read_once(tmp_path):
     from docx import Document
 
