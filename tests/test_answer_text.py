@@ -9,31 +9,39 @@ from docvault.answer_text import AnswerField, MarkerFilter
 
 ONE_DOCUMENT = (
     '{"supported": true, '
-    '"answer": "The each occurrence limit is $1,000,000 [S1]. Defence costs do not reduce it [S1].", '
-    '"evidence": [{"source": "S1", "quote": "Each Occurrence Limit $1,000,000"}], '
+    '"answer": "The each occurrence limit is $1,000,000 [E1]. Defence costs do not reduce it [E2].", '
+    '"evidence": [{"id": "E1", "source": "S1", "quote": "Each Occurrence Limit $1,000,000"}, '
+    '{"id": "E2", "source": "S1", "quote": "Defence costs are payable in addition to the limits"}], '
     '"follow_ups": ["Is there a general aggregate limit?"]}'
 )
 TWO_DOCUMENTS = (
     '{"supported": true, '
-    '"answer": "The policy deductible is $5,000 per claim [S1]. The renewal quote lowers it to $2,500 [S2, S3].", '
-    '"evidence": [{"source": "S1", "quote": "Deductible: $5,000 per claim"}, '
-    '{"source": "S2", "quote": "Deductible $2,500"}, {"source": "S3", "quote": "a reduced deductible"}], '
+    '"answer": "The policy deductible is $5,000 per claim [E1]. The renewal quote lowers it to $2,500 [E2, E3].", '
+    '"evidence": [{"id": "E1", "source": "S1", "quote": "Deductible: $5,000 per claim"}, '
+    '{"id": "E2", "source": "S2", "quote": "Deductible $2,500"}, '
+    '{"id": "E3", "source": "S3", "quote": "a reduced deductible"}], '
     '"follow_ups": ["Does the quote change the premium?", "Which limits differ?"]}'
 )
 ESCAPED = (
     r'{"supported": true, '
-    r'"answer": "The café clause defines \"insured\" [S1]. Claims go to C:\\Claims\\2026 [S2].\n'
-    r'Approved with a smile \ud83d\ude00 [S1][S2]", '
-    r'"evidence": [{"source": "S1", "quote": "\"insured\" means"}, {"source": "S2", "quote": "C:\\Claims"}], '
+    r'"answer": "The café clause defines \"insured\" [E1]. Claims go to C:\\Claims\\2026 [E2].\n'
+    r'Approved with a smile \ud83d\ude00 [E1][E2]", '
+    r'"evidence": [{"id": "E1", "source": "S1", "quote": "\"insured\" means"}, '
+    r'{"id": "E2", "source": "S2", "quote": "C:\\Claims"}], '
     r'"follow_ups": []}'
 )
 MARKDOWN_LIST = (
     '{"supported": true, '
-    '"answer": "Three terms change:\\n\\n- The aggregate is **$3,000,000** [S1]\\n'
-    '- The deductible is **$5,000** [S1, S2]\\n- A silica exclusion is added [S2]", '
-    '"evidence": [{"source": "S1", "quote": "General Aggregate Limit $3,000,000"}, '
-    '{"source": "S2", "quote": "Form SM 30 11, Silica or Silica-Related Dust Exclusion, is added"}], '
+    '"answer": "Three terms change:\\n\\n- The aggregate is **$3,000,000** [E1]\\n'
+    '- The deductible is **$5,000** [E2, E3]\\n- A silica exclusion is added [E4]", '
+    '"evidence": [{"id": "E1", "source": "S1", "quote": "General Aggregate Limit $3,000,000"}, '
+    '{"id": "E2", "source": "S1", "quote": "Deductible $5,000"}, {"id": "E3", "source": "S2", "quote": "$5,000"}, '
+    '{"id": "E4", "source": "S2", "quote": "Form SM 30 11, Silica or Silica-Related Dust Exclusion, is added"}], '
     '"follow_ups": []}'
+)
+STRAY_SOURCE_MARKER = (
+    '{"supported": true, "answer": "The aggregate is $2,000,000 [E1]. The deductible is $5,000 [S2].", '
+    '"evidence": [{"id": "E1", "source": "S1", "quote": "Aggregate Limit $2,000,000"}], "follow_ups": []}'
 )
 
 
@@ -60,21 +68,24 @@ def filtered(chunks: list[str]) -> str:
 
 @pytest.mark.parametrize(("raw", "answer", "display"), [
     (ONE_DOCUMENT,
-     "The each occurrence limit is $1,000,000 [S1]. Defence costs do not reduce it [S1].",
+     "The each occurrence limit is $1,000,000 [E1]. Defence costs do not reduce it [E2].",
      "The each occurrence limit is $1,000,000. Defence costs do not reduce it."),
     (TWO_DOCUMENTS,
-     "The policy deductible is $5,000 per claim [S1]. The renewal quote lowers it to $2,500 [S2, S3].",
+     "The policy deductible is $5,000 per claim [E1]. The renewal quote lowers it to $2,500 [E2, E3].",
      "The policy deductible is $5,000 per claim. The renewal quote lowers it to $2,500."),
     (ESCAPED,
-     'The café clause defines "insured" [S1]. Claims go to C:\\Claims\\2026 [S2].\n'
-     "Approved with a smile \U0001f600 [S1][S2]",
+     'The café clause defines "insured" [E1]. Claims go to C:\\Claims\\2026 [E2].\n'
+     "Approved with a smile \U0001f600 [E1][E2]",
      'The café clause defines "insured". Claims go to C:\\Claims\\2026.\nApproved with a smile \U0001f600'),
     (MARKDOWN_LIST,
-     "Three terms change:\n\n- The aggregate is **$3,000,000** [S1]\n- The deductible is **$5,000** [S1, S2]\n"
-     "- A silica exclusion is added [S2]",
+     "Three terms change:\n\n- The aggregate is **$3,000,000** [E1]\n- The deductible is **$5,000** [E2, E3]\n"
+     "- A silica exclusion is added [E4]",
      "Three terms change:\n\n- The aggregate is **$3,000,000**\n- The deductible is **$5,000**\n"
      "- A silica exclusion is added"),
-], ids=["one-document", "two-documents", "escapes", "markdown-list"])
+    (STRAY_SOURCE_MARKER,
+     "The aggregate is $2,000,000 [E1]. The deductible is $5,000 [S2].",
+     "The aggregate is $2,000,000. The deductible is $5,000."),
+], ids=["one-document", "two-documents", "escapes", "markdown-list", "stray-source-marker"])
 def test_a_model_reply_streams_the_same_answer_and_display_text_at_every_split(raw, answer, display):
     assert json.loads(raw)["answer"] == answer
     for chunks in chunkings(raw):
@@ -115,10 +126,10 @@ def test_an_unsupported_answer_streams_like_any_other():
 
 
 def test_the_answer_is_read_when_it_comes_after_evidence_and_supported():
-    raw = ('{"evidence": [{"source": "S1", "quote": "Flood is excluded"}, [1, -2.5e3, null, true]], '
-           '"supported": false, "answer": "Flood is not covered [S1]."}')
+    raw = ('{"evidence": [{"id": "E1", "source": "S1", "quote": "Flood is excluded"}, [1, -2.5e3, null, true]], '
+           '"supported": false, "answer": "Flood is not covered [E1]."}')
     for chunks in chunkings(raw):
-        assert answer_of(chunks) == "Flood is not covered [S1].", chunks
+        assert answer_of(chunks) == "Flood is not covered [E1].", chunks
 
 
 def test_an_answer_key_below_the_top_level_is_ignored():
@@ -205,23 +216,26 @@ def test_an_empty_answer_is_done_with_no_text():
 
 
 @pytest.mark.parametrize(("text", "expected"), [
-    ("limit [S1].", "limit."),
-    ("a [S1][S2] b", "a b"),
-    ("a [S2, S3] b", "a b"),
-    ("a [S2,S3] b", "a b"),
-    ("a [S2 ,S3] b", "a b"),
-    ("a [S] b", "a [S] b"),
+    ("limit [E1].", "limit."),
+    ("a [E1][E12] b", "a b"),
+    ("a [E2, E3] b", "a b"),
+    ("a [E2,E3] b", "a b"),
+    ("a [E2 ,E3] b", "a b"),
+    ("limit [S2].", "limit."),
+    ("a [E1][S2] b", "a b"),
+    ("a [E1, S2] b", "a b"),
+    ("a [E] b", "a [E] b"),
     ("a [1] b", "a [1] b"),
-    ("a [s1] b", "a [s1] b"),
-    ("a [S1 x] b", "a [S1 x] b"),
-    ("a\n[S1] b", "a\n b"),
-    ("a \t[S12]", "a"),
-    ("a [S1 [S2] b", "a [S1 b"),
+    ("a [e1] b", "a [e1] b"),
+    ("a [E1 x] b", "a [E1 x] b"),
+    ("a\n[E1] b", "a\n b"),
+    ("a \t[E12]", "a"),
+    ("a [E1 [E2] b", "a [E1 b"),
     ("ends in spaces  ", "ends in spaces"),
-    ("a [S1", "a [S1"),
-    ("a [S1][S2", "a[S2"),
-    ("- **$1,000,000** [S1]\n- $2,500 [S2]", "- **$1,000,000**\n- $2,500"),
-    ("1. limit [S1]\n2. deductible [S2]\n", "1. limit\n2. deductible\n"),
+    ("a [E1", "a [E1"),
+    ("a [E1][E2", "a[E2"),
+    ("- **$1,000,000** [E1]\n- $2,500 [E2]", "- **$1,000,000**\n- $2,500"),
+    ("1. limit [E1]\n2. deductible [E2]\n", "1. limit\n2. deductible\n"),
 ])
 def test_markers_and_the_spaces_before_them_vanish_at_every_split(text, expected):
     for chunks in chunkings(text):
@@ -230,30 +244,31 @@ def test_markers_and_the_spaces_before_them_vanish_at_every_split(text, expected
 
 def test_a_possible_marker_is_held_back_until_it_cannot_be_one():
     markers = MarkerFilter()
-    chunks = ["limit [S", "1", "].", " see [S2 ", "x]"]
-    assert [markers.feed(chunk) for chunk in chunks] == ["limit", "", ".", " see", " [S2 x]"]
+    chunks = ["limit [E", "1", "].", " see [E2 ", "x]", " and [S", "2]."]
+    assert [markers.feed(chunk) for chunk in chunks] == ["limit", "", ".", " see", " [E2 x]", " and", "."]
 
 
 def test_flush_returns_an_unfinished_marker_drops_a_trailing_pad_and_empties_the_filter():
     markers = MarkerFilter()
-    assert [markers.feed("a [S1"), markers.flush(), markers.feed("b \t"), markers.flush(), markers.flush()] == [
-        "a", " [S1", "b", "", ""]
+    assert [markers.feed("a [E1"), markers.flush(), markers.feed("b \t"), markers.flush(), markers.flush()] == [
+        "a", " [E1", "b", "", ""]
 
 
 def test_flush_drops_the_trailing_spaces_of_an_unfinished_marker():
     markers = MarkerFilter()
-    assert [markers.feed("x [S1, "), markers.flush()] == ["x", " [S1,"]
+    assert [markers.feed("x [E1, "), markers.flush()] == ["x", " [E1,"]
 
 
 GRAMMAR_CASES = [
-    "", " ", "[", "[S1]", "[S1] starts the answer", "limit [S1].", "x[S1]y",
-    "a [S1] [S2] b", "a [S1][S2][S3] b", "a [S1]\t[S2]", "a  \t [S12]", "a [S1]\t",
-    "a\n[S1] b", "a\u00a0[S1] b", "trailing pad \t ",
-    "a [S2, S3] b", "a [S2,S3][S4] b", "a [S2 ,\n S3] b", "a [S2,\nS3] b", "a [S1\u00a0,\u2003S2] b",
-    "a [S\u0661] b", "a [S\u00b2] b",
-    "a [S] b", "a [1] b", "a [s1] b", "a [S1 x] b", "a [S1 ] b", "a [S1,] b", "a [S1, S] b",
-    "a [S1 [S2] b", "a [S1,  [S2] b", "a [S1 \n[S2] b", "a [ [S1] b", "a [S1[S2] b", "[[S1]]", "nested [S[S1]]",
-    "a [S1][S2 x] b", "a [S1][", "a [S1", "a [S1][S2", "a [S1, ",
+    "", " ", "[", "[E1]", "[E1] starts the answer", "limit [E1].", "x[E1]y",
+    "a [E1] [E2] b", "a [E1][E2][E3] b", "a [E1]\t[E2]", "a  \t [E12]", "a [E1]\t",
+    "a\n[E1] b", "a\u00a0[E1] b", "trailing pad \t ",
+    "a [E2, E3] b", "a [E2,E3][E4] b", "a [E2 ,\n E3] b", "a [E2,\nE3] b", "a [E1\u00a0,\u2003E2] b",
+    "a [E\u0661] b", "a [E\u00b2] b",
+    "a [E] b", "a [1] b", "a [e1] b", "a [E1 x] b", "a [E1 ] b", "a [E1,] b", "a [E1, E] b",
+    "a [E1 [E2] b", "a [E1,  [E2] b", "a [E1 \n[E2] b", "a [ [E1] b", "a [E1[E2] b", "[[E1]]", "nested [E[E1]]",
+    "a [E1][E2 x] b", "a [E1][", "a [E1", "a [E1][E2", "a [E1, ",
+    "a [S2] b", "a [E1][S2] b", "a [S1, E2] b", "a [ES1] b", "a [SE1] b", "a [E1 [S2] b", "a [S1][E", "a [D1] b",
 ]
 
 

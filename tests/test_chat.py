@@ -211,7 +211,7 @@ def test_a_question_the_model_declines_is_kept_as_not_found_with_its_reason(clie
 def test_a_question_about_the_whole_document_is_answered_from_its_opening_passage(client, ctx):
     def says_what_it_is(prompt):
         opening = " ".join(prompt.inputs["sources"][0].text.split()[:6])
-        return draft(f"{opening} [S1]", ("S1", opening))
+        return draft(f"{opening} [E1]", ("E1", "S1", opening))
 
     class SaysWhatItIs(FakeChat):
         declines_unanswerable = True
@@ -271,9 +271,9 @@ def source(label: str, doc: DocRef, text: str, page_map: PageMap, chunk: int) ->
     return Source(label, ChunkId(UUID(int=chunk)), doc, text, page_map, similarity=0.5, rrf=0.03)
 
 
-def draft(answer: str, *evidence: tuple[str, str], supported: bool = True) -> AnswerDraft:
-    return AnswerDraft(supported=supported, answer=answer,
-                       evidence=[EvidenceDraft(source=label, quote=quote) for label, quote in evidence], follow_ups=[])
+def draft(answer: str, *evidence: tuple[str, str, str], supported: bool = True) -> AnswerDraft:
+    return AnswerDraft(supported=supported, answer=answer, follow_ups=[], evidence=[
+        EvidenceDraft(id=evidence_id, source=label, quote=quote) for evidence_id, label, quote in evidence])
 
 
 def limits() -> list[Source]:
@@ -287,8 +287,9 @@ def test_ground_cites_the_page_each_quote_sits_on_inside_a_page_spanning_chunk()
     text = f"{clause['text']}\n\n{clause['continues']['text']}"
     spanning = source("S1", POLICY_DOC, text, PageMap(((0, 4), (len(clause["text"]) + 2, 5))), chunk=7)
 
-    answer = chat.ground(draft("There is no duty to defend uncovered suits [S1].",
-                               ("S1", clause["continues"]["text"].upper()), ("S1", clause["text"])), [spanning])
+    answer = chat.ground(draft("There is no duty to defend uncovered suits [E1].",
+                               ("E1", "S1", clause["continues"]["text"].upper()), ("E1", "S1", clause["text"])),
+                         [spanning])
 
     assert answer == Answered("There is no duty to defend uncovered suits [1][2].", (
         Citation(POLICY_DOC.id, POLICY, 5, PageBasis.PHYSICAL, clause["continues"]["text"], ChunkId(UUID(int=7))),
@@ -298,21 +299,22 @@ def test_ground_cites_the_page_each_quote_sits_on_inside_a_page_spanning_chunk()
 def test_ground_drops_unknown_labels_and_paraphrases_and_removes_their_markers():
     limit = FACTS["policy-each-occurrence-limit"]["text"]
 
-    answer = chat.ground(draft("The limit is $1,000,000 [S1]. Defence costs reduce it [S9]. The quote keeps it [S2].",
-                               ("S1", limit), ("S9", limit), ("S2", "the quote keeps the limit at one million")),
+    answer = chat.ground(draft("The limit is $1,000,000 [E1]. Defence costs reduce it [E2]. The quote keeps it [E3].",
+                               ("E1", "S1", limit), ("E2", "S9", limit),
+                               ("E3", "S2", "the quote keeps the limit at one million")),
                          limits())
 
     assert answer == Answered("The limit is $1,000,000 [1]. Defence costs reduce it. The quote keeps it.", (
         Citation(POLICY_DOC.id, POLICY, 2, PageBasis.PHYSICAL, limit, ChunkId(UUID(int=11))),))
 
 
-def test_ground_rewrites_a_marker_naming_two_sources_and_cites_a_repeated_quote_once():
+def test_ground_rewrites_a_marker_naming_two_items_and_gives_a_repeated_quote_its_first_number():
     limit = FACTS["quote-each-occurrence-limit"]["text"]
 
-    answer = chat.ground(draft("Both documents set it at $1,000,000 [S1, S2].",
-                               ("S1", limit), ("S2", limit), ("S1", limit)), limits())
+    answer = chat.ground(draft("Both documents set it at $1,000,000 [E1, E2]. The policy states it once [E3].",
+                               ("E1", "S1", limit), ("E2", "S2", limit), ("E3", "S1", limit)), limits())
 
-    assert answer.text == "Both documents set it at $1,000,000 [1][2]."
+    assert answer.text == "Both documents set it at $1,000,000 [1][2]. The policy states it once [1]."
     assert [(c.filename, c.quote) for c in answer.citations] == [(POLICY, limit), (QUOTE, limit)]
 
 
@@ -320,10 +322,10 @@ def test_ground_rewrites_the_markers_ending_markdown_list_items_and_keeps_the_li
     limit = FACTS["policy-each-occurrence-limit"]["text"]
 
     answer = chat.ground(draft("The each occurrence limit is the same in both:\n\n"
-                               "- The policy: **$1,000,000** [S1]\n"
-                               "- The quote: **$1,000,000** [S2]\n"
-                               "- Defence costs reduce it [S9]",
-                               ("S1", limit), ("S2", limit)), limits())
+                               "- The policy: **$1,000,000** [E1]\n"
+                               "- The quote: **$1,000,000** [E2]\n"
+                               "- Defence costs reduce it [E3]",
+                               ("E1", "S1", limit), ("E2", "S2", limit)), limits())
 
     assert answer.text == ("The each occurrence limit is the same in both:\n\n"
                            "- The policy: **$1,000,000** [1]\n"
@@ -332,27 +334,71 @@ def test_ground_rewrites_the_markers_ending_markdown_list_items_and_keeps_the_li
     assert [(c.filename, c.quote) for c in answer.citations] == [(POLICY, limit), (QUOTE, limit)]
 
 
-def test_ground_gives_every_sentence_each_verified_quote_of_its_source_whatever_the_order_or_wording():
-    text = "Item 1. General Aggregate Limit $2,000,000\nItem 2. Deductible $5,000 per claim"
-    limits_page = source("S1", POLICY_DOC, text, PageMap(((0, 2),)), chunk=33)
+AGGREGATE = "Item 1. General Aggregate Limit $2,000,000"
+DEDUCTIBLE = "Item 2. Deductible $5,000 per claim"
 
-    answer = chat.ground(draft("The aggregate is $2,000,000, separate from the $5,000 deductible per claim [S1]. "
-                               "The deductible is $5,000 per claim [S1]. The aggregate is $2m [S1].",
-                               ("S1", "Item 2. Deductible $5,000 per claim"),
-                               ("S1", "Item 1. General Aggregate Limit $2,000,000"),
-                               ("S1", "Item 1. General Aggregate Limit $2,000,000"),
-                               ("S1", "Deductible $25,000")),
-                         [limits_page])
 
-    assert answer.text == ("The aggregate is $2,000,000, separate from the $5,000 deductible per claim [1][2]. "
-                           "The deductible is $5,000 per claim [1][2]. The aggregate is $2m [1][2].")
-    assert [citation.quote for citation in answer.citations] == [
-        "Item 2. Deductible $5,000 per claim", "Item 1. General Aggregate Limit $2,000,000"]
+def aggregate_and_deductible() -> list[Source]:
+    return [source("S1", POLICY_DOC, f"{AGGREGATE}\n{DEDUCTIBLE}", PageMap(((0, 2),)), chunk=33)]
+
+
+def test_ground_cites_each_sentence_its_own_quote_whatever_order_the_evidence_comes_in():
+    answer = chat.ground(draft("The aggregate is $2,000,000 [E1]. The deductible is $5,000 per claim [E2].",
+                               ("E2", "S1", DEDUCTIBLE), ("E1", "S1", AGGREGATE)), aggregate_and_deductible())
+
+    assert answer.text == "The aggregate is $2,000,000 [2]. The deductible is $5,000 per claim [1]."
+    assert [citation.quote for citation in answer.citations] == [DEDUCTIBLE, AGGREGATE]
+
+
+
+def test_ground_reads_an_evidence_id_written_with_brackets_or_in_lower_case():
+    answer = chat.ground(draft("The aggregate is $2,000,000 [E1]. The deductible is $5,000 per claim [E2].",
+                               ("[E1]", "S1", AGGREGATE), (" e2", "S1", DEDUCTIBLE)), aggregate_and_deductible())
+
+    assert answer.text == "The aggregate is $2,000,000 [1]. The deductible is $5,000 per claim [2]."
+
+def test_ground_leaves_a_sentence_whose_quote_is_not_found_without_a_number_and_numbers_the_others():
+    answer = chat.ground(draft("The aggregate is $2,000,000 [E1]. The deductible is $25,000 [E2]. "
+                               "It applies per claim [E3].",
+                               ("E1", "S1", AGGREGATE), ("E2", "S1", "Deductible $25,000"), ("E3", "S1", DEDUCTIBLE)),
+                         aggregate_and_deductible())
+
+    assert answer.text == "The aggregate is $2,000,000 [1]. The deductible is $25,000. It applies per claim [2]."
+    assert [citation.quote for citation in answer.citations] == [AGGREGATE, DEDUCTIBLE]
+
+
+def test_ground_removes_a_marker_with_no_evidence_item():
+    answer = chat.ground(draft("The aggregate is $2,000,000 [E1]. The deductible is $5,000 per claim [E2].",
+                               ("E1", "S1", AGGREGATE)), aggregate_and_deductible())
+
+    assert answer.text == "The aggregate is $2,000,000 [1]. The deductible is $5,000 per claim."
+
+
+def test_ground_gives_two_sentences_that_share_a_marker_the_same_number():
+    answer = chat.ground(draft("The deductible is $5,000 [E1]. It applies per claim [E1]. "
+                               "The aggregate is $2,000,000 [E2].",
+                               ("E1", "S1", DEDUCTIBLE), ("E2", "S1", AGGREGATE)), aggregate_and_deductible())
+
+    assert answer.text == "The deductible is $5,000 [1]. It applies per claim [1]. The aggregate is $2,000,000 [2]."
+
+
+def test_ground_removes_a_stray_source_marker_without_a_number():
+    answer = chat.ground(draft("The aggregate is $2,000,000 [E1]. The deductible is $5,000 per claim [S1].",
+                               ("E1", "S1", AGGREGATE), ("S1", "S1", DEDUCTIBLE)), aggregate_and_deductible())
+
+    assert answer.text == "The aggregate is $2,000,000 [1]. The deductible is $5,000 per claim."
+
+
+def test_ground_numbers_the_markers_of_a_markdown_list_and_keeps_its_syntax():
+    answer = chat.ground(draft("- Aggregate **$2,000,000** [E1]\n- Deductible $5,000 [E2]",
+                               ("E1", "S1", AGGREGATE), ("E2", "S1", DEDUCTIBLE)), aggregate_and_deductible())
+
+    assert answer.text == "- Aggregate **$2,000,000** [1]\n- Deductible $5,000 [2]"
 
 
 def test_ground_refuses_a_declined_draft_and_a_draft_with_nothing_verified():
-    declined = chat.ground(draft("The documents do not mention flood cover [S1].", supported=False), limits())
-    unverified = chat.ground(draft("The limit is one million [S1].", ("S1", "a limit of one million dollars")),
+    declined = chat.ground(draft("The documents do not mention flood cover [E1].", supported=False), limits())
+    unverified = chat.ground(draft("The limit is one million [E1].", ("E1", "S1", "a limit of one million dollars")),
                              limits())
 
     assert declined == NotFound(TurnOutcome.MODEL_DECLINED, "The documents do not mention flood cover.")

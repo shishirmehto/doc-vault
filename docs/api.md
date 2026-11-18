@@ -128,7 +128,7 @@ Over the daily AI spending cap, an ask is 429 `quota_exceeded` before any model 
 | Event | Data | Meaning |
 |---|---|---|
 | `stage` | `{"stage": "condensing" \| "searching" \| "answering"}` | A step starts. `condensing` comes only after the first turn. |
-| `delta` | `{"text": "..."}` | Provisional answer text, with every `[S#]` marker removed. Append it. |
+| `delta` | `{"text": "..."}` | Provisional answer text, with every `[E#]` marker removed. Append it. |
 | `reset` | `{}` | Discard the provisional text. It comes before a retry or a repair that follows text already sent. |
 | `turn` | the `POST /chats/{id}/messages` body | The grounded answer. It replaces the provisional text and ends the stream. |
 | `error` | the error envelope | `ai_unavailable`, `ai_bad_output`, `internal_error`, or `quota_exceeded` when the spending cap is reached after the stream started. It ends the stream. |

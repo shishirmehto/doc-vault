@@ -11,7 +11,7 @@ A user starts a chat on one or more ready documents and asks questions. Each ans
 - `chat-multi-doc` cites every document in the scope that holds the answer.
 - `chat-not-found` returns `status: not_found` with `reason` `no_evidence` (nothing passed the gate; with a key, the model also saw the opening passages), `model_declined` or `unverified`.
 - `chat-history` returns every turn in order (`GET /chats/{id}/messages`).
-- `chat-stream` streams the same answer as server-sent events (`POST /chats/{id}/messages/stream`): `stage`, then `delta` text without `[S#]` markers, then one `turn` (or `error`). A client that leaves mid-answer still gets its turn stored.
+- `chat-stream` streams the same answer as server-sent events (`POST /chats/{id}/messages/stream`): `stage`, then `delta` text without `[E#]` markers, then one `turn` (or `error`). A client that leaves mid-answer still gets its turn stored.
 - `chat-suggestions` returns up to three `suggestions` per turn. Asking one comes back `answered`.
 
 ## How to get to it (user POV)
@@ -51,7 +51,7 @@ curl -sN -D - $API/chats/<chat id>/messages/stream -H "$H" \
 ```
 
 - Headers include `content-type: text/event-stream`, `cache-control: no-cache, no-transform` and `x-accel-buffering: no`.
-- Events come in this order: `stage` `searching`, `stage` `answering`, several `delta` events about 25 ms apart (`FAKE_STREAM_DELAY_MS` in compose), then `turn`. The deltas joined read `Property Damage Deductible $2,500 per occurrence`, without `[S1]`. The `turn` data equals the last turn of `GET /chats/<chat id>/messages`.
+- Events come in this order: `stage` `searching`, `stage` `answering`, several `delta` events about 25 ms apart (`FAKE_STREAM_DELAY_MS` in compose), then `turn`. The deltas joined read `Property Damage Deductible $2,500 per occurrence`, without `[E1]`. The `turn` data equals the last turn of `GET /chats/<chat id>/messages`.
 - A follow-up starts with `stage` `condensing`. `Who won the 2022 football World Cup?` sends `stage` `searching`, then `turn` with `"reason": "no_evidence"`, and no `delta`.
 - **Disconnect.** Start a new chat on Q alone, a scope no step above has asked, and run the same command with `--max-time 0.1` to cut the stream mid-answer (curl exits 28). After a second, `GET /chats/<that chat id>/messages` shows the turn as answered, and `$S/sql.sh "SELECT purpose, ok FROM llm_calls WHERE turn_id = '<turn id>'"` shows its `answer` row. It has no `embed_query` row, because the first stream embedded the same question text and the embedding cache serves it.
 - **Through the web proxy.** In the chat from the first stream, where the question is now a follow-up that the answer cache does not serve, run the same command against `$WEB/api/chats/<chat id>/messages/stream` with `-H 'accept-encoding: gzip'`. The response has no `content-encoding`, and the deltas keep their spacing. If they arrive in one burst at the end, the proxy is compressing the stream.

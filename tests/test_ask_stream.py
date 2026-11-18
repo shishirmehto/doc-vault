@@ -172,7 +172,7 @@ class RepairedOnce(FakeChat):
     def complete_json(self, prompt, output, *, timeout_s, on_text=None):
         if prompt.name != "answer" or len(prompt.messages) > 1 or on_text is None:
             return super().complete_json(prompt, output, timeout_s=timeout_s, on_text=on_text)
-        bad = '{"supported": true, "answer": "A first draft [S1].", "evidence": "S1"}'
+        bad = '{"supported": true, "answer": "A first draft [E1].", "evidence": "E1"}'
         on_text(bad)
         return RawCompletion(bad), Tokens(100, 0, 10)
 

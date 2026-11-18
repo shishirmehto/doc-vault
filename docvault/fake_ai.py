@@ -258,8 +258,9 @@ def _fake_answer(prompt: Prompt) -> AnswerDraft:
                            follow_ups=follow_ups)
     return AnswerDraft(
         supported=True,
-        answer=" ".join(f"{collapse_whitespace(segment)} [{source.label}]" for _, source, segment in cited),
-        evidence=[EvidenceDraft(source=source.label, quote=segment) for _, source, segment in cited],
+        answer=" ".join(f"{collapse_whitespace(segment)} [E{n}]" for n, (_, _, segment) in enumerate(cited, 1)),
+        evidence=[EvidenceDraft(id=f"E{n}", source=source.label, quote=segment)
+                  for n, (_, source, segment) in enumerate(cited, 1)],
         follow_ups=follow_ups)
 
 

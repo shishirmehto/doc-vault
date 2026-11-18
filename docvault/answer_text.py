@@ -7,8 +7,8 @@ composes as ``marker_filter.feed(answer_field.feed(chunk))``:
 
 - AnswerField reads the decoded value of the top-level "answer" string out of
   JSON split at any character.
-- MarkerFilter removes [S#] source-marker runs with the grammar of
-  chat._MARKERS, holding back text that could still turn into a marker.
+- MarkerFilter removes [E#] marker runs, and stray [S#] ones, with the
+  grammar of chat._MARKERS, holding back text that could still turn into a marker.
 """
 
 from __future__ import annotations
@@ -186,11 +186,11 @@ class _Marker(Enum):
 
 
 class MarkerFilter:
-    """Text with every [S#] marker run and the spaces and tabs before it removed, as it arrives.
+    """Text with every [E#] or [S#] marker run and the spaces and tabs before it removed, as it arrives.
 
     Uses exactly the grammar of chat._MARKERS. Trailing text that could still
     become a marker is held back and released the moment it cannot. Adjacent
-    markers ("[S1][S2]") are removed one at a time, which removes the same
+    markers ("[E1][E2]") are removed one at a time, which removes the same
     text as removing their run in one match.
     """
 
@@ -223,7 +223,7 @@ class MarkerFilter:
         following = _following(self._state, ch)
         if following is None:
             # Every match attempt from the pad through this "[" fails at ch, but a marker can still start
-            # after the "[" (a space inside "[S1 [S2]" is the next marker's pad), so the rest is scanned again.
+            # after the "[" (a space inside "[E1 [E2]" is the next marker's pad), so the rest is scanned again.
             released, rescan = self._pad + "[", self._marker[1:] + ch
             self._state, self._pad, self._marker = _Marker.TEXT, "", ""
             return released + "".join(self._step(c) for c in rescan)
@@ -237,7 +237,7 @@ class MarkerFilter:
 
 def _following(state: _Marker, ch: str) -> _Marker | None:
     match state, ch:
-        case _Marker.OPEN, "S":
+        case _Marker.OPEN, "E" | "S":
             return _Marker.LABEL
         case (_Marker.LABEL | _Marker.NUMBER), _ if ch.isdecimal():
             return _Marker.NUMBER
@@ -247,7 +247,7 @@ def _following(state: _Marker, ch: str) -> _Marker | None:
             return _Marker.AFTER_COMMA
         case (_Marker.NUMBER | _Marker.BEFORE_COMMA), _ if ch.isspace():
             return _Marker.BEFORE_COMMA
-        case _Marker.AFTER_COMMA, "S":
+        case _Marker.AFTER_COMMA, "E" | "S":
             return _Marker.LABEL
         case _Marker.AFTER_COMMA, _ if ch.isspace():
             return _Marker.AFTER_COMMA

@@ -184,7 +184,7 @@ export interface paths {
          *
          *     - `stage`, data `{"stage": "condensing" | "searching" | "answering"}`, as each step starts. `condensing` comes
          *       only when the chat has earlier turns.
-         *     - `delta`, data `{"text": "..."}`: provisional answer text with every `[S#]` marker removed. Append it.
+         *     - `delta`, data `{"text": "..."}`: provisional answer text with every `[E#]` marker removed. Append it.
          *     - `reset`, data `{}`: discard the provisional text. Sent before a retry or repair that follows text already sent.
          *     - `turn`, data: the same body `POST /chats/{chat_id}/messages` returns. It is grounded and final, replaces all
          *       provisional text, and ends the stream.

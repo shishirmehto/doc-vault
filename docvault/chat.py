@@ -547,9 +547,10 @@ def _same_question(text: str) -> str:
 
 # ------------------------------------------------------------------ grounding
 
-# A run of adjacent markers ("[S2]", "[S2][S3]", "[S2, S3]") and the spaces before it.
-_MARKERS = re.compile(r"(?P<pad>[ \t]*)(?P<run>(?:\[S\d+(?:\s*,\s*S\d+)*\])+)")
-_LABEL = re.compile(r"S\d+")
+# A run of adjacent markers ("[E2]", "[E2][E3]", "[E2, E3]") and the spaces before it. A source marker such as
+# [S2], the old form, matches too and cites nothing, so a model that slips into it leaves no stray label.
+_MARKERS = re.compile(r"(?P<pad>[ \t]*)(?P<run>(?:\[[ES]\d+(?:\s*,\s*[ES]\d+)*\])+)")
+_EVIDENCE_ID = re.compile(r"E\d+")
 
 
 def ground(draft: AnswerDraft, sources: Sequence[Source]) -> Answer:
@@ -560,36 +561,46 @@ def ground(draft: AnswerDraft, sources: Sequence[Source]) -> Answer:
     dropped. A kept citation quotes the source span, not the model's copy, and
     takes the page where that span starts inside the chunk, so a chunk spanning
     pages 11-12 cites 12 when the quoted words are on 12. Citations are numbered
-    1..n in evidence order, and each [S#] marker becomes the numbers of its
-    label's citations. Nothing verified -> UNVERIFIED.
+    1..n in evidence order, a repeated quote keeping its first number, and each
+    [E#] marker becomes the numbers of the evidence items with that id.
+    Nothing verified -> UNVERIFIED.
     """
     if not draft.supported:
         return NotFound(TurnOutcome.MODEL_DECLINED, _rewrite_markers(draft.answer, {}))
     by_label = {source.label: source for source in sources}
     citations: list[Citation] = []
+    numbers: dict[tuple[str, int, int], int] = {}
     refs: dict[str, list[int]] = {}
-    seen: set[tuple[str, int, int]] = set()
     for evidence in draft.evidence:
         source = by_label.get(evidence.source)
         span = None if source is None else pages.locate_quote(evidence.quote, source.text)
-        if span is None or (evidence.source, *span) in seen:
+        if span is None:
             continue
-        seen.add((evidence.source, *span))
-        start, end = span
-        citations.append(Citation(source.doc.id, source.doc.filename, source.page_map.page_at(start),
-                                  source.doc.page_basis, pages.collapse_whitespace(source.text[start:end]),
-                                  source.chunk_id))
-        refs.setdefault(evidence.source, []).append(len(citations))
+        quoted = (evidence.source, *span)
+        if quoted not in numbers:
+            start, end = span
+            citations.append(Citation(source.doc.id, source.doc.filename, source.page_map.page_at(start),
+                                      source.doc.page_basis, pages.collapse_whitespace(source.text[start:end]),
+                                      source.chunk_id))
+            numbers[quoted] = len(citations)
+        refs.setdefault(_evidence_key(evidence.id), []).append(numbers[quoted])
     if not citations:
         return NotFound(TurnOutcome.UNVERIFIED, UNVERIFIED_TEXT)
     return Answered(_rewrite_markers(draft.answer, refs), (citations[0], *citations[1:]))
 
 
+def _evidence_key(evidence_id: str) -> str:
+    """ "E1" for "E1", "[E1]" or " e1": the id as the answer's markers write it. Any other id matches no marker."""
+    found = _EVIDENCE_ID.search(evidence_id.upper())
+    return found.group(0) if found else evidence_id
+
+
 def _rewrite_markers(text: str, refs: Mapping[str, Sequence[int]]) -> str:
-    """Each marker run becomes "[1][2]" for its labels' verified citations. A run with none is removed with the
-    spaces before it, so "limit [S9]." reads "limit." rather than "limit ."."""
+    """Each marker run becomes "[1][2]" for its evidence ids' verified citations. A run with none is removed with the
+    spaces before it, so "limit [E9]." reads "limit." rather than "limit ."."""
     def replace(match: re.Match[str]) -> str:
-        cited = dict.fromkeys(ref for label in _LABEL.findall(match["run"]) for ref in refs.get(label, ()))
+        cited = dict.fromkeys(ref for evidence_id in _EVIDENCE_ID.findall(match["run"])
+                              for ref in refs.get(evidence_id, ()))
         return match["pad"] + "".join(f"[{ref}]" for ref in cited) if cited else ""
 
     return _MARKERS.sub(replace, text).strip()
