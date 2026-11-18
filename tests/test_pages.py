@@ -314,3 +314,22 @@ def test_a_docx_whose_text_would_inflate_past_the_bound_is_refused_before_it_is_
     assert raised.value.failure == Failure(ErrorCode.UNREADABLE_FILE,
                                            "The Word file's text would expand to more than 1 MB. Split the document "
                                            "and upload the parts.", retryable=False)
+
+
+def test_a_docx_table_reads_a_merged_cell_once_and_keeps_a_table_nested_in_a_cell(tmp_path):
+    from docx import Document
+
+    word = Document()
+    word.add_paragraph("Schedule")
+    table = word.add_table(rows=2, cols=3)
+    merged = table.cell(0, 0).merge(table.cell(0, 1))
+    merged.text, table.cell(0, 2).text = "General Aggregate", "$2,000,000"
+    for col, text in enumerate(["Deductible", "per claim", "$2,500"]):
+        table.cell(1, col).text = text
+    nested = table.cell(1, 1).add_table(rows=1, cols=2)
+    nested.cell(0, 0).text, nested.cell(0, 1).text = "Waiting period", "30 days"
+    path = tmp_path / "schedule.docx"
+    word.save(str(path))
+
+    assert pages.extract(DocKind.DOCX, path, max_pages=10).pages[0].text == (
+        "Schedule\nGeneral Aggregate | $2,000,000\nDeductible | per claim | $2,500\nWaiting period | 30 days")

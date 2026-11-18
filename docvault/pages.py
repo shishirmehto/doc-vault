@@ -184,7 +184,7 @@ def _tidy(text: str) -> str:
 def _extract_docx(path: Path, max_pages: int) -> ExtractedText:
     """python-docx, body paragraphs and tables in document order, cut into
     SYNTHETIC sections of ~SYNTHETIC_PAGE_CHARS at paragraph boundaries.
-    Tables become one line per row, cells joined by " | ".
+    Tables become one line per row, cells joined by " | " (_table_lines).
     """
     with zipfile.ZipFile(path) as archive:
         inflated = archive.getinfo("word/document.xml").file_size   # zipfile reads no more than this
@@ -195,10 +195,35 @@ def _extract_docx(path: Path, max_pages: int) -> ExtractedText:
     paragraphs: list[str] = []
     for item in open_docx(str(path)).iter_inner_content():
         if isinstance(item, Table):
-            paragraphs += [TABLE_CELL.join(_tidy(cell.text) for cell in row.cells) for row in item.rows]
+            paragraphs += _table_lines(item)
         else:
             paragraphs.append(_tidy(item.text))
     return _sections(paragraphs, joiner="\n")
+
+
+def _table_lines(table: Table) -> list[str]:
+    """One line per row, cells joined by TABLE_CELL. row.cells repeats a horizontally merged cell once per
+    grid column, so a cell that is the same element as the one before it is skipped. A table nested in a
+    cell adds its own lines after its row."""
+    lines: list[str] = []
+    for row in table.rows:
+        cells: list[str] = []
+        nested: list[str] = []
+        previous = None
+        for cell in row.cells:
+            if cell._tc is previous:
+                continue
+            previous = cell._tc
+            texts: list[str] = []
+            for inner in cell.iter_inner_content():
+                if isinstance(inner, Table):
+                    nested += _table_lines(inner)
+                else:
+                    texts.append(inner.text)
+            cells.append(_tidy("\n".join(texts)))
+        lines.append(TABLE_CELL.join(cells))
+        lines += nested
+    return lines
 
 
 def _extract_txt(path: Path, max_pages: int) -> ExtractedText:
