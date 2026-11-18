@@ -129,6 +129,10 @@ On the OpenAI models, in the latest run, on 2026-11-18:
 | A question with no answer in the documents is declined | 15 of 16 |
 | A planted fact appears in a key fact's quote, on its page | 19 of 28 |
 
+The samples are small: they make 11 chunks, and each answer receives up to 16 passages, so at these settings retrieval cannot miss and 34 of 34 measures little. Run again with 4 passages and 600-character chunks, retrieval found 31 of 34 and the answer cited 24 of 34. Of the three facts it did not retrieve, one was still answered right from the quote's change list, one question was declined, and one answer said the documents do not state the amount. No answer gave a wrong figure.
+
+A held-out set of 10 more questions, written after the gate was calibrated, asks for facts at the start and the end of one document, four facts spread through one, a figure worked out from two (the premium rises by $3,450), a date that decides the answer, a follow-up that narrows the last question, and answers that only a document outside the chat holds. Every answer held its expected figures and none named a forbidden one (7 of 7 checked), and 12 of the 16 facts were cited on the expected page. The 4 misses cite the quote's change list or a shortened quote of the right clause.
+
 On 2026-11-17, on the previous answer prompt (`answer-v2`), 50 questions were also asked 91 times about 23 real insurance documents, in chats of 1, 3 and 23 documents. Each question named its expected value and page. A script scored every ask, and then each miss was read. Of the 80 asks with an answer in the documents, 71 passed the script with the expected value cited on an expected page. The review passed 2 more, which wrote "115 percent" as "multiplied by 1.15". The other 7 were declined, and no answer gave a wrong figure. Of the 11 asks with no answer, 8 came back `not_found` and 3 said in their first sentence that the documents do not cover it. Some of these documents are copyrighted, so the documents, questions and scores are kept outside this repository, and these figures cannot be rerun from it. [`docs/design.md`](docs/design.md) has the details, under Real documents.
 
 ## API

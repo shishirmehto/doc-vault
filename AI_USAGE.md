@@ -87,7 +87,7 @@ The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and
 - The eval set again, for $1.08 on the ledger.
 - 23 real insurance documents, 3,263 pages, on a separate copy of the stack. 50 questions were asked 91 times, in chats of 1, 3 and 23 documents. Of the 80 asks with an answer in the documents, a script passed 71 with the expected value cited on an expected page, and a review of each miss passed 2 more. The other 7 were declined. Of the 11 asks with no answer, 8 came back `not_found` and 3 declined in words. [`docs/design.md`](docs/design.md) has the details, under Real documents.
 
-The third, on 2026-11-18, ran the eval set four times, $4.40 in all, while the answer prompt was changed to allow Markdown lists and bold and then to name each quote by its marker. [`docs/evals.md`](docs/evals.md) reports the last run, at `f2243ec`.
+The third, on 2026-11-18, ran the eval set four times, $4.40 in all, while the answer prompt was changed to allow Markdown lists and bold and then to name each quote by its marker. [`docs/evals.md`](docs/evals.md) reports the last run, at `f2243ec`. Three more runs that day, $1.43 in all, scored the held-out extra cases, with 16 and with 4 passages, and the main set with 4 passages (`91c96fb`).
 
 ## Where the AI was wrong, and what caught it
 
