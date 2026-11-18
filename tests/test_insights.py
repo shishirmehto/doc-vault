@@ -10,9 +10,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from docvault import documents, insights, pages, tasks
-from docvault.ai import FakeChat, FakeEmbedder, ProviderError
+from docvault.ai import ProviderError
 from docvault.db import Lease, pipeline_steps
 from docvault.domain import DocKind, DocumentId, ErrorCode, Failure, InsightsPending, VaultError
+from docvault.fake_ai import FakeChat, FakeEmbedder
 from docvault.prompts import InsightsDraft, KeyFactDraft
 
 from .conftest import ENDORSEMENT, FACTS, POLICY, QUOTE, SAMPLES, scalar, step_rows

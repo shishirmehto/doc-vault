@@ -14,11 +14,12 @@ import pytest
 import redis
 
 from docvault import chat, documents, prompts
-from docvault.ai import FakeChat, FakeEmbedder, ProviderError
+from docvault.ai import ProviderError
 from docvault.cache import Cache, CacheStats, Counts
 from docvault.config import Settings
 from docvault.context import build_ctx
 from docvault.domain import DocumentId, Purpose, VaultError
+from docvault.fake_ai import FakeChat, FakeEmbedder
 
 from .conftest import FACTS, POLICY, SAMPLES, RecordingJobs, scalar
 from .test_ai import OWNER, ScriptedChat, gateway, rows

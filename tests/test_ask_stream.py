@@ -7,9 +7,10 @@ import threading
 import pytest
 
 from docvault import insights
-from docvault.ai import FakeChat, ProviderError, RawCompletion, Tokens
+from docvault.ai import ProviderError, RawCompletion, Tokens
 from docvault.api import AskInThread, app
 from docvault.domain import ChatId
+from docvault.fake_ai import FakeChat
 from docvault.prompts import AnswerDraft
 from docvault.ratelimit import RateLimiter
 

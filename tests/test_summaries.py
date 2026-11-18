@@ -7,7 +7,6 @@ import httpx2
 import pytest
 
 from docvault import documents, prompts, summaries
-from docvault.ai import FakeChat
 from docvault.api import app
 from docvault.domain import (
     ErrorCode,
@@ -20,6 +19,7 @@ from docvault.domain import (
     SummaryTone,
     VaultError,
 )
+from docvault.fake_ai import FakeChat
 from docvault.prompts import Prompt, SummaryDraft, SummarySourceDraft
 from docvault.ratelimit import RateLimiter
 

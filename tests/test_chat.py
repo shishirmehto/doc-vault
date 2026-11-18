@@ -8,7 +8,6 @@ from uuid import UUID, uuid4
 import httpx2
 
 from docvault import chat
-from docvault.ai import FakeChat
 from docvault.api import app
 from docvault.chat import Candidate
 from docvault.domain import (
@@ -23,6 +22,7 @@ from docvault.domain import (
     Source,
     TurnOutcome,
 )
+from docvault.fake_ai import FakeChat
 from docvault.prompts import AnswerDraft, EvidenceDraft
 
 from .conftest import FACTS, POLICY, QUOTE, SAMPLES, TRUTH, scalar

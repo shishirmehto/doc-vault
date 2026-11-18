@@ -9,7 +9,7 @@ import httpx2
 import pytest
 
 from docvault import compare, documents, insights, prompts
-from docvault.ai import ComparisonOwner, FakeChat, ProviderError
+from docvault.ai import ComparisonOwner, ProviderError
 from docvault.api import app
 from docvault.domain import (
     Cell,
@@ -21,6 +21,7 @@ from docvault.domain import (
     Row,
     Usage,
 )
+from docvault.fake_ai import FakeChat
 from docvault.prompts import CellDraft, CompareDoc, ComparisonDraft, Msg, Prompt, RowDraft
 from docvault.ratelimit import RateLimiter
 

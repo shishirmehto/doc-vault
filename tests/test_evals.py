@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from docvault import evals
-from docvault.ai import FakeEmbedder
 from docvault.config import Settings
 from docvault.domain import Cell, Purpose, Row, SummaryLength
 from docvault.evals import ExpectedField, Fact, FieldResult, Ratio
+from docvault.fake_ai import FakeEmbedder
 
 from .conftest import TEST_DATABASE_URL
 

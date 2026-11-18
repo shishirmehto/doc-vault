@@ -21,8 +21,6 @@ from docvault import ai
 from docvault.ai import (
     AI,
     DocOwner,
-    FakeChat,
-    FakeEmbedder,
     OpenAIChat,
     OpenAIEmbedder,
     ProviderError,
@@ -31,6 +29,7 @@ from docvault.ai import (
 )
 from docvault.config import Settings, load_settings
 from docvault.domain import DocumentId, ErrorCode, Failure, Purpose, VaultError
+from docvault.fake_ai import FakeChat, FakeEmbedder
 from docvault.prompts import Msg, Prompt, Tier
 
 OWNER = DocOwner(DocumentId(UUID("00000000-0000-0000-0000-0000000000d1")))

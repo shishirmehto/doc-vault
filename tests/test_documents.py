@@ -10,7 +10,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen.canvas import Canvas
 
 from docvault import documents, insights, tasks
-from docvault.ai import FakeEmbedder, ProviderError
+from docvault.ai import ProviderError
 from docvault.db import Lease, pipeline_steps
 from docvault.domain import (
     Created,
@@ -29,6 +29,7 @@ from docvault.domain import (
     Ready,
     VaultError,
 )
+from docvault.fake_ai import FakeEmbedder
 
 from . import conftest
 from .conftest import SAMPLES, Crash, advisory_locks, scalar, step_rows

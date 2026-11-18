@@ -11,8 +11,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from docvault import chat, documents, insights
-from docvault.ai import FakeChat, ProviderError
+from docvault.ai import ProviderError
 from docvault.domain import DocumentId, VaultError
+from docvault.fake_ai import FakeChat
 
 from .conftest import ENDORSEMENT, POLICY, QUOTE, SAMPLES, Crash
 from .test_documents import FailingEmbedder, scanned_pdf, upload, with_embedder
