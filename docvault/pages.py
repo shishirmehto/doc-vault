@@ -96,8 +96,10 @@ def _decode(raw: bytes) -> str:
         return raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         text = raw.decode("utf-8-sig", errors="replace")
-        if len(_UTF8_SEQUENCE.findall(raw)) > text.count("\ufffd"):
-            return text
+        bad = text.count("\ufffd")
+        for complete, _ in enumerate(_UTF8_SEQUENCE.finditer(raw), start=1):
+            if complete > bad:
+                return text
         return raw.decode("cp1252", errors="replace")
 
 
