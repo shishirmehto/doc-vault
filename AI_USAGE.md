@@ -38,7 +38,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 
 ## Verification beyond unit tests
 
-- **Evals** ([`docs/evals.md`](docs/evals.md)). Retrieval, citations, refusals and insights are scored separately, so a miss shows the step where it happened. The relevance threshold was chosen on a frozen case set, never on a single question.
+- **Evals** ([`docs/evals.md`](docs/evals.md)). Retrieval, citations, refusals and insights are scored separately, so a miss shows the step where it happened. The relevance threshold was chosen on a frozen case set, never on a single question. A retrieval benchmark of 53 frozen questions on four long public documents scores ranking alone, because the samples are too small for retrieval to miss.
 - **Real documents.** Before the first live run below, 19 public insurance documents ran through an isolated stack on the fake provider:
   - policy forms in two editions;
   - declarations pages;
@@ -60,7 +60,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 
 ## The live runs
 
-Three runs used the OpenAI key.
+Four runs used the OpenAI key.
 
 The first, on 2026-11-12, sent eight passages to the answer step. It cost $3.17 on the ledger, $1.18 of it for the eval set. It covered:
 - **The eval set.** Retrieval found 34 of 34 expected facts, 30 of 34 were cited on the right page, and 15 of 16 out-of-scope questions were declined. The 2026-11-17 rerun gave the same three numbers, and [`docs/evals.md`](docs/evals.md) reports that rerun.
@@ -89,6 +89,8 @@ The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and
 
 The third, on 2026-11-18, ran the eval set four times, $4.40 in all, while the answer prompt was changed to allow Markdown lists and bold and then to name each quote by its marker. [`docs/evals.md`](docs/evals.md) reports the last run, at `f2243ec`. Three more runs that day, $1.43 in all, scored the held-out extra cases, with 16 and with 4 passages, and the main set with 4 passages (`91c96fb`).
 
+The fourth, later on 2026-11-18, tested the changes for named pages and sections, the retrieval log, the retrieval benchmark and the half-weight full-text rank. About $1.5 went on experiments: the benchmark runs, the chunk-size sweep, the tests with and without the contents block and the section path, and live checks on the 922-page handbook. The final round at `703cca0` was seven runs for $2.32: the main, held-out and page sets at 16 passages and at 4 passages, and one benchmark run. [`docs/evals.md`](docs/evals.md) reports them, and its retrieval benchmark section has each experiment with its numbers.
+
 ## Where the AI was wrong, and what caught it
 
 | What went wrong | What caught it | Shown in |
@@ -112,12 +114,16 @@ The third, on 2026-11-18, ran the eval set four times, $4.40 in all, while the a
 | A change to text decoding read cp1252 text with an accent next to a curly quote as broken UTF-8, so French accents became U+FFFD | The same review agent, with a reproduction | `613dfb5` |
 | The README gave the real-document scores after review only, while the run's own report treats the strict scores as the headline | A grader agent that scored the repo against the case study | `bbe6354` |
 | The first Markdown wording of the answer prompt tied formatting to supported answers and cost two eval turns: a deductible cited to the quote's change list, and an out-of-scope question answered with related limits | The live eval, run a second time to rule out noise: the same two turns missed both times. A reworded prompt recovered the citation; the out-of-scope turn still answers with related limits | `a10a653`, [`docs/evals.md`](docs/evals.md) |
+| The plan for section questions put a `<contents>` block of each document's outline into the answer prompt. On the 922-page handbook it turned "How is this handbook organised?" into an unverified refusal and added about 3% input tokens | The same build, asked live with and without the block. The block was left out | `05353fb`, [`docs/design.md`](docs/design.md#prompts) |
+| The first version of page questions sent each document's closing passage with every question in chats of up to three documents, about 1,800 characters on a long document, to help only "How does it end?" | A cost check on the 922-page handbook that I asked for. The end of a document now means its last page | `2c0f8b3`, `05353fb` |
+| The `05353fb` commit message says answer input tokens fell from 82,112 to 78,114, but that was measured on a build that still had the contents block | The lead agent's decision log, when the commit landed. The same nine questions were measured again at `703cca0`, with 69,341 | `05353fb`, `703cca0` |
+| The full-text rank counted as much as the vector rank in the fusion, and 4 of 53 questions about long documents had the right passage below the 16 sent. The 44 sample questions sit on 11 chunks, so they could not show it | The retrieval benchmark on four public PDFs. The full-text rank now counts half, and 1 of the 53 stays below the 16 | `e84c72e`, `703cca0`, [`docs/evals.md`](docs/evals.md#retrieval-benchmark-on-long-public-documents) |
 
 ## AI inside the product
 
 - Every prompt lives in [`docvault/prompts.py`](docvault/prompts.py). Each is versioned and carries a note on why it is worded the way it is.
 - **Grounding.** Every quote in an answer is located on its cited page, and the page's own text replaces the model's copy. Citations that cannot be found are dropped. Key facts in insights must quote their page, and those that don't are dropped and counted.
-- **Relevance gate.** It runs before the answer call. A question whose best match falls below the threshold goes to the answer step with only each document's opening passage, which answers "What is this about?" and refuses the rest. On the eval set every question passed it, so the answer step declined the out-of-scope ones.
+- **Relevance gate.** It runs before the answer call. A question whose best match falls below the threshold, and that names no page or section, goes to the answer step with only each document's opening passage, which answers "What is this about?" and refuses the rest. On the eval set every question passed it, so the answer step declined the out-of-scope ones itself, 14 of 16 in the latest run.
 - **Follow-ups.** Each follow-up is rewritten into a standalone question, which is stored and returned as `interpreted_as`.
 - **Ledger.** Every provider call is written to an append-only ledger with its tokens and cost. The metrics endpoints read it, so cost and latency are measured, not estimated.
 - **Fake provider.** A deterministic fake lets the tests and a run with no key work without a model. Answer quality is reported only for the OpenAI models.

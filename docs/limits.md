@@ -5,12 +5,19 @@ The README lists the main ones. This is the full list, by area.
 ## Answers and retrieval
 
 - The OpenAI gate threshold (0.20) sits below the lowest answerable turn of the calibration run. On the eval set it passed every question, and the answer step declined the out-of-scope ones ([`docs/evals.md`](evals.md)).
-- The tests use canned HTTP responses for the OpenAI backends. Live runs on 2026-11-12 and 2026-11-17 covered the eval set. The first also covered 19 public insurance documents, with streaming, suggestions, comparisons and summaries. The second also asked 50 questions about 23 real documents (`docs/evals.md`, [`docs/design.md`](design.md), [`AI_USAGE.md`](../AI_USAGE.md)).
+- The tests use canned HTTP responses for the OpenAI backends. Live runs on 2026-11-12 and 2026-11-17 covered the eval set. The first also covered 19 public insurance documents, with streaming, suggestions, comparisons and summaries. The second also asked 50 questions about 23 real documents (`docs/evals.md`, [`docs/design.md`](design.md), [`AI_USAGE.md`](../AI_USAGE.md)). Runs on 2026-11-18 covered the three sample case sets, the retrieval benchmark and ten questions on the 922-page handbook.
 - The fake provider simulates a model's pacing when it streams: it sends its finished answer a word at a time, 25 ms apart in compose (`FAKE_STREAM_DELAY_MS`). The plain route has no delay.
 - During a re-embed after an embedding-model change, a chat over that document refuses with `no_evidence`, and the embedding progress count reads as complete.
 - After an embedding-model change, chats answer only from documents already re-embedded until reconcile finishes.
-- Retrieval sends 16 passages to the answer step. In a test on real documents of up to 922 pages, 4 of the 50 questions were declined in at least one chat scope, because the passage holding the answer ranked below those 16. Sending 16 instead of eight raised the answer step's input from about 4,300 to 7,700 tokens and its median time from 3.8 to 4.5 s.
-- In chat, "Summarize this document" answers from the opening passage and the 16 passages nearest the question. On a 922-page handbook that covers a few sections, and the answer says so. `POST /documents/{id}/summaries` reads the first 240,000 characters instead.
+- Retrieval sends 16 passages to the answer step. In a test on real documents of up to 922 pages, run before the full-text rank was halved, 4 of the 50 questions were declined in at least one chat scope, because the passage holding the answer ranked below those 16. Sending 16 instead of eight raised the answer step's input from about 4,300 to 7,700 tokens and its median time from 3.8 to 4.5 s. On the retrieval benchmark at `703cca0`, 1 of 53 questions still has its page below the 16.
+- There is no reranker. After the full-text rank was halved, 1 of the 53 benchmark questions has its page below the 16 (at rank 35), so a reranker could gain at most that one. OpenAI has no rerank endpoint, so a reranker would cost a model call per question or a local model in the image.
+- In chat, "Summarize this document" answers from the opening passage and the 16 passages nearest the question. On a 922-page handbook that covers a few sections, and the answer names the pages it draws on. `POST /documents/{id}/summaries` reads the first 240,000 characters instead.
+- A question that names a page or a section gets at most 2 passages for it, and at most 4 per document. With small chunks a long page is sent in part. At 4 passages and 600-character chunks, page 7 of the sample policy holds more chunks than that, and the employment exclusion on it is not sent.
+- Page numbers are the PDF's own, counted from 1, not the labels printed on the pages. The crop insurance handbook's page 922 prints "898". A Word or text document has no page numbers, so "page 3" names nothing in it, though its last section is still how it ends.
+- A section is found only through PDF bookmarks or Word Title and Heading styles, so a PDF with no bookmarks has no sections to name.
+- A document indexed before `05353fb` has no stored outline, so a section name finds nothing in it. The same bytes uploaded again return the stored document, so the fix is to delete it and upload it again.
+- Repeated page headers and footers stay in the chunks. Leaving them out cost 2 of the 53 benchmark questions at 16 passages ([`docs/evals.md`](evals.md#retrieval-benchmark-on-long-public-documents)).
+- Changing `chunk_max_chars` or `chunk_overlap_chars` does not re-chunk the documents already indexed. Only a document parsed after the change uses the new settings.
 - With a key, a question that matches nothing still costs one answer call over the opening passages, about 1,200 input tokens and 3 to 4 s.
 - An answer is kept when at least one of its quotes is found. A sentence whose quote is not found stays in the answer text.
 - Each sentence cites the quote the model wrote for it. A sentence whose quote is not found shows no number.
@@ -50,6 +57,9 @@ The README lists the main ones. This is the full list, by area.
 
 ## Uploads, chats and deletes
 
+- There is no OCR, so a scanned PDF has no text and fails with `no_extractable_text`.
+- PDF tables come out as flat text.
+- The vault has one tenant. No table has an owner column and there is no login, so every client sees every document and chat.
 - A delete racing an upload of the same bytes can delete the blob that the new row needs.
 - Some PDFs print bold text by drawing each glyph twice, so a run of characters that come in identical pairs is halved: "PPoolliiccyy" reads "Policy", and so does a code such as `MMDDYYYY`, which reads `MDYY`. A run of one repeated character, such as `YYYY`, is kept.
 - Text files are read as UTF-8, UTF-16 with a byte-order mark, or cp1252. Other encodings, such as Shift-JIS, are indexed as the wrong characters.
