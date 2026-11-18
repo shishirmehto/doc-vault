@@ -41,6 +41,7 @@ ANSWER_VERSION = "answer-v2"
 INSIGHTS_VERSION = "insights-v1"
 COMPARE_VERSION = "compare-v1"
 SUMMARY_VERSION = "summary-v1"
+INSIGHTS_TIER: Tier = "main"
 
 DocumentType = Literal["policy", "quote", "endorsement", "certificate", "schedule", "contract",
                        "claim", "invoice", "correspondence", "report", "other"]
@@ -287,7 +288,7 @@ def insights(filename: str, basis: PageBasis, pages: Sequence[Page], *, budget_c
     the user. Map-reduce over the rest is a stretch item.
     """
     included, lines = _page_prefix(basis, pages, budget_chars)
-    prompt = Prompt(name="insights", version=INSIGHTS_VERSION, purpose=Purpose.INSIGHTS, tier="main",
+    prompt = Prompt(name="insights", version=INSIGHTS_VERSION, purpose=Purpose.INSIGHTS, tier=INSIGHTS_TIER,
                     system=INSIGHTS_SYSTEM, messages=(Msg("user", "\n".join([f"Document: {filename}", *lines])),),
                     inputs={"filename": filename, "pages": included})
     return prompt, included[-1].number

@@ -32,7 +32,7 @@ from .domain import (
     Step,
 )
 from .pages import find_on_page
-from .prompts import INSIGHTS_VERSION, InsightsDraft
+from .prompts import INSIGHTS_TIER, INSIGHTS_VERSION, InsightsDraft
 
 _READY = """
 INSERT INTO document_insights (document_id, status, prompt_version, model, body, pages_read, dropped_unverified)
@@ -61,7 +61,7 @@ def run_analyze(ctx: Ctx, doc_id: DocumentId, *, attempt: int = 1) -> None:
     after the last attempt. Returns quietly for duplicate deliveries, deleted
     documents, documents not parsed yet (run_index enqueues analysis after its
     parse checkpoint), insights already ready under the current prompt
-    version, and failed insights, which stay failed until
+    version and model, and failed insights, which stay failed until
     POST /documents/{id}/retry deletes the row. The document's status is not
     checked: pages are all insights need.
     """
@@ -70,10 +70,12 @@ def run_analyze(ctx: Ctx, doc_id: DocumentId, *, attempt: int = 1) -> None:
             return
         conn = steps.conn
         doc = conn.execute(
-            "SELECT d.filename, d.page_basis, i.status AS insights_status, i.prompt_version FROM documents d"
-            " LEFT JOIN document_insights i ON i.document_id = d.id WHERE d.id = %s", (doc_id,)).fetchone()
+            "SELECT d.filename, d.page_basis, i.status AS insights_status, i.prompt_version, i.model"
+            " FROM documents d LEFT JOIN document_insights i ON i.document_id = d.id WHERE d.id = %s",
+            (doc_id,)).fetchone()
         if doc is None or doc["insights_status"] == "failed" or (
-                doc["insights_status"] == "ready" and doc["prompt_version"] == INSIGHTS_VERSION):
+                doc["insights_status"] == "ready" and doc["prompt_version"] == INSIGHTS_VERSION
+                and doc["model"] == ctx.ai.chat.models[INSIGHTS_TIER]):
             return
         pages = [Page(row["number"], row["text"]) for row in conn.execute(
             "SELECT number, text FROM pages WHERE document_id = %s ORDER BY number", (doc_id,))]

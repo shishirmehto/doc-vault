@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from docvault import documents, insights, pages, tasks
-from docvault.ai import FakeChat, ProviderError
+from docvault.ai import FakeChat, FakeEmbedder, ProviderError
 from docvault.db import Lease, pipeline_steps
 from docvault.domain import DocKind, DocumentId, ErrorCode, Failure, InsightsPending, VaultError
 from docvault.prompts import InsightsDraft, KeyFactDraft
@@ -183,6 +183,28 @@ def test_reconcile_enqueues_analysis_for_aged_documents_without_insights(ctx, tm
 
     assert documents.reconcile(ctx) == 1
     assert ctx.jobs.analyzed == [aged]
+
+
+def test_a_key_added_after_a_fake_run_rewrites_the_fake_insights_once(ctx):
+    doc_id = indexed(ctx, SAMPLES / QUOTE)
+    insights.run_analyze(ctx, doc_id)
+
+    class LiveEmbedder(FakeEmbedder):
+        model = "live-embed"
+
+    class LiveChat(FakeChat):
+        models = {"main": "live-main", "small": "live-small"}
+
+    live = with_chat(with_embedder(ctx, LiveEmbedder()), LiveChat())
+    ctx.jobs.analyzed.clear()
+    assert documents.reconcile(live) == 1
+    documents.run_index(live, doc_id)
+    assert ctx.jobs.analyzed == [doc_id]
+
+    insights.run_analyze(live, doc_id)
+    insights.run_analyze(live, doc_id)
+    assert scalar(ctx.db, "SELECT model FROM document_insights WHERE document_id = %s", (doc_id,)) == "live-main"
+    assert scalar(ctx.db, "SELECT count(*) FROM llm_calls WHERE purpose = 'insights'") == 2
 
 
 def test_a_document_that_failed_after_parsing_keeps_insights_cited_by_section(client, ctx):

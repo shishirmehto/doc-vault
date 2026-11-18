@@ -254,7 +254,9 @@ def _index(ctx: Ctx, steps: PipelineSteps) -> None:
         with steps.record(Step.PARSE):
             _parse(ctx, conn, doc_id, DocKind(doc["kind"]), Sha256(doc["sha256"]))
         ctx.jobs.analyze(doc_id)
-    elif not transition(conn, doc_id, DocStatus.EMBEDDING):
+    elif transition(conn, doc_id, DocStatus.EMBEDDING):
+        ctx.jobs.analyze(doc_id)   # after a provider change; insights written by another model are written again
+    else:
         return
 
     with steps.record(Step.EMBED):
@@ -322,7 +324,8 @@ def reconcile(ctx: Ctx) -> int:
          stale document within backlog / INDEX_BATCH ticks. A crash between the
          stamp and the enqueue delays that batch by STALE_AFTER.
       2. READY documents with chunks from another embedding model (a reviewer
-         adds a provider key after a fake run) -> EMBEDDING, jobs.index.
+         adds a provider key after a fake run) -> EMBEDDING, jobs.index, which
+         also queues analysis, so fake insights are written again by the model.
       3. Parsed documents untouched for STALE_AFTER, with no insights row and
          no analyze step started within STALE_AFTER -> jobs.analyze, at most
          ANALYZE_BATCH per tick. Covers an enqueue lost after the parse

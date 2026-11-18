@@ -19,7 +19,7 @@ The README lists the main ones. This is the full list, by area.
 
 - Insights read a page prefix that fits 240,000 characters. Longer documents report partial coverage; map-reduce over the rest is not built.
 - A key fact is checked only for its quote being on the cited page, not for its value appearing in the quote.
-- Insights rerun only when the prompt version changes, not when the model or the provider key changes.
+- Insights rerun when the prompt version changes, and when a provider key is added after a run without one: the documents are embedded again and their insights rewritten. Changing only the chat model leaves existing insights as they are.
 
 ## Comparisons
 
