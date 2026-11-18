@@ -11,6 +11,7 @@ import pytest
 
 from docvault import chat, pages, prompts
 from docvault import documents as vault_documents
+from docvault.ai import ProviderError
 from docvault.api import app
 from docvault.chat import Candidate, PageRequest, SectionRequest
 from docvault.domain import (
@@ -32,6 +33,7 @@ from docvault.prompts import AnswerDraft, EvidenceDraft
 from .conftest import ENDORSEMENT, FACTS, POLICY, QUOTE, SAMPLES, TRUTH, scalar
 from .test_ai import openai_chat, openai_client
 from .test_compare import completion
+from .test_documents import FailingEmbedder, with_embedder
 from .test_insights import indexed, post, provider_down, with_chat
 from .test_pages import bookmarked_pdf, text_pdf
 
@@ -182,6 +184,14 @@ def test_a_chat_whose_document_is_being_cut_again_takes_no_questions_until_it_is
     assert scalar(ctx.db, "SELECT count(*) FROM llm_calls") == calls
     assert scalar(ctx.db, "SELECT count(*) FROM chat_turns") == 0
 
+    down = with_embedder(small, FailingEmbedder(0, ProviderError("timeout", retryable=True)))
+    vault_documents.run_index(down, policy, attempt=vault_documents.MAX_RETRIES + 1)
+    failed = client.post(f"/chats/{chat_id}/messages", json={"question": "What is the each occurrence limit?"})
+    assert (failed.status_code, failed.json()["error"]["message"], failed.json()["error"]["details"]) == (409,
+        "1 of 1 documents in this chat failed to index. Retry them with POST /documents/{id}/retry, then ask again.",
+        {"not_ready": [{"id": str(policy), "filename": POLICY, "status": "failed"}]})
+
+    assert client.post(f"/documents/{policy}/retry").status_code == 202
     vault_documents.run_index(small, policy)
     assert ask(client, chat_id, "What is the each occurrence limit?")["status"] == "answered"
 

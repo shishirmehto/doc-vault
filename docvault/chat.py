@@ -83,7 +83,7 @@ PAGE_PASSAGES_PER_REQUEST = 2   # chunks sent for each page, range or section a 
 PAGE_PASSAGES_PER_DOC = 4   # chunks sent for the pages and sections a question names, per document
 MAX_PAGE_SPAN = 10          # "pages 1-500" asks for the first 10
 TITLE_LOOKAHEAD = 3         # chunks read past a section's first ones to find the one holding its title
-ANSWER_CACHE_FORMAT = 12    # part of every answer key: a change to the cached value's shape or to select_sources bumps it
+ANSWER_CACHE_FORMAT = 13    # part of every answer key: a change to the cached value's shape or to select_sources bumps it
 ANSWER_TTL_S = 30 * 24 * 3600
 
 
@@ -430,7 +430,8 @@ def scope(conn: Connection, chat_id: ChatId) -> tuple[DocRef, *tuple[DocRef, ...
     Raises DOCUMENTS_DELETED when any of them was deleted after the chat started:
     answering from the rest would quietly change what the chat was asked about.
     Raises DOCUMENTS_NOT_READY while any is indexed again (new chunk settings or embedding model), because its
-    chunks are then partly embedded, and an answer from them could also land in the answer cache.
+    chunks are then partly embedded, and an answer from them could also land in the answer cache; the message
+    says to retry the document when that indexing failed.
     """
     rows = conn.execute(
         "SELECT cd.document_id, CASE WHEN count(*) OVER (PARTITION BY cd.filename) > 1 AND d.version IS NOT NULL"
@@ -445,9 +446,12 @@ def scope(conn: Connection, chat_id: ChatId) -> tuple[DocRef, *tuple[DocRef, ...
                          "Start a new chat with the documents you want to ask about.", details={"deleted": deleted})
     if not_ready := [{"id": str(row["document_id"]), "filename": row["filename"], "status": row["status"]}
                      for row in rows if row["status"] != DocStatus.READY]:
-        raise VaultError(ErrorCode.DOCUMENTS_NOT_READY,
-                         f"{len(not_ready)} of {len(rows)} documents in this chat are being indexed. "
-                         "Ask again when indexing finishes.", details={"not_ready": not_ready})
+        failed = sum(doc["status"] == DocStatus.FAILED for doc in not_ready)
+        raise VaultError(ErrorCode.DOCUMENTS_NOT_READY, (
+            f"{failed} of {len(rows)} documents in this chat failed to index. Retry them with "
+            "POST /documents/{id}/retry, then ask again." if failed else
+            f"{len(not_ready)} of {len(rows)} documents in this chat are being indexed. Ask again when indexing finishes."),
+            details={"not_ready": not_ready})
     first, *rest = (DocRef(DocumentId(row["document_id"]), row["filename"], PageBasis(row["page_basis"]),
                            row["page_count"], tuple(OutlineEntry(entry["title"], entry["level"], entry["page"])
                                                     for entry in row["outline"] or ())) for row in rows)
