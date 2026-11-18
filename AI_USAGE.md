@@ -89,7 +89,7 @@ The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and
 
 The third, on 2026-11-18, ran the eval set four times, $4.40 in all, while the answer prompt was changed to allow Markdown lists and bold and then to name each quote by its marker. [`docs/evals.md`](docs/evals.md) reports the last run, at `f2243ec`. Three more runs that day, $1.43 in all, scored the held-out extra cases, with 16 and with 4 passages, and the main set with 4 passages (`91c96fb`).
 
-The fourth, later on 2026-11-18, tested the changes for named pages and sections, the retrieval log, the retrieval benchmark and the half-weight full-text rank. About $1.5 went on experiments: the benchmark runs, the chunk-size sweep, the tests with and without the contents block and the section path, and live checks on the 922-page handbook. The final round at `703cca0` was seven runs for $2.32: the main, held-out and page sets at 16 passages and at 4 passages, and one benchmark run. [`docs/evals.md`](docs/evals.md) reports them, and its retrieval benchmark section has each experiment with its numbers.
+The fourth, later on 2026-11-18, tested the changes for named pages and sections, the retrieval log, the retrieval benchmark and the half-weight full-text rank. About $1.4 went on experiments: the benchmark runs, the chunk-size sweep, the tests with and without the contents block and the section path, and live checks on the 922-page handbook. The final round at `703cca0` was seven runs for $2.32: the main, held-out and page sets at 16 passages and at 4 passages, and one benchmark run. [`docs/evals.md`](docs/evals.md) reports them, and its retrieval benchmark section has each experiment with its numbers.
 
 ## Where the AI was wrong, and what caught it
 
