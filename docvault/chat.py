@@ -446,11 +446,12 @@ def gate(candidates: Sequence[Candidate], min_similarity: float) -> bool:
     return any(candidate.lexical_hit or candidate.similarity >= min_similarity for candidate in candidates)
 
 
+# One index lookup per document on (document_id, ord), so no other chunk is read, sorted or scored.
 OPENINGS_SQL = """
-SELECT DISTINCT ON (document_id) id, document_id, text, page_map, 1 - (embedding <=> %(q)s) AS similarity
-FROM chunks
-WHERE document_id = ANY(%(doc_ids)s) AND embedding_model = %(model)s
-ORDER BY document_id, ord
+SELECT c.id, c.document_id, c.text, c.page_map, 1 - (c.embedding <=> %(q)s) AS similarity
+FROM unnest(%(doc_ids)s::uuid[]) AS d(id)
+CROSS JOIN LATERAL (SELECT id, document_id, text, page_map, embedding FROM chunks
+                    WHERE document_id = d.id AND embedding_model = %(model)s ORDER BY ord LIMIT 1) c
 """
 
 
