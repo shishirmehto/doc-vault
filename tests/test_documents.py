@@ -148,6 +148,18 @@ def test_scanned_pdf_fails_with_a_reason_and_can_be_retried(ctx, tmp_path):
     assert ctx.jobs.indexed == [doc_id, doc_id]
 
 
+def test_a_file_the_parser_cannot_read_logs_the_parsers_own_error(ctx, tmp_path, caplog):
+    broken = tmp_path / "broken.pdf"
+    broken.write_bytes(b"%PDF-1.7\nnot really a pdf")
+    doc_id = upload(ctx, broken).document.id
+    documents.run_index(ctx, doc_id)
+
+    assert documents.get(ctx.db, doc_id).lifecycle.failure.code == ErrorCode.UNREADABLE_FILE
+    [record] = [r for r in caplog.records if r.name == "docvault.documents"]
+    assert (record.levelname, record.getMessage()) == ("WARNING", f"Indexing document {doc_id} failed: unreadable_file")
+    assert record.exc_info[0].__module__.startswith("pypdf")
+
+
 def test_retry_after_a_provider_failure_resumes_at_embedding_without_parsing_again(ctx):
     doc_id = upload(ctx, POLICY).document.id
     down = with_embedder(ctx, FailingEmbedder(1, ProviderError("timeout", retryable=True)))

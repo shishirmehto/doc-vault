@@ -231,6 +231,8 @@ def run_index(ctx: Ctx, doc_id: DocumentId, *, attempt: int = 1) -> None:
             if exc.failure.retryable and attempt <= MAX_RETRIES:
                 raise
             failure = exc.failure
+            # The cause, when there is one, is the parser's or the provider's own error.
+            log.warning("Indexing document %s failed: %s", doc_id, failure.code, exc_info=exc.__cause__)
         except Exception:
             log.exception("Indexing document %s failed", doc_id)
             failure = Failure(ErrorCode.INTERNAL, "Processing failed unexpectedly. Retry the document.", retryable=True)
