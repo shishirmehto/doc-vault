@@ -1,0 +1,71 @@
+# Converted from scale-test/questions/crop.json (sha256 3f024ed039a24b72e9c365e889d231e132496b26bc3b80f6b2d2366a34d558d8) on 2026-11-18
+# by convert_questions.py. Question text, ids and expected pages are verbatim; a source case's
+# second turn has the id <case id>.2. docs is the chat's scope; doc holds the expected pages.
+# Skipped turns:
+#   crop-fu turn 2 "And for dry peas?": follow-up that needs the turn before it
+#   crop-nf1 turn 1 "Is hemp insurable under the federal crop insurance program, and what production records does a hemp grower need?": not_found, no expected pages
+#   crop-nf2 turn 1 "If a farmer files for bankruptcy partway through the crop year, what happens to the crop insurance policy and any indemnity owed?": not_found, no expected pages
+questions:
+- id: crop-01
+  ask: Once the final area yield and revenue numbers are out, how quickly does the insurer have to pay a claim under the Supplemental Coverage Option?
+  docs: [crop-insurance-handbook-2025.pdf]
+  doc: crop-insurance-handbook-2025.pdf
+  pages: [66]
+  quote: Indemnities will be calculated and paid under the SCO Endorsement within 30 days after final area yield and revenue has been released.
+  values: [30 days]
+- id: crop-02
+  ask: A mint grower has the winter coverage option and the stand fails early. What share of the normal production guarantee does that option give?
+  docs: [crop-insurance-handbook-2025.pdf]
+  doc: crop-insurance-handbook-2025.pdf
+  pages: [46]
+  quote: The Mint WCO provides a guarantee equal to 60 percent of the production guarantee determined under the CP.
+  values: [60 percent]
+- id: crop-03
+  ask: Under UDGO, if all my acreage of a crop ends up in one optional unit, how many acres of it would I need to still qualify for an enterprise unit?
+  docs: [crop-insurance-handbook-2025.pdf]
+  doc: crop-insurance-handbook-2025.pdf
+  pages: [136]
+  quote: at least 660 acres of the insured crop planted on acreage considered to be in one OU
+  values: [660 acres]
+- id: crop-04
+  ask: A farmer's first crop failed and a second crop was planted on the same ground. What share of the first crop's insurable loss can be paid out?
+  docs: [crop-insurance-handbook-2025.pdf]
+  doc: crop-insurance-handbook-2025.pdf
+  pages: [201, 205, 207, 208, 209]
+  quote: Indemnity payment is limited to 35 percent of the insurable loss for the 1st insured crop.
+  values: [35 percent]
+- id: crop-05
+  ask: At what level compared with the average of other APH databases does an approved yield get treated as inconsistent and possibly reduced?
+  docs: [crop-insurance-handbook-2025.pdf]
+  doc: crop-insurance-handbook-2025.pdf
+  pages: [364, 372, 779, 780]
+  quote: Inconsistent approved yields are approved yields greater than 115 percent of the average of the approved yields of all applicable APH databases
+  values: [115 percent]
+- id: crop-06
+  ask: How far ahead must a cane grower warn the insurance provider before cutting stalks to use as planting stock?
+  docs: [crop-insurance-handbook-2025.pdf]
+  doc: crop-insurance-handbook-2025.pdf
+  pages: [552]
+  quote: The insured must notify the AIP at least 15 days before cutting any sugarcane for seed.
+  values: [15 days]
+- id: crop-07
+  ask: For alfalfa stem counts in forage underwriting, how tall does a stem have to be before it gets counted?
+  docs: [crop-insurance-handbook-2025.pdf]
+  doc: crop-insurance-handbook-2025.pdf
+  pages: [842, 844]
+  quote: counting only those stems that are over 2 inches tall
+  values: [2 inches]
+- id: crop-08
+  ask: How much of a grass seed field must be covered by the crop's leaf area before insurance can attach?
+  docs: [crop-insurance-handbook-2025.pdf]
+  doc: crop-insurance-handbook-2025.pdf
+  pages: [894]
+  quote: equals or exceeds 75 percent of the land area planted to the type
+  values: [75 percent]
+- id: crop-fu
+  ask: For the wheat and barley winter coverage endorsement, what is the deadline for giving notice of damage?
+  docs: [crop-insurance-handbook-2025.pdf]
+  doc: crop-insurance-handbook-2025.pdf
+  pages: [40]
+  quote: but not later than the spring FPD provided in the SP
+  values: [spring FPD]

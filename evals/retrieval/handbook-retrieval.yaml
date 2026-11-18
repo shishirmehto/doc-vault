@@ -1,0 +1,150 @@
+# Frozen retrieval set for crop-insurance-handbook-2025.pdf, written 2026-11-18 before any run.
+# pages = 1-based PDF page numbers (not printed footer numbers).
+# section = last 2 levels of the deepest bookmark covering the answer, titles copied verbatim from the PDF outline.
+# kind: mid-section = deepest bookmark spans 3+ pages and the answer is not on its first page;
+#       section-start = answer is on the page where that bookmark's heading appears, after the heading.
+questions:
+- id: q01
+  ask: "If I find what looks like an error in RMA's crop insurance underwriting procedures, how do I report it?"
+  pages: [28]
+  section: "1 General Information > F. Procedural Questions"
+  kind: section-start
+  answer: "Email RMA at rma.kc.cih@usda.gov, clearly identifying the error and giving the proposed correction (general procedure questions go to the AIP first)."
+- id: q02
+  ask: "My grower has a private hail policy and wants hail and fire taken off his federal crop policy. How long does he have to send that request?"
+  pages: [37]
+  section: "904 Hail and Fire Exclusion Option > B. Deadlines"
+  kind: section-start
+  answer: "Within 72 hours after the effective date of the annual hail and fire policy (or the first year of a multi-season policy); in later years of a multi-season policy, on or before the date coverage attaches."
+- id: q03
+  ask: "A sugar beet grower with the early-harvest option excluded some bad years but took no yield substitutions. Which yield limitation flag gets reported to PASS?"
+  pages: [88]
+  section: "923 Sugar Beet Early Harvest Adjustment Option (EHA) > R. Calculating the Yields for APH Databases When EHA is Elected"
+  kind: mid-section
+  answer: "Yield limitation flag 18, reported with the EHA option code on the P15 record."
+- id: q04
+  ask: "A farmer asks for enterprise units by type but doesn't say on the form which types he means. How is the election applied?"
+  pages: [103]
+  section: "Section 3:  Enterprise Units > 1031 EU Availability"
+  kind: mid-section
+  answer: "It applies to all types: a separate EU for each type on the policy."
+- id: q05
+  ask: "Can a grower keep whole-farm units if he takes the harvest price exclusion on his soybeans but not on his corn?"
+  pages: [115]
+  section: "1053 WU Qualifications > A. All Eligible Crops Must Be Insured"
+  kind: section-start
+  answer: "No. If the harvest price exclusion is elected for any crop in the whole-farm unit, it must be elected for all crops in it."
+- id: q06
+  ask: "The adjuster left check strips in a field for the loss appraisal. How soon must they be destroyed so the field still counts as summer fallow next year?"
+  pages: [163]
+  section: "1121 General Information and Insurability > B. Insurability"
+  kind: mid-section
+  answer: "Within 30 days after the applicable plant termination date; otherwise those sample areas are treated as sub-fields and do not qualify as summer fallow."
+- id: q07
+  ask: "Can my grower have his fields measured for the acreage report by a land-measuring company that his crop insurance agent is associated with?"
+  pages: [220]
+  section: "Section 3:  Acreage Report Revisions > 1234 Measurement Services Requested for Acreage Reports"
+  kind: section-start
+  answer: "Yes. The measurement can be done by FSA or by land-measurement businesses, including ones sales agents are associated with; but for claim purposes, measurements performed by the agent are not allowed."
+- id: q08
+  ask: "A direct-marketing grower filled in his expected harvest date on his marketing certification. Does that count as his notice of damage or loss?"
+  pages: [299]
+  section: "Section 6:  Marketing Certification Elements > 1461 Elements and Required Information"
+  kind: mid-section
+  answer: "No. The expected harvest date is not the official notice the policy requires for damage, loss, abandonment, destruction or alternative use; a separate notice is required."
+- id: q09
+  ask: "Can a brand-new customer sign up for yield cups in their first year, before they have any prior approved yield?"
+  pages: [357]
+  section: "1652 Eligibility for Cups > B. Availability"
+  kind: section-start
+  answer: "Yes. A new insured may elect the YC in the first year of the policy, although a cup only applies to a database with a prior year's approved yield (carryover additional coverage policies)."
+- id: q10
+  ask: "Two brothers have equal interests in the crop and make the farm decisions together. Does each of them get his own master yield?"
+  pages: [411]
+  section: "1746 Requirements for Establishing Initial MY(s) > A. Operator"
+  kind: mid-section
+  answer: "No. With equal interests and equal day-to-day management they are treated as operating jointly and get one combined MY."
+- id: q11
+  ask: "When a master yield is being set up, at what point is an irrigated actual yield treated as questionable?"
+  pages: [414]
+  section: "1748 Establishing a MY > B. Verifier Responsibilities"
+  kind: mid-section
+  answer: "When it exceeds 150% of the applicable crop year T-yield (160% for non-irrigated, or when irrigated and non-irrigated T-yields are not separate), unless the RO publishes other verification factors."
+- id: q12
+  ask: "A California avocado grower stumped his trees in September 2024. What year do we record for that on his orchard worksheet?"
+  pages: [461]
+  section: "Section 4:  Producer’s Pre-Acceptance Worksheet (PAW) > 1832 PAW Elements and Required Information"
+  kind: mid-section
+  answer: "2025. For California avocados, an action taken July through December is recorded as the following calendar year (January through June uses the actual year)."
+- id: q13
+  ask: "When the inspector visits a trellised apple orchard before we accept it, what does he record about the trellis?"
+  pages: [471]
+  section: "Section 5:  Perennial Crop Pre-Acceptance Inspection Report (PAIR) > 1846 PAIR Elements and Required Information"
+  kind: mid-section
+  answer: "The trellis type for each block (for example tatura, slender spindle or Lincoln canopy) and its condition."
+- id: q14
+  ask: "We're inspecting a cranberry bog before accepting it, and it had hail last season. What extra do we have to write up?"
+  pages: [472]
+  section: "Section 5:  Perennial Crop Pre-Acceptance Inspection Report (PAIR) > 1846 PAIR Elements and Required Information"
+  kind: mid-section
+  answer: "Describe the severity of the hail damage in Remarks (attaching sheets as needed); required when hail occurred in the last two years or was a secondary cause of loss."
+- id: q15
+  ask: "A Florida fruit tree grove runs across two land sections. Do we fill out one grove worksheet or two?"
+  pages: [578]
+  section: "2011 PAW > C. Florida Fruit Tree PAW Completion Instructions"
+  kind: mid-section
+  answer: "A separate worksheet for each section, with all the section numbers listed in Remarks."
+- id: q16
+  ask: "On the Florida fruit tree grove worksheet, what do we enter if the grower can't get an exact tree count for a block?"
+  pages: [579]
+  section: "2011 PAW > C. Florida Fruit Tree PAW Completion Instructions"
+  kind: mid-section
+  answer: "Enter an estimate and mark it \"est.\""
+- id: q17
+  ask: "When inspecting a Florida orange grove before acceptance, what does the inspector record about the grower's area citrus disease program?"
+  pages: [592]
+  section: "2013 PAIR Florida Citrus Fruit > E. PAIR Completion Instructions"
+  kind: mid-section
+  answer: "Whether the producer does crop protection according to Citrus Health Management Area (CHMA) guidelines, and if yes, which CHMA district."
+- id: q18
+  ask: "On a pecan orchard inspection, what does the inspector look for in the tree canopy when rating each block?"
+  pages: [637]
+  section: "Section 5:  PAW/PAIR > 2160 PAIR Required Elements"
+  kind: mid-section
+  answer: "Whether light penetration into the canopy is enough to stimulate nut development; each block is rated above average, average or below average."
+- id: q19
+  ask: "By when must the RMA regional offices issue their regional underwriting guidance each year?"
+  pages: [640]
+  section: "Section 1:  RO Determined Yield Request Deadlines and Submission Requirements > 2202 Underwriting Guides"
+  kind: section-start
+  answer: "No later than the first applicable policy contract change date (later only in limited cases, such as a major weather event causing widespread damage after the deadline)."
+- id: q20
+  ask: "I'm adding the sprinkler rice endorsement for a new rice customer whose rice policy has no number yet. What goes in the policy number box?"
+  pages: [682]
+  section: "Exhibits > Exhibit 9H Sprinkler Irrigated Rice Endorsement Application Completion Instructions"
+  kind: mid-section
+  answer: "Write \"To be assigned\" and attach the SIR Endorsement Application to the rice policy application."
+- id: q21
+  ask: "Cotton planted two rows on 30-inch spacing with a 20-inch skip: does that count as skip-row when figuring planted acres?"
+  pages: [711]
+  section: "Exhibits > Exhibit 11C FSA Determination for 30/50 Planting Pattern"
+  kind: section-start
+  answer: "No. Since the 2013 crop year FSA treats this \"30/50\" pattern as not skip-row, so no FSA percent planted factor is applied."
+- id: q22
+  ask: "For contract seed beans the approved yield comes out in dollars per acre. How do we get pounds per acre for the acreage report?"
+  pages: [834]
+  section: "Exhibits > Exhibit 17G Special APH Instructions for Contract Seed Beans and Contract Seed Peas"
+  kind: mid-section
+  answer: "Divide the approved yield by the contract price per pound, with a separate line for each different contract price."
+- id: q23
+  ask: "What shelling percentage do we use to convert unshelled Nonpareil almonds to shelled pounds?"
+  pages: [864]
+  section: "Exhibits > Exhibit 18C Shelling Percentage Chart for Clean Unshelled Almonds"
+  kind: section-start
+  answer: "69 percent (the chart spells the variety \"Non Pariel\")."
+- id: q24
+  ask: "For grafted apple blocks in Washington, does PASS update the grafted F yields each year on its own?"
+  pages: [883, 884]
+  section: "Exhibits > Exhibit 18I APH Databases for Grafted Apple Acreage in the States of Idaho, Oregon, and Washington"
+  kind: mid-section
+  answer: "No. The AIP updates the F yields manually each year using the grafting percentages table; PASS does not apply the Grafting T-Yield Factor."

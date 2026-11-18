@@ -1,0 +1,71 @@
+# Converted from scale-test/questions/aca.json (sha256 296ef0e47e635cfb3a4af4fdca9041a70beb5d3959f7b0a2a711d5806c5187ec) on 2026-11-18
+# by convert_questions.py. Question text, ids and expected pages are verbatim; a source case's
+# second turn has the id <case id>.2. docs is the chat's scope; doc holds the expected pages.
+# Skipped turns:
+#   aca-fu turn 2 "And for a family?": follow-up that needs the turn before it
+#   aca-nf1 turn 1 "If I get laid off, can I stay on my employer's health plan through COBRA, and for how many months?": not_found, no expected pages
+#   aca-nf2 turn 1 "Are hearing aids and acupuncture part of the essential health benefits?": not_found, no expected pages
+questions:
+- id: aca-01
+  ask: What's the longest waiting period a group health plan can make a new hire sit through before coverage starts?
+  docs: [affordable-care-act-pl-111-148.pdf]
+  doc: affordable-care-act-pl-111-148.pdf
+  pages: [43]
+  quote: waiting period (as defined in section 2704(b)(4)) that exceeds 90 days
+  values: [90 days]
+- id: aca-02
+  ask: How much money did Congress appropriate for the program that backs new member-run nonprofit health insurers?
+  docs: [affordable-care-act-pl-111-148.pdf]
+  doc: affordable-care-act-pl-111-148.pdf
+  pages: [73]
+  quote: There are hereby appropriated, out of any funds in the Treasury not otherwise appropriated, $6,000,000,000 to carry out this section.
+  values: ['$6,000,000,000']
+- id: aca-03
+  ask: An exchange enrollee earns between 150% and 200% of the federal poverty line. With cost-sharing reductions, what share of allowed costs does their plan have to pick up?
+  docs: [affordable-care-act-pl-111-148.pdf]
+  doc: affordable-care-act-pl-111-148.pdf
+  pages: [104]
+  quote: more than 150 percent but not more than 200 percent of the poverty line for a family of the size involved, increase the plan’s share of the total allowed costs of benefits provided under the plan to 80 percent of such costs
+  values: [80 percent]
+- id: aca-04
+  ask: How much money did the law set aside for the CMS Innovation Center's model-testing work for 2011 through 2019?
+  docs: [affordable-care-act-pl-111-148.pdf]
+  doc: affordable-care-act-pl-111-148.pdf
+  pages: [276]
+  quote: $10,000,000,000 for the activities initiated under this section for the period of fiscal years 2011 through 2019
+  values: ['$10,000,000,000']
+- id: aca-05
+  ask: Under the Medicare Part D coverage gap discount program, what share of the negotiated price of a brand-name drug does the manufacturer discount?
+  docs: [affordable-care-act-pl-111-148.pdf]
+  doc: affordable-care-act-pl-111-148.pdf
+  pages: [349]
+  quote: means 50 percent of the negotiated price of the applicable drug of a manufacturer
+  values: [50 percent]
+- id: aca-06
+  ask: Our payroll team wants to know how much the additional tax on HSA withdrawals not used for medical expenses went up to after 2010.
+  docs: [affordable-care-act-pl-111-148.pdf]
+  doc: affordable-care-act-pl-111-148.pdf
+  pages: [736]
+  quote: Section 223(f)(4)(A) of the Internal Revenue Code of 1986 is amended by striking ‘‘10 percent’’ and inserting ‘‘20 percent’’
+  values: [20 percent]
+- id: aca-07
+  ask: For taxpayers under 65, what new percentage threshold applies to the itemized medical expense deduction beginning in 2013?
+  docs: [affordable-care-act-pl-111-148.pdf]
+  doc: affordable-care-act-pl-111-148.pdf
+  pages: [750]
+  quote: Subsection (a) of section 213 of the Internal Revenue Code of 1986 is amended by striking ‘‘7.5 percent’’ and inserting ‘‘10 percent’’
+  values: [10 percent]
+- id: aca-08
+  ask: What rate of excise tax do tanning salons have to collect on a customer's session?
+  docs: [affordable-care-act-pl-111-148.pdf]
+  doc: affordable-care-act-pl-111-148.pdf
+  pages: [902]
+  quote: a tax equal to 10 percent of the amount paid for such service
+  values: [10 percent]
+- id: aca-fu
+  ask: What's the cap on the deductible for a small-group plan covering one person?
+  docs: [affordable-care-act-pl-111-148.pdf]
+  doc: affordable-care-act-pl-111-148.pdf
+  pages: [48]
+  quote: $2,000 in the case of a plan covering a single individual
+  values: ['$2,000']

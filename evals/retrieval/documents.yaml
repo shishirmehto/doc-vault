@@ -1,0 +1,38 @@
+# The retrieval eval's documents and frozen question files (python -m docvault.retrieval_evals).
+# The PDFs are never committed. scripts/fetch-public-docs.sh DIR downloads them and checks each sha256, and the
+# runner checks them again under --docs DIR. pages is the PDF's page count.
+# A question file is frozen once it is listed under cases: the runner refuses one whose sha256 differs.
+# A case's docs is the chat scope of every question in it that names none of its own.
+documents:
+- file: crop-insurance-handbook-2025.pdf
+  sha256: ca0ec368db318d314e3641893ed119fc2b1879a63f1bcd294a9d3a877dabeb3b
+  pages: 922
+  url: https://www.rma.usda.gov/sites/default/files/2024-11/2025-18010-1-Crop-Insurance-Handbook.pdf
+  licence: USDA Risk Management Agency handbook FCIC-18010-1; a US government work, public domain in the US (17 U.S.C. 105).
+- file: affordable-care-act-pl-111-148.pdf
+  sha256: f5112f582ef4e15808cbcf5cb37ae21b6d7b66ee0166158898a7ce6b4562ac50
+  pages: 906
+  url: https://www.govinfo.gov/content/pkg/PLAW-111publ148/pdf/PLAW-111publ148.pdf
+  licence: Public Law 111-148 as published by GovInfo; a US government work, public domain in the US (17 U.S.C. 105).
+- file: loss-adjustment-standards-handbook-2025.pdf
+  sha256: 47d31fd9942971de4fba4edf0116300a6a831dc70e5f0310917e433e9e965363
+  pages: 400
+  url: https://rma.usda.gov/sites/default/files/2024-12/2025-25010-Loss-Adjustment-Standards-Handbook.pdf
+  licence: USDA Risk Management Agency handbook FCIC-25010, 2025 edition; a US government work, public domain in the US (17 U.S.C. 105).
+- file: loss-adjustment-standards-handbook-2026.pdf
+  sha256: 9fc415d4a9f51008938e905a5134a8c47e9eba8490eb8d220e6a4883e06ddd89
+  pages: 405
+  url: https://www.rma.usda.gov/sites/default/files/2026-01/2026-25010-Loss-Adjustment-Standards-Handbook.pdf
+  licence: USDA Risk Management Agency handbook FCIC-25010, 2026 edition; a US government work, public domain in the US (17 U.S.C. 105).
+cases:
+- file: handbook-retrieval.yaml
+  sha256: f7a3f198bf860bb4e630c6d5184a3a45454b3d34f7c8d2bcb3d90ce92d3c58d9
+  docs: [crop-insurance-handbook-2025.pdf]
+- file: crop.yaml
+  sha256: a4a9a3f9d90c85851878503880c83b5e2e77f01791c6c3f7595ae76ca267e6e2
+- file: aca.yaml
+  sha256: e0ceec820eaaae5dff74b8fb08285212f9045334fc4e1097abe80d0f2a6dde7b
+- file: lash.yaml
+  sha256: 308fe6e8d00a327fa6c2aa3db6c297e9aa9317e30d19eae56d51377d02ba1e5b
+- file: versions.yaml
+  sha256: 3a1b2756012cc9f70967562f1084741dcea8699a88d3ba8ea1410866a6a5c7dc

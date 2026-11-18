@@ -1,0 +1,71 @@
+# Converted from scale-test/questions/lash.json (sha256 5fcd28c9a39115215c5d4a34354cf428dc1d892e8daf2633dc5b5202824592e4) on 2026-11-18
+# by convert_questions.py. Question text, ids and expected pages are verbatim; a source case's
+# second turn has the id <case id>.2. docs is the chat's scope; doc holds the expected pages.
+# Skipped turns:
+#   lash-fu turn 2 "And if the crop has revenue protection and there's only a revenue drop from prices, with no damage to production?": follow-up that needs the turn before it
+#   lash-nf1 turn 1 "What percentage of my crop insurance premium does the government subsidize for corn?": not_found, no expected pages
+#   lash-nf2 turn 1 "Can an adjuster use a drone to appraise hail damage, and what are the rules for that?": not_found, no expected pages
+questions:
+- id: lash-01
+  ask: A farmer phoned in his hail loss to the insurance company. Does he have to follow up in writing, and how long does he have to do it?
+  docs: [loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [37]
+  quote: the insured must confirm the notice in writing within 15 days
+  values: [15 days]
+- id: lash-02
+  ask: If the insurance company is slow to pay my claim, from which day does interest start running on the indemnity?
+  docs: [loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [14]
+  quote: simple interest will be paid from the 61st day on the net indemnity
+  values: [61st day]
+- id: lash-03
+  ask: How much of my field has to be damaged and need replanting before I qualify for a replanting payment?
+  docs: [loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [111, 112]
+  quote: he damaged acreage to be replanted must be at least the lesser of 20 acres or twenty percent (20%) of the insured planted acreage for the unit
+  values: [20 acres, twenty percent (20%)]
+- id: lash-04
+  ask: When I'm measuring a field's acreage with a measuring wheel, how many feet is one wheel?
+  docs: [loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [143]
+  quote: 1.0 wheel = 6.6 feet
+  values: [6.6 feet]
+- id: lash-05
+  ask: On a big field, how many acres does it take before I have to set up one more appraisal sample area?
+  docs: [loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [177, 181]
+  quote: One additional RSA is required for each additional 40.0 acres (or fraction thereof)
+  values: [40.0 acres]
+- id: lash-06
+  ask: We're testing grain for vomitoxin. How long can we hold the sample before it has to be mailed or taken to the lab?
+  docs: [loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [276, 277]
+  quote: within 4 days (15 days for Vomitoxin only)
+  values: [15 days]
+- id: lash-07
+  ask: A farmer wants to till up his wind-damaged field to stop erosion. What share of the field can he start tilling right away just by telling his agent?
+  docs: [loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [324]
+  quote: If the insured intends to till twenty-five percent (25%) or less of the field or subfield, (accumulative rather than single event) the insured can immediately begin tilling
+  values: [twenty-five percent (25%)]
+- id: lash-08
+  ask: When a crop doesn't have to be destroyed before the indemnity is paid because of wind erosion, what portion of those claims does the insurer have to randomly check afterward?
+  docs: [loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [329]
+  quote: random review of not less than ten percent (10%) of such claims
+  values: [ten percent (10%)]
+- id: lash-fu
+  ask: What's the outer deadline for a farmer to give notice of loss on a planted crop when the damage wasn't noticed until late?
+  docs: [loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [39]
+  quote: but not later than 15 days after the EOIP, even if the crop has not
+  values: [15 days after the EOIP]

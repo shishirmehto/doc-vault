@@ -1,0 +1,22 @@
+# Converted from scale-test/questions/versions.json (sha256 5ae452a69fb6ba5657f4caa925f7a47a67c2954a86bc687435cba635b72b9178) on 2026-11-18
+# by convert_questions.py. Question text, ids and expected pages are verbatim; a source case's
+# second turn has the id <case id>.2. docs is the chat's scope; doc holds the expected pages.
+# Skipped turns:
+#   none
+# Later turns kept:
+#   ver-grainbag turn 2 "What else changed about field inspections in the 2026 edition?": names the edition and the topic itself, so it is asked on its own
+questions:
+- id: ver-grainbag
+  ask: What tolerance for grain bags did the 2026 loss adjustment handbook add?
+  docs: [loss-adjustment-standards-handbook-2025.pdf, loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [3]
+  quote: Added the five percent (5%) tolerance for grain bags language
+  values: [5%]
+- id: ver-grainbag.2
+  ask: What else changed about field inspections in the 2026 edition?
+  docs: [loss-adjustment-standards-handbook-2025.pdf, loss-adjustment-standards-handbook-2026.pdf]
+  doc: loss-adjustment-standards-handbook-2026.pdf
+  pages: [2]
+  quote: Added procedural language identifying when field inspections may not be required for Coarse Grains, Small Grains, and Cotton.
+  values: [field inspection]

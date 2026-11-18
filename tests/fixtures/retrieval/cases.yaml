@@ -1,0 +1,31 @@
+# A tiny retrieval case set over the samples, for tests/test_retrieval_evals.py. With the fake embedder and
+# 400-character chunks the expected passages rank from 1 to past 16, so every column of the report can move.
+questions:
+- id: roofing
+  ask: Is roofing work on tall buildings excluded?
+  pages: [5]
+  quote: roofing work performed on any building more than three storeys or 40 feet in height, whichever is lower
+  values: [40 feet]
+- id: cancellation
+  ask: How many days notice before cancelling for nonpayment of premium?
+  pages: [6]
+  quote: at least 10 days before that date if we cancel for nonpayment of premium
+  values: [10 days]
+- id: limits
+  ask: Which limits apply each occurrence?
+  pages: [6]
+- id: policy
+  ask: What does this policy say?
+  pages: [3]
+- id: insured
+  ask: Who is the insured?
+  pages: [5]
+- id: off-page
+  ask: What is the medical expense limit?
+  pages: [7]
+- id: silica
+  ask: Which new exclusion does the renewal add?
+  docs: [sample-cgl-policy.pdf, sample-renewal-quote.pdf]
+  doc: sample-renewal-quote.pdf
+  pages: [3]
+  quote: Form SM 30 11, Silica or Silica-Related Dust Exclusion, is added
