@@ -85,6 +85,19 @@ At `91c96fb`, on `answer-v4`, the two runs found 16/16 and 12/16 and cited 12/16
 - At 16 passages the two citation misses are "What is on the last page of the policy?" and "How does the policy end?". The employment exclusion is on page 7, but both answers cite other text on that page.
 - At 4 passages and 600-character chunks, page 7 holds more chunks than the 2 sent for a named page, so the exclusion's chunk is not sent, and those two turns miss at retrieval.
 
+`980201a` changed what a request counted from the end gets: "the last page" and "How does it end?" now take the last 2 chunks of the page, not the first. The page set ran again on 2026-11-18 at `d2d0e88`, at 16 passages, and at `0ab4c79`, a README-only commit after it, with 4 passages and 600-character chunks:
+
+| Number | 16 passages | 4 passages, 600-character chunks |
+|---|---|---|
+| Retrieval hit rate | 5/5 (100%) | 5/5 (100%) |
+| Citation accuracy | 4/5 (80%) | 4/5 (80%) |
+| Answer text | 4/4 (100%) | 4/4 (100%) |
+| Not-found accuracy | 1/1 (100%) | 1/1 (100%) |
+| Cost | $0.249 | $0.157 |
+
+- At 16 passages each sample's last page sits in one chunk, so the change sent the same passages. "How does the policy end?" cited the exclusion this time, which is run-to-run variation.
+- At 4 passages and 600-character chunks, both last-page turns now receive the exclusion's chunk. "What is on the last page of the policy?" still cites other text on page 7.
+
 ## Run the evals
 
 Set `OPENAI_API_KEY` in `.env` and start the compose Postgres (`docker compose up -d db`). Then run the eval on the host. It prints the results.
