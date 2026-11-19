@@ -747,14 +747,17 @@ def _written_out(question: str, outline: Sequence[OutlineEntry], titles: Sequenc
 
 def _best(scores: Mapping[int, Any], outline: Sequence[OutlineEntry]) -> int | None:
     """The outline index with the highest score, or None when there is none or entries in different branches tie.
-    Of an entry and one under it, the one under it wins."""
-    top = [index for index, score in scores.items() if score == max(scores.values())]
-    best = [index for index in top if not any(_under(outline, other, index) for other in top)]
+    Of an entry and one under it, the one under it wins. The entries under an entry follow it in the outline, so an
+    entry has a top-scoring one under it exactly when the next top-scoring entry is under it."""
+    high = max(scores.values(), default=None)
+    top = sorted(index for index, score in scores.items() if score == high)
+    best = [index for index, after in zip(top, [*top[1:], None], strict=False)
+            if after is None or not _under(outline, after, index)]
     return best[0] if len(best) == 1 else None
 
 
 def _under(outline: Sequence[OutlineEntry], child: int, parent: int) -> bool:
-    return parent < child and all(entry.level > outline[parent].level for entry in outline[parent + 1:child + 1])
+    return parent < child and all(outline[at].level > outline[parent].level for at in range(parent + 1, child + 1))
 
 
 def _section(outline: Sequence[OutlineEntry], index: int, page_count: int) -> SectionRequest:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import time
 from uuid import UUID, uuid4
 
 import httpx2
@@ -889,6 +890,27 @@ def test_of_two_entries_that_match_alike_the_one_under_the_other_wins_and_two_un
     assert [chat.section_requests(question, outline, 922) for question in (
         "What is Exhibit 23?", "What does the High-Risk Land Exclusion Option cover?")] == [
         (SectionRequest("Exhibit 23 Production Report Flowchart", 922, 922),), ()]
+
+
+def test_a_match_inside_another_wins_only_when_no_match_outside_it_ties():
+    def named(*levels):
+        outline = tuple(OutlineEntry("Coverage Part Limits", level, page) for page, level in enumerate(levels, start=1))
+        return chat.section_requests("What do the Coverage Part Limits say?", outline, 9)
+
+    assert [named(0, 1, 2), named(0, 1, 1), named(0, 1, 0), named(1, 0, 1), named(0, 0, 1)] == [
+        (SectionRequest("Coverage Part Limits", 3, 9),), (), (), (), ()]
+
+
+def test_a_title_repeated_through_an_outline_at_the_bound_is_matched_in_linear_time():
+    repeated = tuple(OutlineEntry("Coverage Part Limits", 0, 1 + n % 900) for n in range(pages.MAX_OUTLINE_ENTRIES))
+    numbered = tuple(OutlineEntry(f"Section 9 Coverage {n}", 0, 1 + n % 900) for n in range(pages.MAX_OUTLINE_ENTRIES))
+    started = time.perf_counter()
+
+    found = [chat.section_requests("What do the Coverage Part Limits say?", repeated, 900),
+             chat.section_requests("What does section 9 say?", numbered, 900)]
+
+    assert time.perf_counter() - started < 1
+    assert found == [(), ()]
 
 
 def test_page_and_section_passages_take_their_places_in_k():
