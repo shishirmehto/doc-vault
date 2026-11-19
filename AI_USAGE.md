@@ -11,8 +11,6 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
    - pgvector in the same Postgres;
    - a hand-written retrieval module, for exact page citations;
    - asking for an API key and building against a fake model until it arrives.
-
-   I took the recommended option on each.
 2. **Design bakeoff.** Three runners, each on a different model, sketched the whole backend from the same task: schema, endpoints, document lifecycle, retrieval and prompts. A read-only judge on another model scored the sketches against a rubric. The lead agent took the strongest sketch as the base and grafted in the best parts of the other two.
 
    The web UI went through the same process, and the judge scored the three sketches 27, 21 and 17. The lead agent first preferred the smallest design. The judge's evidence changed the pick: that design had extra page hops in the demo path and a quote matcher that drifted from the backend's.
@@ -25,7 +23,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
    - two more UI passes: an audit, and a final pass that brought every feature into one layout;
    - a quality pass (`/simplify` and a comment review) over the bonus phases that had skipped it.
 
-   The phases ran one at a time because they shared files, the dev stack and the test database.
+    The phases ran one at a time because they shared files, the dev stack and the test database.
 4. **Parallel work without collisions.** The UI was built on its own branch in a separate git worktree, at the same time as the backend agent worked on `main`, and merged in `cf378d7`. The UI agents used the running API read-only and never restarted containers.
 5. **Independent acceptance.** Before accepting a phase, the lead agent reran the full test suite. It also asked the live API its own questions and compared the answers with [`samples/facts.yaml`](samples/facts.yaml), and it used the UI in a browser. Several findings below came from this step.
 
@@ -35,6 +33,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
    - it rewrote a summary twice and counted the ledger rows;
    - it uploaded a second version under the same name;
    - it asked one first question in two chats and checked that the second made no model call.
+6. **Final review.** Before submitting, I asked for a last review of the whole repo, run overnight as a loop. Review agents on different models each read the pushed head from one angle: security, code correctness, the docs' claims against the code, the tests, and two cold reads that scored the repo against the case study's criteria. The lead agent fixed each confirmed defect test-first, one commit each, and sent the new head for another round. The loop stopped at the third round, the first that found nothing of high or medium severity. An agent on another model then checked the lead agent's decision log against the reviewers' reports. The last eight rows of the table below came from this review.
 
 ## Verification beyond unit tests
 
@@ -63,6 +62,7 @@ In this document, "I" is me, the human. "The lead agent" is the Claude Code sess
 Five rounds of runs used the OpenAI key.
 
 The first, on 2026-11-12, sent eight passages to the answer step. It cost $3.17 on the ledger, $1.18 of it for the eval set. It covered:
+
 - **The eval set.** Retrieval found 34 of 34 expected facts, 30 of 34 were cited on the right page, and 15 of 16 out-of-scope questions were declined. The 2026-11-17 rerun gave the same three numbers, and [`docs/evals.md`](docs/evals.md) lists it beside the current results.
 - **The 19 real documents.** Before any paid call, the lead agent wrote the expected answer and page for 31 broker questions from the documents' own text. Six of the questions have no answer in their document.
   - Of the 25 answerable questions, 21 were answered right.
@@ -79,11 +79,13 @@ The first, on 2026-11-12, sent eight passages to the answer step. It cost $3.17 
   - streamed answers arrived in about 90 pieces, the first after 2.7 s.
 
 What the first run left open:
+
 - Three limits that the README lists: "Differs" compares text and not meaning, a chat sent eight passages to the answer step (16 since 2026-11-17), and insights read the first 240,000 characters.
 - A word broken at a line end, with a stray space inside it, stays split ("se t-tlements") when the document never uses it whole. That happens in the oldest standard forms.
 - The eval's case set was written for the sample documents. The 31 real-document questions are a hand-graded spot check, not a scored set.
 
 The second, on 2026-11-17 at `f9f69eb`, sent 16 passages to the answer step, and the opening passages in chats of up to three documents. It covered:
+
 - The eval set again, for $1.08 on the ledger.
 - 23 real insurance documents, 3,263 pages, on a separate copy of the stack. 50 questions were asked 91 times, in chats of 1, 3 and 23 documents. Of the 80 asks with an answer in the documents, a script passed 71 with the expected value cited on an expected page, and a review of each miss passed 2 more. The other 7 were declined. Of the 11 asks with no answer, 8 came back `not_found` and 3 declined in words. [`docs/design.md`](docs/design.md) has the details, under Real documents.
 
@@ -120,6 +122,14 @@ The fifth, overnight into 2026-11-19, checked the pushed head and the fixes that
 | The first version of page questions sent each document's closing passage with every question in chats of up to three documents, about 1,800 characters on a long document, to help only "How does it end?" | A cost check on the 922-page handbook that I asked for. The end of a document now means its last page | `2c0f8b3`, `05353fb` |
 | The `05353fb` commit message says answer input tokens fell from 82,112 to 78,114, but that was measured on a build that still had the contents block | The lead agent's decision log, when the commit landed. The same nine questions were measured again at `703cca0`, with 69,341 | `05353fb`, `703cca0` |
 | The full-text rank counted as much as the vector rank in the fusion, and 4 of 53 questions about long documents had the right passage below the 16 sent. The 44 sample questions sit on 11 chunks, so they could not show it | The retrieval benchmark on four public PDFs. The full-text rank now counts half, and 1 of the 53 stays below the 16 | `e84c72e`, `703cca0`, [`docs/evals.md`](docs/evals.md#retrieval-benchmark-on-long-public-documents) |
+| A PDF page holding one long unbroken word took more than 10 s to read, because the line-end hyphen pattern retried the word from each of its characters | The security review agent, with a timing reproduction. The pattern now runs in linear time, with the same page text on the public PDFs and the samples | `3a88db3` |
+| Since the Word outline came in, a Word file whose styles define no default paragraph style failed to upload as unreadable | A code review agent in the final review | `fb4e7c6` |
+| After a chunk-settings change, a question in an existing chat answered from a partly embedded index and could cache that answer, while [`docs/limits.md`](docs/limits.md) said it got a 409 | A code review agent that compared the docs with the chat route. The question now gets the 409 | `fd6be06` |
+| "The last page" and "How does it end?" sent the start of a long last page, never its end | A code review agent. Such a question now gets the page's last two chunks | `980201a` |
+| The README had grown to 4,041 words, and a reader lost the thread in its middle | A grader agent's cold read against the case study. The README is now 2,560 words, with the detail in `docs/` and no number changed | `d2d0e88` |
+| The lead agent's own correction to `docs/limits.md` removed a true line: in the minute before the next reconcile run, a question after an embedding-model change is declined, not refused with 409 | The third review round, on another model | `c9d2804`, `927b454` |
+| The lead agent's report on the final review left out one of the security review's findings: a crafted PDF outline could stall every question | An agent on another model that checked the decision log against the reviewers' reports. A document now keeps its first 5,000 bookmarks or headings | `b9c5d3d` |
+| The commit message for that bound says it stops the stall, but a title repeated 5,000 times still took about 40 s a question, because each matching entry was compared with every other | A late review agent, with a timing reproduction. Each entry is now compared with the next one only, with the same result as the old code on 20,000 random outlines | `89a4f9d` |
 
 ## AI inside the product
 
